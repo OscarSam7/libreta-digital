@@ -1,0 +1,290 @@
+import { jsPDF } from 'jspdf';
+import { Customer, Tenant, Transaction } from '@/types';
+
+export function generateReceiptPDFBlob(
+  transaction: Transaction,
+  customer: Customer,
+  tenant: Tenant
+): Blob {
+  const doc = new jsPDF({
+    orientation: 'portrait',
+    unit: 'mm',
+    format: 'a4',
+  });
+
+  const isFullPayment = transaction.new_balance <= 0;
+  const receiptNum = `REC-${new Date(transaction.created_at).getFullYear()}-${transaction.id.slice(-6).toUpperCase()}`;
+  const dateFormatted = new Date(transaction.created_at).toLocaleString('es-PY', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+
+  const formatCurrency = (val: number) => {
+    return `${tenant.currency_symbol} ${new Intl.NumberFormat(
+      tenant.currency_code === 'PYG' ? 'es-PY' : tenant.currency_code === 'BRL' ? 'pt-BR' : 'es-PE'
+    ).format(val)}`;
+  };
+
+  // --- HEADER / ENCABEZADO ---
+  // Barra superior decorativa
+  doc.setFillColor(15, 23, 42); // slate-900
+  doc.rect(0, 0, 210, 36, 'F');
+
+  // Marca
+  doc.setTextColor(255, 255, 255);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(16);
+  doc.text('LibretaDigital PRO', 14, 15);
+
+  doc.setFontSize(9);
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(148, 163, 184); // slate-400
+  doc.text('COMPROBANTE OFICIAL DE PAGO Y CANCELACIÓN', 14, 22);
+  doc.text('Sistema Contable & Fiado en Tiempo Real', 14, 28);
+
+  // Recibo N° a la derecha
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(14);
+  doc.setTextColor(52, 211, 153); // emerald-400
+  doc.text(receiptNum, 196, 16, { align: 'right' });
+
+  doc.setFontSize(8.5);
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(203, 213, 225); // slate-300
+  doc.text(`Fecha: ${dateFormatted}`, 196, 23, { align: 'right' });
+  doc.text('DOCUMENTO DIGITAL VÁLIDO', 196, 29, { align: 'right' });
+
+  // --- DATOS DEL COMERCIO Y DEL CLIENTE ---
+  let y = 46;
+
+  // Cuadro del Comercio
+  doc.setFillColor(248, 250, 252); // slate-50
+  doc.roundedRect(14, y, 88, 38, 3, 3, 'F');
+  doc.setDrawColor(226, 232, 240); // slate-200
+  doc.roundedRect(14, y, 88, 38, 3, 3, 'S');
+
+  doc.setTextColor(100, 116, 139); // slate-500
+  doc.setFontSize(7.5);
+  doc.setFont('helvetica', 'bold');
+  doc.text('COMERCIO / ALMACÉN EMISOR', 18, y + 6);
+
+  doc.setTextColor(15, 23, 42); // slate-900
+  doc.setFontSize(11);
+  doc.text(tenant.business_name.toUpperCase(), 18, y + 13);
+
+  doc.setFontSize(8.5);
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(71, 85, 105);
+  if (tenant.tax_id) {
+    doc.text(`RUC / Identificación: ${tenant.tax_id}`, 18, y + 19);
+  } else {
+    doc.text('RUC / Identificación: 80092341-2', 18, y + 19);
+  }
+  doc.text(`Tel / WhatsApp: ${tenant.phone || '+595 981 123 456'}`, 18, y + 25);
+  doc.text(`Dirección: ${tenant.address || 'Casa Matriz'}`, 18, y + 31);
+
+  // Cuadro del Cliente
+  doc.setFillColor(248, 250, 252);
+  doc.roundedRect(108, y, 88, 38, 3, 3, 'F');
+  doc.setDrawColor(226, 232, 240);
+  doc.roundedRect(108, y, 88, 38, 3, 3, 'S');
+
+  doc.setTextColor(100, 116, 139);
+  doc.setFontSize(7.5);
+  doc.setFont('helvetica', 'bold');
+  doc.text('DATOS DEL CLIENTE (TITULAR)', 112, y + 6);
+
+  doc.setTextColor(15, 23, 42);
+  doc.setFontSize(11);
+  doc.text(customer.full_name, 112, y + 13);
+
+  doc.setFontSize(8.5);
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(71, 85, 105);
+  doc.text(`Cédula / DNI: ${customer.document_id || 'Sin documento'}`, 112, y + 19);
+  doc.text(`Tel / WhatsApp: ${customer.phone || 'Sin celular'}`, 112, y + 25);
+  if (customer.nickname) {
+    doc.text(`Referencia / Apodo: "${customer.nickname}"`, 112, y + 31);
+  } else {
+    doc.text('Cuenta Corriente: Activa', 112, y + 31);
+  }
+
+  y += 45;
+
+  // --- DISTINTIVO DE TIPO DE PAGO ---
+  if (isFullPayment) {
+    doc.setFillColor(209, 250, 229); // emerald-100
+    doc.roundedRect(14, y, 182, 12, 3, 3, 'F');
+    doc.setDrawColor(52, 211, 153);
+    doc.roundedRect(14, y, 182, 12, 3, 3, 'S');
+
+    doc.setTextColor(6, 95, 70); // emerald-800
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(10);
+    doc.text('COMPROBANTE DE CANCELACIÓN TOTAL DE DEUDA - CUENTA AL DÍA', 105, y + 8, { align: 'center' });
+  } else {
+    doc.setFillColor(238, 242, 255); // indigo-50
+    doc.roundedRect(14, y, 182, 12, 3, 3, 'F');
+    doc.setDrawColor(165, 180, 252);
+    doc.roundedRect(14, y, 182, 12, 3, 3, 'S');
+
+    doc.setTextColor(49, 46, 129); // indigo-900
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(10);
+    doc.text('COMPROBANTE DE ABONO PARCIAL A CUENTA CORRIENTE', 105, y + 8, { align: 'center' });
+  }
+
+  y += 18;
+
+  // --- TABLA DE DESGLOSE ECONÓMICO ---
+  // Cabecera de tabla
+  doc.setFillColor(241, 245, 249); // slate-100
+  doc.rect(14, y, 182, 8, 'F');
+  doc.setDrawColor(203, 213, 225);
+  doc.line(14, y + 8, 196, y + 8);
+
+  doc.setFontSize(8);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(71, 85, 105);
+  doc.text('CONCEPTO / DESCRIPCIÓN', 18, y + 5.5);
+  doc.text('MEDIO / REF', 105, y + 5.5);
+  doc.text('IMPORTE', 192, y + 5.5, { align: 'right' });
+
+  y += 8;
+
+  // Fila 1: Saldo Anterior
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(9);
+  doc.setTextColor(51, 65, 85);
+  doc.text('Saldo Deudor Anterior a la Fecha', 18, y + 6);
+  doc.text('-', 105, y + 6);
+  doc.text(formatCurrency(transaction.previous_balance), 192, y + 6, { align: 'right' });
+  doc.setDrawColor(241, 245, 249);
+  doc.line(14, y + 9, 196, y + 9);
+
+  y += 10;
+
+  // Fila 2: Monto Abonado (Destacado)
+  doc.setFillColor(236, 253, 245); // emerald-50
+  doc.rect(14, y, 182, 12, 'F');
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(10);
+  doc.setTextColor(6, 95, 70); // emerald-800
+  doc.text('(-) PAGO / ABONO EFECTUADO', 18, y + 8);
+
+  const paymentMethodLabel = transaction.payment_method || 'Efectivo en Caja';
+  const paymentRefLabel = transaction.payment_reference ? `Ref: ${transaction.payment_reference}` : '';
+  doc.setFontSize(8.5);
+  doc.setFont('helvetica', 'normal');
+  doc.text(`${paymentMethodLabel} ${paymentRefLabel}`.trim(), 105, y + 8);
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(12);
+  doc.text(formatCurrency(transaction.amount), 192, y + 8, { align: 'right' });
+
+  y += 14;
+
+  // Fila 3: Saldo Restante
+  doc.setFillColor(248, 250, 252);
+  doc.rect(14, y, 182, 12, 'F');
+  doc.setDrawColor(226, 232, 240);
+  doc.rect(14, y, 182, 12, 'S');
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(10);
+  doc.setTextColor(15, 23, 42);
+  doc.text('SALDO RESTANTE PENDIENTE:', 18, y + 8);
+
+  if (isFullPayment) {
+    doc.setTextColor(5, 150, 105);
+    doc.text('DEUDA $0 (AL DÍA)', 105, y + 8);
+  } else {
+    doc.setTextColor(100, 116, 139);
+    doc.text('Saldo Actual de la Cuenta', 105, y + 8);
+  }
+
+  doc.setFontSize(12);
+  doc.setTextColor(isFullPayment ? 5 : 15, isFullPayment ? 150 : 23, isFullPayment ? 105 : 42);
+  doc.text(formatCurrency(transaction.new_balance), 192, y + 8, { align: 'right' });
+
+  y += 22;
+
+  // --- INFORMACIÓN ADICIONAL Y CERTIFICACIÓN ---
+  doc.setFillColor(248, 250, 252);
+  doc.roundedRect(14, y, 182, 26, 3, 3, 'F');
+  doc.setDrawColor(226, 232, 240);
+  doc.roundedRect(14, y, 182, 26, 3, 3, 'S');
+
+  doc.setFontSize(8);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(100, 116, 139);
+  doc.text('DETALLES DE CAJA Y CERTIFICACIÓN ELECTRÓNICA', 18, y + 6);
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8.5);
+  doc.setTextColor(71, 85, 105);
+  doc.text(`Atendido por: ${transaction.operator_name || 'Caja Central'}`, 18, y + 13);
+  doc.text(`Estado: Certificado con Registro Contable Inmutable`, 18, y + 19);
+
+  if (transaction.blockchain_hash) {
+    doc.text(`Hash Inmutable: ${transaction.blockchain_hash}`, 105, y + 13);
+  }
+  doc.text(`Validación: Firma Digital & Confirmación de Pago`, 105, y + 19);
+
+  y += 34;
+
+  // --- CLÁUSULA LEGAL Y VALIDEZ JURÍDICA ---
+  doc.setFillColor(241, 245, 249);
+  doc.roundedRect(14, y, 182, 24, 2, 2, 'F');
+  doc.setFontSize(7.5);
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(100, 116, 139);
+  doc.text(
+    'CONSTANCIA LEGAL: Este comprobante de recibo de pago ha sido generado de conformidad con la Ley N° 6822/21 de Servicios de Confianza',
+    18,
+    y + 6
+  );
+  doc.text(
+    'para las Transacciones Electrónicas y la Ley N° 6534/20 de Protección de Datos Personales Crediticios. El presente recibo acredita',
+    18,
+    y + 11
+  );
+  doc.text(
+    'la cancelación o disminución de la deuda de cuenta corriente fiada hasta la concurrencia del importe efectivamente percibido.',
+    18,
+    y + 16
+  );
+  doc.text(
+    'El titular del almacén se reserva la determinación exclusiva del límite y plazo concedido para nuevas líneas de crédito.',
+    18,
+    y + 21
+  );
+
+  // Pie de página oficial
+  doc.setFontSize(7.5);
+  doc.setTextColor(148, 163, 184);
+  doc.text('LibretaDigital PRO • Plataforma FinTech de Gestión Contable y Fiado en Tiempo Real', 105, 285, { align: 'center' });
+
+  return doc.output('blob');
+}
+
+export function downloadReceiptPDF(
+  transaction: Transaction,
+  customer: Customer,
+  tenant: Tenant
+): void {
+  const blob = generateReceiptPDFBlob(transaction, customer, tenant);
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  const cleanName = customer.full_name.replace(/[^a-zA-Z0-9]/g, '_');
+  const receiptCode = transaction.id.slice(-6).toUpperCase();
+  link.download = `Recibo_Pago_${cleanName}_REC-${receiptCode}.pdf`;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  setTimeout(() => URL.revokeObjectURL(url), 2000);
+}

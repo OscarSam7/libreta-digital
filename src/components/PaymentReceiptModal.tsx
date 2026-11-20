@@ -3,6 +3,7 @@
 import React, { useRef } from 'react';
 import { Customer, Tenant, Transaction } from '@/types';
 import { generatePaymentReceiptWhatsAppUrl } from '@/lib/reports';
+import { downloadReceiptPDF } from '@/lib/pdfReceipt';
 import { BrandLogo } from '@/components/BrandLogo';
 import {
   CheckCircle2,
@@ -18,7 +19,8 @@ import {
   Hash,
   Sparkles,
   ArrowDownLeft,
-  Receipt
+  Receipt,
+  Download
 } from 'lucide-react';
 
 interface Props {
@@ -199,16 +201,25 @@ export function PaymentReceiptModal({ transaction, customer, tenant, onClose }: 
           </div>
         </div>
 
-        {/* BOTONES DE ACCIÓN: WHATSAPP, IMPRIMIR Y CERRAR */}
+        {/* BOTONES DE ACCIÓN: WHATSAPP, DESCARGAR PDF, IMPRIMIR Y CERRAR */}
         <div className="p-4 bg-white border-t border-slate-200 space-y-2 shrink-0">
+          <button
+            type="button"
+            onClick={() => downloadReceiptPDF(transaction, customer, tenant)}
+            className="w-full py-3 px-4 bg-indigo-600 hover:bg-indigo-500 text-white font-black text-xs sm:text-sm rounded-2xl flex items-center justify-center gap-2 shadow-md shadow-indigo-600/25 transition active:scale-98 cursor-pointer"
+          >
+            <Download className="w-4 h-4" />
+            <span>Descargar Comprobante en Formato PDF</span>
+          </button>
+
           <a
             href={whatsappUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="w-full py-3.5 px-4 bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs sm:text-sm rounded-2xl flex items-center justify-center gap-2 shadow-lg shadow-emerald-600/25 transition active:scale-98 cursor-pointer"
+            className="w-full py-3 px-4 bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs sm:text-sm rounded-2xl flex items-center justify-center gap-2 shadow-lg shadow-emerald-600/25 transition active:scale-98 cursor-pointer"
           >
             <Send className="w-4 h-4" />
-            <span>Enviar Comprobante al Cliente por WhatsApp</span>
+            <span>Enviar Enlace del PDF por WhatsApp al Cliente</span>
           </a>
 
           <div className="grid grid-cols-2 gap-2">
@@ -218,7 +229,7 @@ export function PaymentReceiptModal({ transaction, customer, tenant, onClose }: 
               className="py-2.5 px-3 bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 transition cursor-pointer"
             >
               <Printer className="w-3.5 h-3.5" />
-              <span>Imprimir / PDF</span>
+              <span>Imprimir / Físico</span>
             </button>
 
             <button

@@ -155,6 +155,7 @@ export function generatePaymentReceiptWhatsAppUrl(
 ): string {
   const origin = typeof window !== 'undefined' ? window.location.origin : 'https://libretadigital.app';
   const portalUrl = `${origin}/portal/${customer.qr_token}`;
+  const receiptPdfUrl = `${origin}/recibo/${transaction.id}`;
   const isFullPayment = transaction.new_balance <= 0;
   const paymentBadge = isFullPayment
     ? '✅ CANCELACIÓN TOTAL DE DEUDA'
@@ -171,7 +172,7 @@ export function generatePaymentReceiptWhatsAppUrl(
   const receiptNum = `REC-${new Date(transaction.created_at).getFullYear()}-${transaction.id.slice(-6).toUpperCase()}`;
 
   const message =
-    `🧾 *COMPROBANTE OFICIAL DE PAGO*\n` +
+    `🧾 *COMPROBANTE OFICIAL DE PAGO EN PDF*\n` +
     `🏪 *${tenant.business_name.toUpperCase()}*\n` +
     (tenant.tax_id ? `📋 *RUC / Ident:* ${tenant.tax_id}\n` : '') +
     (tenant.phone ? `📞 *Tel / WhatsApp:* ${tenant.phone}\n` : '') +
@@ -194,7 +195,9 @@ export function generatePaymentReceiptWhatsAppUrl(
     `• *Estado:* Certificado y Registrado en Libro Mayor\n` +
     (transaction.blockchain_hash ? `🔐 *Hash Inmutable:* ${transaction.blockchain_hash}\n` : '') +
     `━━━━━━━━━━━━━━━━━━━━━━━━━\n\n` +
-    `📱 *Ver libreta digital y recibo oficial en vivo:*\n` +
+    `⬇️ *DESCARGÁ TU COMPROBANTE EN FORMATO PDF AQUÍ:*\n` +
+    `${receiptPdfUrl}\n\n` +
+    `📱 *Consultá tu libreta digital en vivo:*\n` +
     `${portalUrl}\n\n` +
     `_¡Muchas gracias por su pago y preferencia en ${tenant.business_name}!_`;
 
