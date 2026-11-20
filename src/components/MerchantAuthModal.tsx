@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Store, ShieldCheck, Phone, Lock, User, ArrowRight, CheckCircle2, AlertCircle, Building2, MapPin } from 'lucide-react';
+import { Store, ShieldCheck, Phone, Lock, User, ArrowRight, CheckCircle2, AlertCircle, Building2, MapPin, LogOut } from 'lucide-react';
 import { Tenant } from '@/types';
 import { saveTenant, getStoredData } from '@/lib/storage';
 import { createClient } from '@/lib/supabase/client';
@@ -311,46 +311,68 @@ export function MerchantAuthModal({ onSuccess, onCancel }: Props) {
           </form>
         )}
 
-        <div className="mt-5 text-center pt-4 border-t border-slate-100 flex justify-between items-center text-xs">
-          {mode === 'LOGIN' ? (
-            <div className="flex items-center gap-3">
+        <div className="mt-5 text-center pt-4 border-t border-slate-100 flex flex-col gap-3">
+          <div className="flex justify-between items-center text-xs">
+            {mode === 'LOGIN' ? (
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMode('REGISTER');
+                    setErrorMsg('');
+                  }}
+                  className="font-bold text-blue-600 hover:underline"
+                >
+                  + Registrar rápido
+                </button>
+                <span className="text-slate-300">•</span>
+                <a
+                  href="/registro-comercio"
+                  className="font-bold text-indigo-600 hover:underline"
+                >
+                  Crear cuenta nueva →
+                </a>
+              </div>
+            ) : (
               <button
                 type="button"
                 onClick={() => {
-                  setMode('REGISTER');
+                  setMode('LOGIN');
                   setErrorMsg('');
                 }}
                 className="font-bold text-blue-600 hover:underline"
               >
-                + Registrar almacén rápido
+                ← Ver almacenes existentes
               </button>
-              <span className="text-slate-300">•</span>
-              <a
-                href="/registro-comercio"
-                className="font-bold text-indigo-600 hover:underline"
-              >
-                Crear cuenta con correo →
-              </a>
-            </div>
-          ) : (
+            )}
+
+            <a
+              href="/admin"
+              className="text-slate-400 hover:text-indigo-600 font-semibold flex items-center gap-1"
+            >
+              <ShieldCheck className="w-3.5 h-3.5" /> Super Admin
+            </a>
+          </div>
+
+          <div className="pt-2 border-t border-slate-100 flex justify-end">
             <button
               type="button"
-              onClick={() => {
-                setMode('LOGIN');
-                setErrorMsg('');
+              onClick={async () => {
+                if (confirm('¿Deseas cerrar sesión de este comercio y salir a la pantalla de registro / login?')) {
+                  const supabase = createClient();
+                  if (supabase) {
+                    try {
+                      await supabase.auth.signOut();
+                    } catch (e) {}
+                  }
+                  window.location.href = '/registro-comercio';
+                }
               }}
-              className="font-bold text-blue-600 hover:underline"
+              className="text-xs font-bold text-rose-600 hover:text-rose-700 flex items-center gap-1.5 transition py-1.5 px-3 rounded-xl hover:bg-rose-50 border border-rose-200"
             >
-              ← Ver almacenes existentes
+              <LogOut className="w-3.5 h-3.5" /> Cerrar Sesión del Comercio
             </button>
-          )}
-
-          <a
-            href="/admin"
-            className="text-slate-400 hover:text-indigo-600 font-semibold flex items-center gap-1"
-          >
-            <ShieldCheck className="w-3.5 h-3.5" /> Super Admin
-          </a>
+          </div>
         </div>
       </div>
     </div>

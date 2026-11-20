@@ -11,10 +11,12 @@ import {
   CheckCircle2,
   Delete,
   Store,
-  Users
+  Users,
+  LogOut
 } from 'lucide-react';
 import { StaffMember, Tenant } from '@/types';
 import { setCurrentOperator } from '@/lib/storage';
+import { createClient } from '@/lib/supabase/client';
 
 interface Props {
   tenant: Tenant;
@@ -25,6 +27,7 @@ interface Props {
   onSuccess: (operator: StaffMember) => void;
   onClose: () => void;
   onOpenManagement?: () => void;
+  onLogoutComercio?: () => void;
 }
 
 export function StaffSwitchModal({
@@ -262,22 +265,39 @@ export function StaffSwitchModal({
             </p>
           </div>
 
-          {/* Acceso a Configuración de Personal para Dueños */}
-          {onOpenManagement && (
-            <div className="pt-2 border-t border-slate-800/60 flex items-center justify-between">
-              <span className="text-xs text-slate-400">¿Deseas dar de alta nuevos colaboradores?</span>
+          {/* Acceso a Configuración de Personal y Cerrar Sesión */}
+          <div className="pt-3 border-t border-slate-800 flex items-center justify-between text-xs">
+            <button
+              type="button"
+              onClick={async () => {
+                if (confirm('¿Deseas cerrar sesión del comercio y salir a la pantalla de login?')) {
+                  const supabase = createClient();
+                  if (supabase) {
+                    try {
+                      await supabase.auth.signOut();
+                    } catch (e) {}
+                  }
+                  window.location.href = '/registro-comercio';
+                }
+              }}
+              className="text-rose-400 hover:text-rose-300 font-bold flex items-center gap-1.5 transition py-1.5 px-2.5 rounded-xl hover:bg-rose-500/10 border border-transparent hover:border-rose-500/30"
+            >
+              <LogOut className="w-3.5 h-3.5" /> Cerrar Sesión
+            </button>
+
+            {onOpenManagement && (
               <button
                 type="button"
                 onClick={() => {
                   onClose();
                   onOpenManagement();
                 }}
-                className="text-xs font-bold text-blue-400 hover:text-blue-300 flex items-center gap-1 transition"
+                className="text-xs font-bold text-blue-400 hover:text-blue-300 flex items-center gap-1 transition py-1.5 px-2.5 rounded-xl hover:bg-blue-500/10"
               >
                 <Users className="w-3.5 h-3.5" /> Gestionar Personal
               </button>
-            </div>
-          )}
+            )}
+          </div>
         </div>
       </div>
     </div>
