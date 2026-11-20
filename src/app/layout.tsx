@@ -6,6 +6,10 @@ export const metadata: Metadata = {
   title: 'LibretaDigital Pro | FinTech POS & Fiado en Tiempo Real',
   description: 'Control de cuentas corrientes, fiado y pagos con doble validación QR para almacenes y minimarkets.',
   manifest: '/manifest.json',
+  icons: {
+    icon: '/icon.svg',
+    apple: '/icon.svg',
+  },
   appleWebApp: {
     capable: true,
     statusBarStyle: 'black-translucent',

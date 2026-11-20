@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { getStoredData, saveTransactions } from '@/lib/storage';
 import { certifyTransactionWithPin } from '@/lib/ledger';
+import { BrandLogo } from '@/components/BrandLogo';
 
 // Inicialización condicional de Supabase para soportar tanto modo API real como Mock reactivo
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -236,7 +237,10 @@ export default function CustomerQRPortal({ qrToken }: { qrToken: string }) {
   return (
     <div className="min-h-screen bg-slate-100 pb-12 max-w-md mx-auto shadow-xl font-sans">
       {/* CABECERA DEL COMERCIO */}
-      <header className="bg-slate-900 text-white px-5 pt-6 pb-8 rounded-b-3xl shadow-md">
+      <header className="bg-slate-900 text-white px-5 pt-5 pb-8 rounded-b-3xl shadow-md">
+        <div className="flex justify-center mb-4 pb-3 border-b border-slate-800">
+          <BrandLogo size="md" theme="dark" />
+        </div>
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
             <div className="bg-emerald-500/20 p-2 rounded-xl">

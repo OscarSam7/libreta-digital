@@ -17,6 +17,7 @@ import { HistoricalBatchImportModal } from '@/components/HistoricalBatchImportMo
 import { PDFReportPreviewModal } from '@/components/PDFReportPreviewModal';
 import { CustomerHistoryModal } from '@/components/CustomerHistoryModal';
 import { TermsAndConditionsModal } from '@/components/TermsAndConditionsModal';
+import { BrandLogo } from '@/components/BrandLogo';
 import {
   TrendingUp,
   Users,
@@ -306,23 +307,23 @@ export function MerchantDashboard() {
       {/* HEADER PRINCIPAL */}
       <header className="bg-slate-950 text-white px-4 py-4 shadow-lg sticky top-0 z-30">
         <div className="max-w-5xl mx-auto flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+          {/* LOGO DE MARCA LIBRETADIGITAL PRO & COMERCIO */}
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-blue-600 to-indigo-500 flex items-center justify-center shadow-lg shadow-blue-500/30">
-              <Store className="w-5 h-5 text-white" />
-            </div>
-            <div>
+            <BrandLogo size="md" theme="dark" />
+            <div className="h-7 w-px bg-slate-800 hidden md:block" />
+            <div className="hidden md:block">
               <div className="flex items-center gap-2">
-                <h1 className="text-base font-black tracking-tight">{tenant.business_name}</h1>
+                <span className="text-xs font-black tracking-tight text-slate-200">{tenant.business_name}</span>
                 <button
                   onClick={() => setShowSubscriptionModal(true)}
-                  className="text-[10px] font-black bg-blue-500/20 hover:bg-blue-500/30 text-blue-300 border border-blue-400/30 px-2.5 py-0.5 rounded-full uppercase transition flex items-center gap-1 cursor-pointer"
+                  className="text-[9px] font-black bg-blue-500/20 hover:bg-blue-500/30 text-blue-300 border border-blue-400/30 px-2 py-0.5 rounded-full uppercase transition flex items-center gap-1 cursor-pointer"
                   title="Cambiar o renovar plan"
                 >
                   <span>PLAN {tenant.subscription_plan}</span>
-                  <CreditCard className="w-3 h-3 text-amber-400" />
+                  <CreditCard className="w-2.5 h-2.5 text-amber-400" />
                 </button>
               </div>
-              <p className="text-xs text-slate-400">POS & Cuentas Corrientes en Tiempo Real</p>
+              <p className="text-[10px] text-slate-400">Terminal POS Activa</p>
             </div>
           </div>
 

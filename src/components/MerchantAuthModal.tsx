@@ -5,6 +5,7 @@ import { Store, ShieldCheck, Phone, Lock, User, ArrowRight, CheckCircle2, AlertC
 import { Tenant } from '@/types';
 import { saveTenant, getStoredData } from '@/lib/storage';
 import { createClient } from '@/lib/supabase/client';
+import { BrandLogo } from '@/components/BrandLogo';
 
 interface Props {
   onSuccess?: () => void;
@@ -149,13 +150,13 @@ export function MerchantAuthModal({ onSuccess, onCancel }: Props) {
         )}
 
         <div className="text-center mb-6">
-          <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-blue-600 to-indigo-600 text-white flex items-center justify-center mx-auto mb-3 shadow-lg shadow-blue-500/30">
-            <Store className="w-6 h-6" />
+          <div className="flex justify-center mb-3">
+            <BrandLogo size="lg" theme="light" showTagline />
           </div>
-          <h2 className="text-2xl font-black text-slate-900">
+          <h2 className="text-xl font-black text-slate-900 mt-2">
             {mode === 'LOGIN' ? 'Acceso de Comercio' : 'Registrar Nuevo Almacén'}
           </h2>
-          <p className="text-xs text-slate-500 mt-1">
+          <p className="text-xs text-slate-500 mt-0.5">
             {mode === 'LOGIN'
               ? 'Selecciona tu almacén o cambia entre sucursales'
               : 'Empieza a usar LibretaDigital Pro en 1 minuto'}

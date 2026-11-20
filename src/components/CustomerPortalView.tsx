@@ -22,6 +22,7 @@ import {
   HelpCircle
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
+import { BrandLogo } from '@/components/BrandLogo';
 
 interface Props {
   token: string;
@@ -132,14 +133,19 @@ export function CustomerPortalView({ token }: Props) {
 
   return (
     <main className="min-h-screen bg-slate-100 p-4 max-w-md mx-auto pb-16 font-sans">
+      {/* Logotipo Oficial LibretaDigital Pro */}
+      <div className="flex justify-center mb-3 pt-2">
+        <BrandLogo size="md" theme="light" />
+      </div>
+
       {/* Header Comercio emisor */}
-      <div className="text-center mb-4 pt-2">
+      <div className="text-center mb-4 bg-white p-3 rounded-2xl border border-slate-200/80 shadow-xs">
         <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 block">
-          Estado de Cuenta Oficial
+          Comercio Emisor
         </span>
-        <h2 className="text-base font-black text-slate-800">{tenant.business_name}</h2>
+        <h2 className="text-base font-black text-slate-900">{tenant.business_name}</h2>
         {tenant.phone && (
-          <p className="text-xs text-slate-500">Contacto: +{tenant.phone}</p>
+          <p className="text-xs text-slate-500 font-medium mt-0.5">Contacto: +{tenant.phone}</p>
         )}
       </div>
 

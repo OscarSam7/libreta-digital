@@ -4,6 +4,7 @@ import React, { useRef } from 'react';
 import { Customer, Tenant, Transaction, PaymentMethod } from '@/types';
 import { CustomerPortfolioSummary, generateWhatsAppReminderUrl } from '@/lib/reports';
 import { QRCodeSVG } from 'qrcode.react';
+import { BrandLogo } from '@/components/BrandLogo';
 import {
   Printer,
   Download,
@@ -184,21 +185,23 @@ export function PDFReportPreviewModal({
             {/* ENCABEZADO OFICIAL DEL COMERCIO */}
             <div>
               <div className="flex justify-between items-start pb-5 border-b-2 border-slate-900">
-                <div className="space-y-1">
-                  <div className="flex items-center gap-2">
-                    <span className="w-3 h-3 rounded-full bg-blue-600 inline-block" />
-                    <h1 className="text-xl sm:text-2xl font-black tracking-tight text-slate-950 uppercase">
+                <div className="flex items-start gap-4">
+                  <div className="w-12 h-12 shrink-0">
+                    <BrandLogo size="icon-only" />
+                  </div>
+                  <div className="space-y-1">
+                    <h1 className="text-xl sm:text-2xl font-black tracking-tight text-slate-950 uppercase leading-none">
                       {tenant.business_name}
                     </h1>
+                    <p className="text-[11px] font-bold text-slate-500">
+                      LibretaDigital Pro • Moneda: {tenant.currency_code} ({tenant.currency_symbol})
+                    </p>
+                    <p className="text-[10px] text-slate-400">
+                      {tenant.address ? `${tenant.address} • ` : ''}
+                      {tenant.phone ? `Tel: ${tenant.phone} • ` : ''}
+                      {tenant.tax_id ? `RUC/Doc: ${tenant.tax_id}` : ''}
+                    </p>
                   </div>
-                  <p className="text-[11px] font-bold text-slate-500">
-                    Sistema Contable & Libreta Digital Pro • Moneda: {tenant.currency_code} ({tenant.currency_symbol})
-                  </p>
-                  <p className="text-[10px] text-slate-400">
-                    {tenant.address ? `${tenant.address} • ` : ''}
-                    {tenant.phone ? `Tel: ${tenant.phone} • ` : ''}
-                    {tenant.tax_id ? `RUC/Doc: ${tenant.tax_id}` : ''}
-                  </p>
                 </div>
 
                 <div className="text-right space-y-1">

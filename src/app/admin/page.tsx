@@ -24,6 +24,7 @@ import {
 import { Tenant } from '@/types';
 import { getStoredData, saveTenant } from '@/lib/storage';
 import { createClient } from '@/lib/supabase/client';
+import { BrandLogo } from '@/components/BrandLogo';
 
 export default function SuperAdminPage() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -252,13 +253,12 @@ export default function SuperAdminPage() {
       <div className="max-w-7xl mx-auto space-y-6">
         {/* HEADER SUPER ADMIN */}
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-slate-900 border border-slate-800 p-6 rounded-3xl shadow-xl">
-          <div className="flex items-center gap-3">
-            <div className="w-12 h-12 bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 rounded-2xl flex items-center justify-center">
-              <ShieldCheck className="w-7 h-7" />
-            </div>
+          <div className="flex items-center gap-4">
+            <BrandLogo size="lg" theme="dark" />
+            <div className="h-8 w-px bg-slate-800 hidden sm:block" />
             <div>
               <div className="flex items-center gap-2">
-                <h1 className="text-xl font-bold text-white">Super Admin — Plataforma LibretaDigital</h1>
+                <h1 className="text-lg font-bold text-white">Super Admin — Plataforma</h1>
                 <span className="px-2.5 py-0.5 bg-indigo-500/20 text-indigo-400 border border-indigo-500/30 text-[10px] font-bold rounded-full uppercase">
                   Acceso Total
                 </span>

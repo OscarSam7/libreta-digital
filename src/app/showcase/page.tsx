@@ -198,55 +198,45 @@ export default function ShowcasePage() {
     },
     {
       id: 4,
-      title: 'Monograma L + D',
-      subtitle: 'Minimalismo Suizo, Sello & Apretón de Manos',
-      tagline: '"La palabra de barrio convertida en firma digital"',
+      title: 'Monograma L + D Oficial',
+      subtitle: 'Colores Corporativos & Diferenciación Nítida L/D',
+      tagline: '"La palabra de confianza de barrio convertida en firma digital"',
       concept:
-        'Las iniciales L (Libreta) y D (Digital) entrelazadas tridimensionalmente para representar a la vez las tapas de un libro y el tradicional apretón de manos entre comerciantes y clientes. Máxima nitidez y facilidad para impresión en tickets térmicos de POS, sellos y pantallas pequeñas.',
+        'El diseño definitivo elegido: mantiene al 100% la geometría y silueta tubular original de las letras entrelazadas, eliminando los resplandores de neón. La letra L se distingue en Azul Real Clásico (#1D4ED8) y la letra D en Verde Esmeralda Natural (#16A34A).',
       colors: [
-        { name: 'Cyan Neon', hex: '#06B6D4', bg: 'bg-cyan-500' },
-        { name: 'Royal Blue', hex: '#1D4ED8', bg: 'bg-blue-700' },
-        { name: 'Paper White', hex: '#FFFFFF', bg: 'bg-white' },
-        { name: 'Dark Carbon', hex: '#0F172A', bg: 'bg-slate-900' },
+        { name: 'Royal Blue (L)', hex: '#1D4ED8', bg: 'bg-blue-700' },
+        { name: 'Emerald Green (D)', hex: '#16A34A', bg: 'bg-emerald-600' },
+        { name: 'White Contrast', hex: '#FFFFFF', bg: 'bg-white' },
+        { name: 'Matte Slate', hex: '#0F172A', bg: 'bg-slate-900' },
       ],
-      iconGradient: 'from-cyan-600 to-blue-700',
-      badgeColor: 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30',
-      borderColor: 'border-cyan-500',
-      accentText: 'text-cyan-400',
+      iconGradient: 'from-blue-700 to-emerald-700',
+      badgeColor: 'bg-blue-500/20 text-blue-400 border-blue-500/30',
+      borderColor: 'border-blue-500',
+      accentText: 'text-blue-500',
       renderSvg: (
-        <svg className="w-24 h-24 sm:w-28 sm:h-28 drop-shadow-xl" viewBox="0 0 100 100" fill="none">
-          <defs>
-            <linearGradient id="ld-gl" x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" stopColor="#38BDF8" />
-              <stop offset="100%" stopColor="#2563EB" />
-            </linearGradient>
-            <linearGradient id="ld-gd" x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" stopColor="#10B981" />
-              <stop offset="100%" stopColor="#059669" />
-            </linearGradient>
-          </defs>
+        <svg className="w-24 h-24 sm:w-28 sm:h-28 drop-shadow-md" viewBox="0 0 100 100" fill="none">
+          {/* Letra L en Azul Real Clásico Sólido */}
           <path
-            d="M26 20 V72 Q26 78 32 78 H58"
-            fill="none"
-            stroke="url(#ld-gl)"
-            strokeWidth="8"
-            strokeLinecap="round"
-          />
-          <path
-            d="M44 24 H56 Q76 24 76 48 Q76 72 56 72 H44"
-            fill="none"
-            stroke="url(#ld-gd)"
-            strokeWidth="8"
+            d="M 26 20 V 72 Q 26 78 32 78 H 58"
+            stroke="#1D4ED8"
+            strokeWidth="9"
             strokeLinecap="round"
             strokeLinejoin="round"
           />
-          <circle cx="56" cy="48" r="4" fill="#38BDF8" />
+          {/* Letra D en Verde Esmeralda Natural Sólido */}
+          <path
+            d="M 44 24 H 56 Q 76 24 76 48 Q 76 72 56 72 H 44"
+            stroke="#16A34A"
+            strokeWidth="9"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
         </svg>
       ),
       iconSmall: (
         <svg className="w-10 h-10" viewBox="0 0 100 100" fill="none">
-          <path d="M26 22 V74 H54" stroke="#38BDF8" strokeWidth="9" strokeLinecap="round" />
-          <path d="M44 26 H56 Q74 26 74 48 Q74 70 56 70 H44" stroke="#10B981" strokeWidth="9" strokeLinecap="round" />
+          <path d="M 26 20 V 72 Q 26 78 32 78 H 58" stroke="#1D4ED8" strokeWidth="9" strokeLinecap="round" />
+          <path d="M 44 24 H 56 Q 76 24 76 48 Q 76 72 56 72 H 44" stroke="#16A34A" strokeWidth="9" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
       ),
     },

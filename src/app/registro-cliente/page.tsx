@@ -22,6 +22,7 @@ import { Tenant } from '@/types';
 import { getStoredData, saveCustomers } from '@/lib/storage';
 import { createClient } from '@/lib/supabase/client';
 import confetti from 'canvas-confetti';
+import { BrandLogo } from '@/components/BrandLogo';
 
 function ClientRegisterContent() {
   const searchParams = useSearchParams();
@@ -186,15 +187,15 @@ function ClientRegisterContent() {
   return (
     <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-col justify-center items-center p-4 py-10 selection:bg-emerald-500 selection:text-white">
       <div className="w-full max-w-lg">
-        {/* ENCABEZADO DE MARCA */}
+        {/* ENCABEZADO DE MARCA OFICIAL */}
         <div className="text-center mb-6">
-          <div className="inline-flex items-center justify-center p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-2xl mb-3 shadow-inner">
-            <Store className="w-8 h-8 text-emerald-400" />
+          <div className="flex justify-center mb-3">
+            <BrandLogo size="lg" theme="dark" showTagline />
           </div>
-          <h1 className="text-2xl font-black tracking-tight text-white">
+          <h1 className="text-xl font-bold tracking-tight text-white mt-2">
             Solicitud de Libreta & Cuenta Corriente
           </h1>
-          <p className="text-xs text-slate-400 mt-1">
+          <p className="text-xs text-slate-400 mt-0.5">
             Regístrate digitalmente para acceder a compras fiadas con firma segura por PIN
           </p>
         </div>
