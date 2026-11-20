@@ -304,76 +304,82 @@ export function MerchantDashboard() {
 
   return (
     <div className="min-h-screen bg-slate-100/70 pb-24 text-slate-900 font-sans">
-      {/* HEADER PRINCIPAL */}
-      <header className="bg-slate-950 text-white px-4 py-4 shadow-lg sticky top-0 z-30">
-        <div className="max-w-5xl mx-auto flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-          {/* LOGO DE MARCA LIBRETADIGITAL PRO & COMERCIO */}
-          <div className="flex items-center gap-3">
-            <BrandLogo size="md" theme="dark" />
-            <div className="h-7 w-px bg-slate-800 hidden md:block" />
-            <div className="hidden md:block">
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-black tracking-tight text-slate-200">{tenant.business_name}</span>
-                <button
-                  onClick={() => setShowSubscriptionModal(true)}
-                  className="text-[9px] font-black bg-blue-500/20 hover:bg-blue-500/30 text-blue-300 border border-blue-400/30 px-2 py-0.5 rounded-full uppercase transition flex items-center gap-1 cursor-pointer"
-                  title="Cambiar o renovar plan"
-                >
-                  <span>PLAN {tenant.subscription_plan}</span>
-                  <CreditCard className="w-2.5 h-2.5 text-amber-400" />
-                </button>
+      {/* HEADER PRINCIPAL RESPONSIVO */}
+      <header className="bg-slate-950 text-white px-3 sm:px-4 py-3 shadow-lg sticky top-0 z-30">
+        <div className="max-w-5xl mx-auto flex flex-col gap-2.5">
+          {/* FILA 1: Logo de Marca a la izquierda, y Acciones Principales a la derecha */}
+          <div className="flex items-center justify-between gap-2 w-full">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <BrandLogo size="sm" theme="dark" className="shrink-0" />
+              <div className="h-6 w-px bg-slate-800 hidden md:block shrink-0" />
+              <div className="hidden md:block truncate">
+                <span className="text-xs font-black tracking-tight text-slate-200 block truncate">{tenant.business_name}</span>
+                <p className="text-[10px] text-slate-400">Terminal POS Activa</p>
               </div>
-              <p className="text-[10px] text-slate-400">Terminal POS Activa</p>
+            </div>
+
+            {/* Controles Rápidos de la derecha */}
+            <div className="flex items-center gap-1.5 shrink-0">
+              {/* Selector de Moneda */}
+              <div className="flex items-center gap-1 bg-slate-900 border border-slate-800 rounded-xl px-2 py-1.5 text-xs">
+                <Globe2 className="w-3 h-3 text-slate-400 shrink-0" />
+                <select
+                  value={tenant.currency_code}
+                  onChange={(e) => handleCurrencyChange(e.target.value)}
+                  className="bg-transparent text-white font-bold outline-none cursor-pointer text-xs"
+                >
+                  {REGIONAL_CURRENCIES.map((c) => (
+                    <option key={c.code} value={c.code} className="bg-slate-900 text-white">
+                      {c.code} ({c.symbol})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Botón Cuenta Comercio */}
+              <button
+                onClick={() => setShowAuthModal(true)}
+                className="p-2 bg-slate-900 hover:bg-slate-800 border border-slate-800 rounded-xl text-xs font-semibold transition"
+                title="Cuenta de Comercio"
+              >
+                <UserCheck className="w-3.5 h-3.5 text-blue-400" />
+              </button>
+
+              {/* Botón SuperAdmin */}
+              <button
+                onClick={() => setShowSuperAdminModal(true)}
+                className="p-2 bg-slate-900 hover:bg-slate-800 border border-slate-800 rounded-xl text-xs font-semibold transition"
+                title="Panel SuperAdmin (Dueño SaaS)"
+              >
+                <SlidersHorizontal className="w-3.5 h-3.5 text-indigo-300" />
+              </button>
+
+              {/* Botón Nuevo Cliente */}
+              <button
+                onClick={() => setShowNewCustomerModal(true)}
+                className="flex items-center gap-1 px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-bold shadow-md shadow-blue-600/30 transition shrink-0"
+              >
+                <Plus className="w-3.5 h-3.5" /> <span>Nuevo Cliente</span>
+              </button>
             </div>
           </div>
 
-          {/* Selector de Moneda y Acciones */}
-          <div className="flex items-center gap-2 w-full sm:w-auto justify-between sm:justify-end">
-            <div className="flex items-center gap-1.5 bg-slate-900 border border-slate-800 rounded-xl px-2.5 py-1.5 text-xs">
-              <Globe2 className="w-3.5 h-3.5 text-slate-400" />
-              <select
-                value={tenant.currency_code}
-                onChange={(e) => handleCurrencyChange(e.target.value)}
-                className="bg-transparent text-white font-bold outline-none cursor-pointer"
-              >
-                {REGIONAL_CURRENCIES.map((c) => (
-                  <option key={c.code} value={c.code} className="bg-slate-900 text-white">
-                    {c.code} ({c.symbol})
-                  </option>
-                ))}
-              </select>
-            </div>
-
+          {/* FILA 2: SUB-BARRA DE ACCESOS DIRECTOS (DESPLAZAMIENTO SUAVE EN MÓVIL SIN OVERFLOW) */}
+          <div className="flex items-center gap-2 overflow-x-auto no-scrollbar py-0.5 w-full">
             <button
               onClick={() => setShowReportsModal(true)}
-              className="flex items-center gap-1.5 px-3 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold shadow-md shadow-indigo-600/30 transition"
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-200 rounded-xl text-xs font-bold transition whitespace-nowrap shrink-0 shadow-xs"
               title="Informes por Fechas y Clientes"
             >
-              <FileText className="w-3.5 h-3.5" /> Informes
+              <FileText className="w-3.5 h-3.5 text-indigo-400" /> Informes
             </button>
 
             <button
               onClick={() => setShowWhatsAppModal(true)}
-              className="flex items-center gap-1.5 px-3 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold shadow-md shadow-emerald-600/30 transition"
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-950/80 hover:bg-emerald-900/80 border border-emerald-800/60 text-emerald-300 rounded-xl text-xs font-bold transition whitespace-nowrap shrink-0 shadow-xs"
               title="Cobranzas y Avisos por WhatsApp"
             >
-              <Send className="w-3.5 h-3.5" /> Cobranzas WA
-            </button>
-
-            <button
-              onClick={() => setShowSuperAdminModal(true)}
-              className="p-2 bg-white/10 hover:bg-white/15 rounded-xl text-xs font-semibold backdrop-blur-md transition"
-              title="Panel SuperAdmin (Dueño SaaS)"
-            >
-              <SlidersHorizontal className="w-4 h-4 text-indigo-300" />
-            </button>
-
-            <button
-              onClick={() => setShowAuthModal(true)}
-              className="p-2 bg-white/10 hover:bg-white/15 rounded-xl text-xs font-semibold backdrop-blur-md transition"
-              title="Cuenta de Comercio"
-            >
-              <UserCheck className="w-4 h-4 text-blue-400" />
+              <Send className="w-3.5 h-3.5 text-emerald-400" /> Cobranzas WA
             </button>
 
             <button
@@ -381,28 +387,29 @@ export function MerchantDashboard() {
                 const url = `${typeof window !== 'undefined' ? window.location.origin : ''}/registro-cliente?almacen=${tenant.id}`;
                 if (navigator.clipboard) {
                   navigator.clipboard.writeText(url);
-                  alert('¡Enlace de auto-registro copiado al portapapeles!\n\nPuedes enviarlo a tus clientes por WhatsApp para que soliciten su libreta y acepten los términos legales desde su celular:\n\n' + url);
+                  alert('¡Enlace de auto-registro copiado al portapapeles!\n\nPuedes enviarlo a tus clientes por WhatsApp:\n\n' + url);
                 } else {
                   prompt('Copia este enlace para enviar a tus clientes:', url);
                 }
               }}
-              className="hidden sm:flex items-center gap-1.5 px-3 py-2 bg-emerald-700/80 hover:bg-emerald-600 text-white rounded-xl text-xs font-bold transition shadow-sm"
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-200 rounded-xl text-xs font-bold transition whitespace-nowrap shrink-0 shadow-xs"
               title="Copiar enlace para que tus clientes se registren desde su celular"
             >
-              <Share2 className="w-3.5 h-3.5" /> Link Clientes
+              <Share2 className="w-3.5 h-3.5 text-emerald-400" /> Link Clientes
             </button>
 
             <button
-              onClick={() => setShowNewCustomerModal(true)}
-              className="flex items-center gap-1.5 px-3.5 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-bold shadow-md shadow-blue-600/30 transition"
+              onClick={() => setShowSubscriptionModal(true)}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 bg-blue-950/60 border border-blue-800/40 text-blue-300 rounded-xl text-[11px] font-bold uppercase transition whitespace-nowrap shrink-0 sm:ml-auto"
+              title="Plan de Suscripción"
             >
-              <Plus className="w-4 h-4" /> Nuevo Cliente
+              <CreditCard className="w-3 h-3 text-amber-400" /> Plan {tenant.subscription_plan}
             </button>
           </div>
         </div>
       </header>
 
-      <main className="max-w-5xl mx-auto px-4 pt-5 space-y-5">
+      <main className="max-w-5xl mx-auto px-3 sm:px-4 pt-4 sm:pt-5 space-y-4 sm:space-y-5 w-full">
         {/* BANNER FINANCIERO */}
         <div className="bg-gradient-to-r from-blue-900 via-indigo-900 to-slate-900 text-white rounded-3xl p-5 shadow-md flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="space-y-1">

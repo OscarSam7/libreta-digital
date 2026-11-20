@@ -24,12 +24,12 @@ export function BrandLogo({
     'icon-only': 'w-full h-full',
   }[size];
 
-  // Tamaños tipográficos
+  // Tamaños tipográficos responsivos
   const textSizes = {
-    sm: 'text-sm',
-    md: 'text-base',
-    lg: 'text-xl',
-    xl: 'text-3xl',
+    sm: 'text-xs sm:text-sm',
+    md: 'text-sm sm:text-base',
+    lg: 'text-lg sm:text-xl',
+    xl: 'text-2xl sm:text-3xl',
     'icon-only': 'text-base',
   }[size];
 
@@ -82,7 +82,7 @@ export function BrandLogo({
   const isLight = theme === 'light';
 
   return (
-    <div className={`inline-flex items-center gap-2.5 select-none ${className}`}>
+    <div className={`inline-flex items-center gap-2 select-none shrink-0 whitespace-nowrap ${className}`}>
       {/* Contenedor del Isotipo con fondo suave mate */}
       <div
         className={`rounded-xl p-1 flex items-center justify-center shadow-xs border ${
