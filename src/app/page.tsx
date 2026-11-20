@@ -61,6 +61,14 @@ export default function Home() {
             <BrandLogo size="md" theme="dark" showTagline={false} />
             <div className="flex items-center gap-2">
               <Link
+                href="/admin"
+                className="text-xs font-bold text-slate-300 hover:text-indigo-300 px-2.5 py-1.5 rounded-xl border border-slate-800 hover:bg-slate-900 transition flex items-center gap-1"
+                title="Acceso exclusivo para el Dueño del SaaS"
+              >
+                <ShieldCheck className="w-3.5 h-3.5 text-indigo-400" />
+                <span className="hidden sm:inline">Super Admin</span>
+              </Link>
+              <Link
                 href="/showcase"
                 className="text-xs font-bold text-slate-300 hover:text-white px-3 py-1.5 rounded-xl border border-slate-800 hover:bg-slate-900 transition flex items-center gap-1.5"
               >
@@ -121,8 +129,14 @@ export default function Home() {
         </main>
 
         {/* FOOTER */}
-        <footer className="border-t border-slate-900 bg-slate-950/80 py-4 px-4 text-center text-[11px] text-slate-500">
+        <footer className="border-t border-slate-900 bg-slate-950/80 py-4 px-4 text-center text-[11px] text-slate-500 flex flex-col sm:flex-row items-center justify-between max-w-5xl mx-auto w-full gap-2">
           <p>LibretaDigital Pro • FinTech POS & Fiado en Tiempo Real • Multi-País</p>
+          <Link
+            href="/admin"
+            className="text-indigo-400 hover:text-indigo-300 font-bold flex items-center gap-1 transition"
+          >
+            <ShieldCheck className="w-3.5 h-3.5" /> Acceso Super Admin (Dueño SaaS) →
+          </Link>
         </footer>
       </div>
     );
