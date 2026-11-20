@@ -52,7 +52,8 @@ import {
   Wallet,
   BookOpen,
   Calendar,
-  History
+  History,
+  Share2
 } from 'lucide-react';
 
 const REGIONAL_CURRENCIES = [
@@ -372,6 +373,22 @@ export function MerchantDashboard() {
               title="Cuenta de Comercio"
             >
               <UserCheck className="w-4 h-4 text-blue-400" />
+            </button>
+
+            <button
+              onClick={() => {
+                const url = `${typeof window !== 'undefined' ? window.location.origin : ''}/registro-cliente?almacen=${tenant.id}`;
+                if (navigator.clipboard) {
+                  navigator.clipboard.writeText(url);
+                  alert('¡Enlace de auto-registro copiado al portapapeles!\n\nPuedes enviarlo a tus clientes por WhatsApp para que soliciten su libreta y acepten los términos legales desde su celular:\n\n' + url);
+                } else {
+                  prompt('Copia este enlace para enviar a tus clientes:', url);
+                }
+              }}
+              className="hidden sm:flex items-center gap-1.5 px-3 py-2 bg-emerald-700/80 hover:bg-emerald-600 text-white rounded-xl text-xs font-bold transition shadow-sm"
+              title="Copiar enlace para que tus clientes se registren desde su celular"
+            >
+              <Share2 className="w-3.5 h-3.5" /> Link Clientes
             </button>
 
             <button
