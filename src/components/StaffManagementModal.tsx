@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 import { StaffMember, StaffRole, StaffPermissions, Tenant } from '@/types';
 import { saveStaff } from '@/lib/storage';
+import { CustomSelect } from '@/components/ui/CustomSelectModal';
 
 interface Props {
   tenant: Tenant;
@@ -421,16 +422,17 @@ export function StaffManagementModal({
                   <label className="block text-[11px] font-bold uppercase text-slate-500 mb-1">
                     Rol en el Negocio
                   </label>
-                  <select
+                  <CustomSelect
                     value={role}
-                    onChange={(e) => handleRoleChange(e.target.value as StaffRole)}
-                    className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-sm text-slate-900 font-bold focus:outline-none focus:border-blue-600 focus:bg-white transition"
-                  >
-                    <option value="CASHIER">Cajero (Ventas y Cobranzas)</option>
-                    <option value="COLLECTOR">Cobrador (Solo registrar pagos)</option>
-                    <option value="ADMIN">Administrador (Límites y Reportes)</option>
-                    {isOwner && <option value="OWNER">Dueño (Acceso Total)</option>}
-                  </select>
+                    onChange={(val) => handleRoleChange(val as StaffRole)}
+                    title="Seleccionar Rol de Colaborador"
+                    options={[
+                      { value: 'CASHIER', label: 'Cajero', sublabel: 'Ventas y Cobranzas' },
+                      { value: 'COLLECTOR', label: 'Cobrador', sublabel: 'Solo registrar pagos' },
+                      { value: 'ADMIN', label: 'Administrador', sublabel: 'Límites y Reportes' },
+                      ...(isOwner ? [{ value: 'OWNER', label: 'Dueño', sublabel: 'Acceso Total al Sistema' }] : []),
+                    ]}
+                  />
                 </div>
               </div>
 

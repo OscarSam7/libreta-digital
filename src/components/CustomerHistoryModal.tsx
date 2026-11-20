@@ -4,6 +4,8 @@ import React, { useState, useMemo } from 'react';
 import { Customer, Transaction, Tenant, PaymentMethod } from '@/types';
 import { exportTransactionsToCSV, generateWhatsAppReminderUrl } from '@/lib/reports';
 import { PDFReportPreviewModal } from '@/components/PDFReportPreviewModal';
+import { CustomDateInput } from '@/components/ui/CustomDatePickerModal';
+import { CustomSelect } from '@/components/ui/CustomSelectModal';
 import {
   FileText,
   Calendar,
@@ -250,28 +252,21 @@ export function CustomerHistoryModal({
         {/* SELECTOR DE CLIENTE Y FICHA RESUMEN */}
         <div className="p-4 bg-slate-50 border-b border-slate-200 shrink-0 space-y-3">
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-            <div className="relative flex-1">
-              <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-              <input
-                type="text"
-                placeholder="Buscar cliente por nombre o teléfono..."
-                value={customerSearch}
-                onChange={(e) => setCustomerSearch(e.target.value)}
-                className="w-full pl-9 pr-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-semibold focus:border-indigo-600 focus:outline-none shadow-sm"
+            <div className="flex-1">
+              <CustomSelect
+                value={selectedCustomerId}
+                onChange={(val) => setSelectedCustomerId(String(val))}
+                title="Seleccionar Cuenta de Cliente"
+                placeholder="Seleccionar cliente..."
+                searchable={true}
+                options={customers.map((c) => ({
+                  value: c.id,
+                  label: `${c.full_name}${c.nickname ? ` (${c.nickname})` : ''}`,
+                  sublabel: `${c.phone || 'Sin teléfono'} • Cód: ${c.id.slice(-6)}`,
+                  badge: `Saldo: ${formatCurrency(c.current_balance)}`,
+                }))}
               />
             </div>
-
-            <select
-              value={selectedCustomerId}
-              onChange={(e) => setSelectedCustomerId(e.target.value)}
-              className="p-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:border-indigo-600 focus:outline-none min-w-[240px] shadow-sm"
-            >
-              {filteredCustomerList.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.full_name} {c.nickname ? `(${c.nickname})` : ''} - Saldo: {formatCurrency(c.current_balance)}
-                </option>
-              ))}
-            </select>
           </div>
 
           {/* FICHA DEL CLIENTE SELECCIONADO */}
@@ -334,11 +329,11 @@ export function CustomerHistoryModal({
                 <label className="text-[9px] font-bold uppercase tracking-wider text-slate-400 block mb-0.5">
                   Fecha Desde
                 </label>
-                <input
-                  type="date"
+                <CustomDateInput
                   value={inputDateFrom}
-                  onChange={(e) => setInputDateFrom(e.target.value)}
-                  className="p-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:border-indigo-600 focus:outline-none shadow-sm"
+                  onChange={(val) => setInputDateFrom(val)}
+                  label="Fecha Desde"
+                  className="min-w-[140px]"
                 />
               </div>
 
@@ -348,11 +343,11 @@ export function CustomerHistoryModal({
                 <label className="text-[9px] font-bold uppercase tracking-wider text-slate-400 block mb-0.5">
                   Fecha Hasta
                 </label>
-                <input
-                  type="date"
+                <CustomDateInput
                   value={inputDateTo}
-                  onChange={(e) => setInputDateTo(e.target.value)}
-                  className="p-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:border-indigo-600 focus:outline-none shadow-sm"
+                  onChange={(val) => setInputDateTo(val)}
+                  label="Fecha Hasta"
+                  className="min-w-[140px]"
                 />
               </div>
 

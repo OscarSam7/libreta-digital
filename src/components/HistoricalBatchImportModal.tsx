@@ -4,6 +4,8 @@ import React, { useState, useMemo } from 'react';
 import { Customer, Tenant, TransactionType, PaymentMethod, TransactionItem } from '@/types';
 import { createNewCustomer } from '@/lib/customers';
 import { processHistoricalBatchTransactions, HistoricalBatchEntry } from '@/lib/ledger';
+import { CustomDateInput } from '@/components/ui/CustomDatePickerModal';
+import { CustomSelect } from '@/components/ui/CustomSelectModal';
 import {
   BookOpen,
   Calendar,
@@ -525,32 +527,24 @@ export function HistoricalBatchImportModal({
                     </div>
                   </form>
                 ) : (
-                  /* SELECTOR DE CLIENTE EXISTENTE */
+                  /* SELECTOR DE CLIENTE EXISTENTE FINTECH */
                   <div className="space-y-2">
-                    <div className="flex gap-2">
-                      <div className="relative flex-1">
-                        <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                        <input
-                          type="text"
-                          placeholder="Filtrar clientes por nombre o teléfono..."
-                          value={custSearch}
-                          onChange={(e) => setCustSearch(e.target.value)}
-                          className="w-full pl-9 pr-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-semibold focus:border-blue-600 focus:outline-none"
-                        />
-                      </div>
-                      <select
-                        value={selectedCustomerId}
-                        onChange={(e) => setSelectedCustomerId(e.target.value)}
-                        className="p-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:border-blue-600 focus:outline-none min-w-[200px]"
-                      >
-                        <option value="">-- Seleccionar Cliente --</option>
-                        {filteredCustomers.map((c) => (
-                          <option key={c.id} value={c.id}>
-                            {c.full_name} {c.nickname ? `(${c.nickname})` : ''} - Saldo: {formatCurrency(c.current_balance)}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
+                    <CustomSelect
+                      value={selectedCustomerId}
+                      onChange={(val) => setSelectedCustomerId(String(val))}
+                      title="Seleccionar Cliente del Negocio"
+                      placeholder="-- Seleccionar Cliente --"
+                      searchable={true}
+                      options={[
+                        { value: '', label: '-- Seleccionar Cliente --' },
+                        ...customers.map((c) => ({
+                          value: c.id,
+                          label: `${c.full_name}${c.nickname ? ` (${c.nickname})` : ''}`,
+                          sublabel: `${c.phone || 'Sin teléfono'} • Cód: ${c.id.slice(-6)}`,
+                          badge: `Saldo: ${formatCurrency(c.current_balance)}`,
+                        })),
+                      ]}
+                    />
 
                     {currentCustomer && (
                       <div className="bg-white p-3 rounded-xl border border-slate-200 flex items-center justify-between text-xs">
@@ -604,16 +598,12 @@ export function HistoricalBatchImportModal({
                         <label className="text-[10px] font-bold uppercase text-slate-400 block mb-1">
                           Fecha del Movimiento *
                         </label>
-                        <div className="relative">
-                          <input
-                            type="date"
-                            required
-                            max={todayDefault}
-                            value={entryDate}
-                            onChange={(e) => setEntryDate(e.target.value)}
-                            className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:border-blue-600 focus:outline-none"
-                          />
-                        </div>
+                        <CustomDateInput
+                          value={entryDate}
+                          onChange={(val) => setEntryDate(val)}
+                          maxDate={todayDefault}
+                          label="Fecha del Movimiento"
+                        />
                       </div>
 
                       <div className="sm:col-span-2">

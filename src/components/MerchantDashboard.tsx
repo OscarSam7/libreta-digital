@@ -20,6 +20,7 @@ import { TermsAndConditionsModal } from '@/components/TermsAndConditionsModal';
 import { StaffManagementModal } from '@/components/StaffManagementModal';
 import { StaffSwitchModal } from '@/components/StaffSwitchModal';
 import { BrandLogo } from '@/components/BrandLogo';
+import { CustomDateInput } from '@/components/ui/CustomDatePickerModal';
 import {
   TrendingUp,
   Users,
@@ -97,6 +98,7 @@ export function MerchantDashboard() {
   const [activeLimitCustomer, setActiveLimitCustomer] = useState<Customer | null>(null);
   const [showSubscriptionModal, setShowSubscriptionModal] = useState(false);
   const [showAuthModal, setShowAuthModal] = useState(false);
+  const [showCurrencyModal, setShowCurrencyModal] = useState(false);
   const [showWhatsAppModal, setShowWhatsAppModal] = useState(false);
   const [showSuperAdminModal, setShowSuperAdminModal] = useState(false);
   const [showReportsModal, setShowReportsModal] = useState(false);
@@ -485,21 +487,17 @@ export function MerchantDashboard() {
               <Share2 className="w-3.5 h-3.5 text-emerald-400" /> Link Clientes
             </button>
 
-            {/* Selector de Moneda */}
-            <div className="flex items-center gap-1 bg-slate-900 border border-slate-800 rounded-xl px-2 py-1.5 text-xs whitespace-nowrap shrink-0">
-              <Globe2 className="w-3 h-3 text-slate-400 shrink-0" />
-              <select
-                value={tenant.currency_code}
-                onChange={(e) => handleCurrencyChange(e.target.value)}
-                className="bg-transparent text-white font-bold outline-none cursor-pointer text-xs"
-              >
-                {REGIONAL_CURRENCIES.map((c) => (
-                  <option key={c.code} value={c.code} className="bg-slate-900 text-white">
-                    {c.code} ({c.symbol})
-                  </option>
-                ))}
-              </select>
-            </div>
+            {/* Selector de Moneda FinTech */}
+            <button
+              type="button"
+              onClick={() => setShowCurrencyModal(true)}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-200 rounded-xl text-xs font-bold transition whitespace-nowrap shrink-0 shadow-xs cursor-pointer"
+              title="Cambiar moneda regional del comercio"
+            >
+              <Globe2 className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+              <span>{tenant.currency_code} ({tenant.currency_symbol})</span>
+              <ChevronDown className="w-3 h-3 text-slate-500 shrink-0" />
+            </button>
 
             {/* Botón Cuenta Comercio */}
             <button
@@ -1215,12 +1213,12 @@ export function MerchantDashboard() {
                       </button>
                     )}
                   </div>
-                  <input
-                    type="date"
-                    max={todayStr}
+                  <CustomDateInput
                     value={txDate || todayStr}
-                    onChange={(e) => setTxDate(e.target.value)}
-                    className="w-full p-2.5 bg-slate-50 border-2 border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:border-blue-600 focus:bg-white focus:outline-none"
+                    onChange={(val) => setTxDate(val)}
+                    maxDate={todayStr}
+                    label="Fecha del Movimiento"
+                    className="w-full p-2.5 bg-slate-50 border-2 border-slate-200 rounded-xl text-xs font-bold text-slate-800"
                   />
                   {txDate && (
                     <p className="text-[10px] text-amber-600 font-semibold mt-1">
@@ -1519,6 +1517,83 @@ export function MerchantDashboard() {
             checkPermissionAndExecute('can_manage_staff', 'Gestionar Colaboradores y Roles', () => setShowStaffModal(true));
           }}
         />
+      )}
+
+      {/* MODAL SELECTOR DE MONEDA REGIONAL FINTECH */}
+      {showCurrencyModal && (
+        <div className="fixed inset-0 z-70 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-950/70 backdrop-blur-sm animate-in fade-in duration-200 font-sans">
+          <div className="bg-white rounded-t-3xl sm:rounded-3xl w-full max-w-md shadow-2xl border border-slate-200 overflow-hidden animate-in slide-in-from-bottom-6 sm:zoom-in-95 duration-200">
+            <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50">
+              <div>
+                <h3 className="text-sm font-black text-slate-900 flex items-center gap-2">
+                  <Globe2 className="w-4 h-4 text-blue-600" /> Moneda Regional de Cuenta
+                </h3>
+                <p className="text-[11px] text-slate-500">
+                  Define la divisa oficial para saldos, fiados y cobranzas
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowCurrencyModal(false)}
+                className="w-7 h-7 rounded-full bg-slate-200 hover:bg-slate-300 text-slate-600 flex items-center justify-center cursor-pointer transition"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-3 space-y-2">
+              {REGIONAL_CURRENCIES.map((c) => {
+                const isSelected = tenant.currency_code === c.code;
+                const flag = c.code === 'PYG' ? '🇵🇾' : c.code === 'BRL' ? '🇧🇷' : c.code === 'PEN' ? '🇵🇪' : '🇺🇸';
+                return (
+                  <button
+                    key={c.code}
+                    type="button"
+                    onClick={() => {
+                      handleCurrencyChange(c.code);
+                      setShowCurrencyModal(false);
+                    }}
+                    className={`w-full flex items-center justify-between p-3.5 rounded-2xl transition cursor-pointer text-left border ${
+                      isSelected
+                        ? 'bg-blue-50/80 border-blue-300 text-blue-950 shadow-xs'
+                        : 'bg-white hover:bg-slate-50 border-slate-200 text-slate-800'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <span className="text-2xl">{flag}</span>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-extrabold text-sm">{c.code} ({c.symbol})</span>
+                          {isSelected && (
+                            <span className="px-2 py-0.5 bg-blue-600 text-white font-bold text-[10px] rounded-full">
+                              Activa
+                            </span>
+                          )}
+                        </div>
+                        <span className="text-xs text-slate-500">{c.label}</span>
+                      </div>
+                    </div>
+
+                    <div
+                      className={`w-6 h-6 rounded-full flex items-center justify-center border transition ${
+                        isSelected
+                          ? 'bg-blue-600 border-blue-600 text-white'
+                          : 'border-slate-300 text-transparent'
+                      }`}
+                    >
+                      <Check className="w-3.5 h-3.5 stroke-[3]" />
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+            <div className="p-3 bg-slate-50 border-t border-slate-100 text-center">
+              <p className="text-[11px] text-slate-400">
+                Los saldos se conservarán y se visualizarán con el nuevo símbolo monetario.
+              </p>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

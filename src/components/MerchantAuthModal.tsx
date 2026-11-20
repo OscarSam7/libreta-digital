@@ -6,6 +6,7 @@ import { Tenant } from '@/types';
 import { saveTenant, getStoredData } from '@/lib/storage';
 import { createClient } from '@/lib/supabase/client';
 import { BrandLogo } from '@/components/BrandLogo';
+import { CustomSelect } from '@/components/ui/CustomSelectModal';
 
 interface Props {
   onSuccess?: () => void;
@@ -184,17 +185,18 @@ export function MerchantAuthModal({ onSuccess, onCancel }: Props) {
                 <Building2 className="w-3.5 h-3.5 text-blue-600" /> Selecciona tu Almacén / Comercio
               </label>
               {existingTenants.length > 0 ? (
-                <select
+                <CustomSelect
                   value={selectedTenantId}
-                  onChange={(e) => setSelectedTenantId(e.target.value)}
-                  className="w-full px-3.5 py-3 bg-slate-50 border-2 border-slate-200 rounded-xl text-sm font-bold text-slate-800 focus:border-blue-600 focus:bg-white focus:outline-none"
-                >
-                  {existingTenants.map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.business_name} {t.address ? `— ${t.address}` : ''}
-                    </option>
-                  ))}
-                </select>
+                  onChange={(val) => setSelectedTenantId(String(val))}
+                  title="Seleccionar Almacén / Comercio"
+                  placeholder="Elige tu comercio..."
+                  searchable={true}
+                  options={existingTenants.map((t) => ({
+                    value: t.id,
+                    label: t.business_name,
+                    sublabel: t.address || undefined,
+                  }))}
+                />
               ) : (
                 <div className="text-xs text-slate-500 py-2">
                   No hay almacenes cargados. Registra el primero abajo.
@@ -295,16 +297,17 @@ export function MerchantAuthModal({ onSuccess, onCancel }: Props) {
                 <label className="text-[11px] font-bold uppercase tracking-wider text-slate-400 block mb-1">
                   Moneda
                 </label>
-                <select
+                <CustomSelect
                   value={currency}
-                  onChange={(e) => setCurrency(e.target.value)}
-                  className="w-full px-3 py-2.5 bg-slate-50 border-2 border-slate-200 rounded-xl text-sm font-bold focus:border-blue-600 focus:bg-white focus:outline-none"
-                >
-                  <option value="PYG">₲ Guaraní (PY)</option>
-                  <option value="BRL">R$ Real (BR)</option>
-                  <option value="PEN">S/ Sol (PE)</option>
-                  <option value="USD">$ Dólar (USD)</option>
-                </select>
+                  onChange={(val) => setCurrency(String(val))}
+                  title="Moneda del Comercio"
+                  options={[
+                    { value: 'PYG', label: '₲ Guaraní (PY)', icon: '🇵🇾' },
+                    { value: 'BRL', label: 'R$ Real (BR)', icon: '🇧🇷' },
+                    { value: 'PEN', label: 'S/ Sol (PE)', icon: '🇵🇪' },
+                    { value: 'USD', label: '$ Dólar (USD)', icon: '🇺🇸' },
+                  ]}
+                />
               </div>
             </div>
 

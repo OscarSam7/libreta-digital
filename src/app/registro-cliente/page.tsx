@@ -23,6 +23,7 @@ import { getStoredData, saveCustomers } from '@/lib/storage';
 import { createClient } from '@/lib/supabase/client';
 import confetti from 'canvas-confetti';
 import { BrandLogo } from '@/components/BrandLogo';
+import { CustomSelect } from '@/components/ui/CustomSelectModal';
 
 function ClientRegisterContent() {
   const searchParams = useSearchParams();
@@ -258,17 +259,19 @@ function ClientRegisterContent() {
                 {loadingTenants ? (
                   <div className="text-xs text-slate-400 py-2">Cargando comercios...</div>
                 ) : (
-                  <select
+                  <CustomSelect
                     value={selectedTenantId}
-                    onChange={(e) => setSelectedTenantId(e.target.value)}
-                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-emerald-500 transition"
-                  >
-                    {tenants.map((t) => (
-                      <option key={t.id} value={t.id}>
-                        {t.business_name} {t.address ? `(${t.address})` : ''}
-                      </option>
-                    ))}
-                  </select>
+                    onChange={(val) => setSelectedTenantId(String(val))}
+                    title="Seleccionar Almacén / Comercio"
+                    placeholder="Elige el comercio..."
+                    searchable={true}
+                    buttonClassName="bg-slate-900 border border-slate-700 text-white hover:border-emerald-500"
+                    options={tenants.map((t) => ({
+                      value: t.id,
+                      label: t.business_name,
+                      sublabel: t.address || undefined,
+                    }))}
+                  />
                 )}
               </div>
 

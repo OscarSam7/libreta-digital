@@ -30,6 +30,7 @@ import { saveTenant, saveStaff, setCurrentOperator, getStoredData, setMerchantLo
 import { createClient } from '@/lib/supabase/client';
 import confetti from 'canvas-confetti';
 import { BrandLogo } from '@/components/BrandLogo';
+import { CustomSelect } from '@/components/ui/CustomSelectModal';
 
 const REGIONAL_CURRENCIES = [
   { code: 'PYG', symbol: '₲', label: 'Paraguay (Guaraní - ₲)', default: true },
@@ -486,20 +487,17 @@ function MerchantRegisterContent() {
                     <label className="text-xs font-bold text-slate-300 mb-1 block">
                       Moneda de Operación *
                     </label>
-                    <div className="relative">
-                      <Globe2 className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-                      <select
-                        value={currencyCode}
-                        onChange={(e) => setCurrencyCode(e.target.value)}
-                        className="w-full pl-10 pr-3 py-2.5 bg-slate-950/70 border border-slate-800 rounded-xl text-white text-xs font-bold focus:outline-none focus:border-blue-500 transition appearance-none cursor-pointer"
-                      >
-                        {REGIONAL_CURRENCIES.map((curr) => (
-                          <option key={curr.code} value={curr.code} className="bg-slate-900 text-white">
-                            {curr.label}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
+                    <CustomSelect
+                      value={currencyCode}
+                      onChange={(val) => setCurrencyCode(String(val))}
+                      title="Moneda de Operación del Comercio"
+                      buttonClassName="bg-slate-950/70 border border-slate-800 text-white hover:border-blue-500"
+                      options={REGIONAL_CURRENCIES.map((curr) => ({
+                        value: curr.code,
+                        label: curr.label,
+                        icon: curr.code === 'PYG' ? '🇵🇾' : curr.code === 'BRL' ? '🇧🇷' : curr.code === 'PEN' ? '🇵🇪' : '🇺🇸',
+                      }))}
+                    />
                   </div>
 
                   <div>

@@ -9,6 +9,8 @@ import {
   generateWhatsAppReminderUrl,
 } from '@/lib/reports';
 import { PDFReportPreviewModal, PDFReportMode } from '@/components/PDFReportPreviewModal';
+import { CustomDateInput } from '@/components/ui/CustomDatePickerModal';
+import { CustomSelect } from '@/components/ui/CustomSelectModal';
 import {
   FileText,
   Calendar,
@@ -426,11 +428,11 @@ export function DetailedReportsModal({
                 <label className="text-[9px] font-bold uppercase tracking-wider text-slate-400 block mb-0.5">
                   Fecha Desde
                 </label>
-                <input
-                  type="date"
+                <CustomDateInput
                   value={inputDateFrom}
-                  onChange={(e) => setInputDateFrom(e.target.value)}
-                  className="p-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:border-indigo-600 focus:outline-none shadow-sm"
+                  onChange={(val) => setInputDateFrom(val)}
+                  label="Fecha Desde"
+                  className="min-w-[140px]"
                 />
               </div>
 
@@ -440,11 +442,11 @@ export function DetailedReportsModal({
                 <label className="text-[9px] font-bold uppercase tracking-wider text-slate-400 block mb-0.5">
                   Fecha Hasta
                 </label>
-                <input
-                  type="date"
+                <CustomDateInput
                   value={inputDateTo}
-                  onChange={(e) => setInputDateTo(e.target.value)}
-                  className="p-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:border-indigo-600 focus:outline-none shadow-sm"
+                  onChange={(val) => setInputDateTo(val)}
+                  label="Fecha Hasta"
+                  className="min-w-[140px]"
                 />
               </div>
 
@@ -702,20 +704,22 @@ export function DetailedReportsModal({
                   />
                 </div>
 
-                <div className="flex items-center gap-2 bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-200 text-xs">
+                <div className="flex items-center gap-2 text-xs">
                   <span className="text-[11px] font-bold text-slate-500 whitespace-nowrap">
                     Criterio de Mora:
                   </span>
-                  <select
+                  <CustomSelect
                     value={moraDaysThreshold}
-                    onChange={(e) => setMoraDaysThreshold(parseInt(e.target.value) || 15)}
-                    className="p-1 bg-white border border-slate-200 rounded-lg text-xs font-black text-slate-800 focus:outline-none"
-                  >
-                    <option value={7}>&gt; 7 días sin pagar</option>
-                    <option value={15}>&gt; 15 días sin pagar</option>
-                    <option value={30}>&gt; 30 días sin pagar</option>
-                    <option value={45}>&gt; 45 días sin pagar</option>
-                  </select>
+                    onChange={(val) => setMoraDaysThreshold(Number(val) || 15)}
+                    title="Criterio de Antigüedad de Mora"
+                    options={[
+                      { value: 7, label: '> 7 días sin pagar', badge: 'Mora temprana' },
+                      { value: 15, label: '> 15 días sin pagar', badge: 'Mora moderada' },
+                      { value: 30, label: '> 30 días sin pagar', badge: 'Mora crítica' },
+                      { value: 45, label: '> 45 días sin pagar', badge: 'Incobrable' },
+                    ]}
+                    className="min-w-[170px]"
+                  />
                 </div>
               </div>
 
@@ -1071,34 +1075,37 @@ export function DetailedReportsModal({
                   <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1">
                     Filtrar por Cliente
                   </label>
-                  <select
+                  <CustomSelect
                     value={selectedCustomerId}
-                    onChange={(e) => setSelectedCustomerId(e.target.value)}
-                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:border-indigo-600"
-                  >
-                    <option value="ALL">Todos los Clientes ({customers.length})</option>
-                    {customers.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.full_name} {c.nickname ? `(${c.nickname})` : ''}
-                      </option>
-                    ))}
-                  </select>
+                    onChange={(val) => setSelectedCustomerId(String(val))}
+                    title="Filtrar por Cliente"
+                    searchable={true}
+                    options={[
+                      { value: 'ALL', label: `Todos los Clientes (${customers.length})` },
+                      ...customers.map((c) => ({
+                        value: c.id,
+                        label: `${c.full_name}${c.nickname ? ` (${c.nickname})` : ''}`,
+                        sublabel: c.phone || undefined,
+                      })),
+                    ]}
+                  />
                 </div>
 
                 <div>
                   <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1">
                     Filtrar por Tipo de Operación
                   </label>
-                  <select
+                  <CustomSelect
                     value={selectedTxType}
-                    onChange={(e) => setSelectedTxType(e.target.value)}
-                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:border-indigo-600"
-                  >
-                    <option value="ALL">Todas las Operaciones</option>
-                    <option value="PURCHASES">Solo Compras (Fiados)</option>
-                    <option value="PAYMENTS">Solo Pagos (Abonos)</option>
-                    <option value="ADJUSTMENTS">Solo Notas de Crédito / Ajustes</option>
-                  </select>
+                    onChange={(val) => setSelectedTxType(String(val))}
+                    title="Filtrar por Tipo de Operación"
+                    options={[
+                      { value: 'ALL', label: 'Todas las Operaciones' },
+                      { value: 'PURCHASES', label: 'Solo Compras (Fiados)', badge: 'Debe' },
+                      { value: 'PAYMENTS', label: 'Solo Pagos (Abonos)', badge: 'Haber' },
+                      { value: 'ADJUSTMENTS', label: 'Solo Notas de Crédito / Ajustes', badge: 'Ajuste' },
+                    ]}
+                  />
                 </div>
               </div>
 
