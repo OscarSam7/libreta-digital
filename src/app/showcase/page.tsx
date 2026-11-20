@@ -680,7 +680,6 @@ export default function CommercialShowcasePage() {
             <Link href="/" className="hover:text-white transition">Terminal POS</Link>
             <Link href="/registro-comercio" className="hover:text-white transition">Registro Comercios</Link>
             <Link href="/registro-cliente" className="hover:text-white transition">Registro Clientes</Link>
-            <Link href="/admin" className="text-indigo-400 hover:text-indigo-300 font-bold transition">Super Admin</Link>
           </div>
           <p className="text-[11px] text-slate-600">© 2026 LibretaDigital Pro. Todos los derechos reservados.</p>
         </div>

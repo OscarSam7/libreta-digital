@@ -510,15 +510,6 @@ export function MerchantDashboard() {
               <UserCheck className="w-3.5 h-3.5 text-blue-400" /> Cuenta
             </button>
 
-            {/* Botón SuperAdmin */}
-            <button
-              onClick={() => setShowSuperAdminModal(true)}
-              className="flex items-center gap-1 px-2.5 py-1.5 bg-slate-900 hover:bg-slate-800 border border-slate-800 rounded-xl text-xs font-semibold transition whitespace-nowrap shrink-0"
-              title="Panel SuperAdmin (Dueño SaaS)"
-            >
-              <SlidersHorizontal className="w-3.5 h-3.5 text-indigo-300" /> SaaS Admin
-            </button>
-
             {/* Plan de Suscripción */}
             <button
               onClick={() => setShowSubscriptionModal(true)}

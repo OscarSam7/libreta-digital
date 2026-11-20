@@ -679,11 +679,8 @@ function MerchantRegisterContent() {
       </main>
 
       {/* FOOTER */}
-      <footer className="border-t border-slate-900 bg-slate-950/80 py-4 px-4 text-center text-[11px] text-slate-500 flex flex-col sm:flex-row items-center justify-between max-w-5xl mx-auto w-full gap-2">
+      <footer className="border-t border-slate-900 bg-slate-950/80 py-4 px-4 text-center text-[11px] text-slate-500 max-w-5xl mx-auto w-full">
         <p>LibretaDigital Pro • FinTech POS & Fiado en Tiempo Real • Multi-País (PY, BR, PE)</p>
-        <Link href="/admin" className="text-indigo-400 hover:text-indigo-300 font-bold transition flex items-center gap-1">
-          <ShieldCheck className="w-3.5 h-3.5" /> Acceso Super Admin →
-        </Link>
       </footer>
     </div>
   );

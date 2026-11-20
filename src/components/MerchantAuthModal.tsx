@@ -353,13 +353,6 @@ export function MerchantAuthModal({ onSuccess, onCancel }: Props) {
                 ← Ver almacenes existentes
               </button>
             )}
-
-            <a
-              href="/admin"
-              className="text-slate-400 hover:text-indigo-600 font-semibold flex items-center gap-1"
-            >
-              <ShieldCheck className="w-3.5 h-3.5" /> Super Admin
-            </a>
           </div>
 
           <div className="pt-2 border-t border-slate-100 flex justify-end">

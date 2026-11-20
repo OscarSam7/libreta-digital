@@ -131,18 +131,21 @@ export default function Home() {
                 )}
               </button>
 
-              <Link
-                href="/admin"
-                className={`text-xs font-bold px-2.5 py-1.5 rounded-xl border transition flex items-center gap-1 ${
-                  isLight
-                    ? 'text-indigo-700 hover:bg-indigo-50 border-indigo-200 bg-white'
-                    : 'text-slate-300 hover:text-indigo-300 border-slate-800 hover:bg-slate-900'
-                }`}
-                title="Acceso exclusivo para el Dueño del SaaS"
-              >
-                <ShieldCheck className="w-3.5 h-3.5 text-indigo-500" />
-                <span className="hidden sm:inline">Super Admin</span>
-              </Link>
+              {/* ACCESO SUPER ADMIN (SOLO VISIBLE SI YA TIENE SESIÓN DE SUPER ADMIN) */}
+              {isSuperAdmin && (
+                <Link
+                  href="/admin"
+                  className={`text-xs font-bold px-2.5 py-1.5 rounded-xl border transition flex items-center gap-1 ${
+                    isLight
+                      ? 'text-indigo-700 hover:bg-indigo-50 border-indigo-200 bg-white'
+                      : 'text-slate-300 hover:text-indigo-300 border-slate-800 hover:bg-slate-900'
+                  }`}
+                  title="Acceso exclusivo para el Dueño del SaaS"
+                >
+                  <ShieldCheck className="w-3.5 h-3.5 text-indigo-500" />
+                  <span className="hidden sm:inline">Super Admin</span>
+                </Link>
+              )}
               <Link
                 href="/showcase"
                 className={`text-xs font-bold px-3 py-1.5 rounded-xl border transition flex items-center gap-1.5 ${
@@ -292,12 +295,14 @@ export default function Home() {
           }`}
         >
           <p>LibretaDigital Pro • FinTech POS & Fiado en Tiempo Real • Multi-País</p>
-          <Link
-            href="/admin"
-            className="text-indigo-600 hover:text-indigo-500 dark:text-indigo-400 font-bold flex items-center gap-1 transition"
-          >
-            <ShieldCheck className="w-3.5 h-3.5" /> Acceso Super Admin (Dueño SaaS) →
-          </Link>
+          {isSuperAdmin && (
+            <Link
+              href="/admin"
+              className="text-indigo-600 hover:text-indigo-500 dark:text-indigo-400 font-bold flex items-center gap-1 transition"
+            >
+              <ShieldCheck className="w-3.5 h-3.5" /> Panel Super Admin →
+            </Link>
+          )}
         </footer>
       </div>
     );
