@@ -27,7 +27,10 @@ import {
   Sparkles,
   ArrowRight,
   Building,
-  Check
+  Check,
+  Settings,
+  Clock,
+  CalendarDays
 } from 'lucide-react';
 import { Tenant } from '@/types';
 import { getStoredData, saveTenant } from '@/lib/storage';
@@ -78,6 +81,15 @@ export default function SuperAdminPage() {
   const [newAddress, setNewAddress] = useState('');
   const [newPlan, setNewPlan] = useState('pro_monthly');
   const [createLoading, setCreateLoading] = useState(false);
+
+  // Modal para gestionar licencia y prórroga temporal de acceso
+  const [editingLicenseTenant, setEditingLicenseTenant] = useState<Tenant | null>(null);
+  const [licensePlan, setLicensePlan] = useState<'vecinal_monthly' | 'pro_monthly' | 'cadena_monthly'>('pro_monthly');
+  const [licenseStatus, setLicenseStatus] = useState<'active' | 'trialing' | 'past_due' | 'canceled'>('active');
+  const [licenseEndDate, setLicenseEndDate] = useState<string>('');
+  const [licenseAdminNote, setLicenseAdminNote] = useState<string>('');
+  const [savingLicense, setSavingLicense] = useState(false);
+  const [licenseSuccessMsg, setLicenseSuccessMsg] = useState('');
 
   // Comprobar sesión de Super Admin existente
   useEffect(() => {
@@ -350,6 +362,95 @@ export default function SuperAdminPage() {
 
     setTenants(tenants.map((t) => (t.id === tenant.id ? updated : t)));
     saveTenant(updated);
+  };
+
+  // Abrir modal de edición de licencia y prórroga
+  const openEditLicenseModal = (t: Tenant) => {
+    setEditingLicenseTenant(t);
+    setLicensePlan((t.subscription_plan as any) || 'pro_monthly');
+    setLicenseStatus(t.sub_status);
+
+    const baseDate = t.subscription_ends_at
+      ? new Date(t.subscription_ends_at)
+      : t.trial_ends_at
+      ? new Date(t.trial_ends_at)
+      : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+
+    const yyyy = baseDate.getFullYear();
+    const mm = String(baseDate.getMonth() + 1).padStart(2, '0');
+    const dd = String(baseDate.getDate()).padStart(2, '0');
+    setLicenseEndDate(`${yyyy}-${mm}-${dd}`);
+    setLicenseAdminNote('');
+    setLicenseSuccessMsg('');
+  };
+
+  // Conceder días rápidos de prórroga
+  const handleAddGraceDays = (days: number) => {
+    const currentEnd = licenseEndDate ? new Date(licenseEndDate + 'T23:59:59') : new Date();
+    // Si la fecha ya expiró en el pasado, sumar a partir de hoy
+    const base = currentEnd.getTime() < Date.now() ? new Date() : currentEnd;
+    const newDate = new Date(base.getTime() + days * 24 * 60 * 60 * 1000);
+
+    const yyyy = newDate.getFullYear();
+    const mm = String(newDate.getMonth() + 1).padStart(2, '0');
+    const dd = String(newDate.getDate()).padStart(2, '0');
+    setLicenseEndDate(`${yyyy}-${mm}-${dd}`);
+
+    // Si estaba vencido o cancelado, reactivar inmediatamente para que no esté bloqueado
+    if (licenseStatus === 'past_due' || licenseStatus === 'canceled') {
+      setLicenseStatus('active');
+    }
+  };
+
+  // Guardar cambios de licencia y prórroga
+  const handleSaveLicense = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingLicenseTenant || !licenseEndDate) return;
+    setSavingLicense(true);
+
+    try {
+      const newEndsAtIso = new Date(licenseEndDate + 'T23:59:59').toISOString();
+      const updatedTenant: Tenant = {
+        ...editingLicenseTenant,
+        subscription_plan: licensePlan,
+        sub_status: licenseStatus,
+        subscription_ends_at: newEndsAtIso,
+        updated_at: new Date().toISOString(),
+      };
+
+      const supabase = createClient();
+      if (supabase) {
+        await supabase
+          .from('tenants')
+          .update({
+            subscription_plan: licensePlan,
+            sub_status: licenseStatus,
+            subscription_ends_at: newEndsAtIso,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', editingLicenseTenant.id);
+      }
+
+      setTenants(tenants.map((t) => (t.id === editingLicenseTenant.id ? updatedTenant : t)));
+      saveTenant(updatedTenant);
+
+      setLicenseSuccessMsg(`¡Licencia de ${updatedTenant.business_name} actualizada! Prórroga hasta ${new Date(newEndsAtIso).toLocaleDateString('es-PY')}`);
+
+      confetti({
+        particleCount: 35,
+        spread: 60,
+        origin: { y: 0.6 },
+      });
+
+      setTimeout(() => {
+        setEditingLicenseTenant(null);
+        setLicenseSuccessMsg('');
+      }, 1600);
+    } catch (err: any) {
+      console.error('Error actualizando licencia:', err);
+    } finally {
+      setSavingLicense(false);
+    }
   };
 
   // Crear almacén manualmente desde el Super Admin
@@ -792,10 +893,19 @@ export default function SuperAdminPage() {
 
                       <td className="py-3.5 px-4 text-right">
                         <div className="flex items-center justify-end gap-1.5">
+                          <button
+                            onClick={() => openEditLicenseModal(t)}
+                            className="px-2.5 py-1 bg-indigo-500/20 hover:bg-indigo-600 text-indigo-300 hover:text-white border border-indigo-500/40 text-[10px] font-bold rounded-lg transition flex items-center gap-1 cursor-pointer"
+                            title="Cambiar Plan o Conceder Prórroga Temporal"
+                          >
+                            <Settings className="w-3 h-3 text-indigo-400" />
+                            <span>Plan / Prórroga</span>
+                          </button>
+
                           {t.sub_status !== 'active' ? (
                             <button
                               onClick={() => handleToggleStatus(t, 'active')}
-                              className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] font-bold rounded-lg transition"
+                              className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] font-bold rounded-lg transition cursor-pointer"
                               title="Activar Suscripción Mensual"
                             >
                               Activar Plan
@@ -803,7 +913,7 @@ export default function SuperAdminPage() {
                           ) : (
                             <button
                               onClick={() => handleToggleStatus(t, 'past_due')}
-                              className="px-2.5 py-1 bg-rose-900/60 hover:bg-rose-800 text-rose-200 text-[10px] font-bold rounded-lg border border-rose-700 transition"
+                              className="px-2.5 py-1 bg-rose-900/60 hover:bg-rose-800 text-rose-200 text-[10px] font-bold rounded-lg border border-rose-700 transition cursor-pointer"
                               title="Marcar Vencido / Bloquear"
                             >
                               Bloquear
@@ -997,6 +1107,180 @@ export default function SuperAdminPage() {
                     className="w-1/2 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-1.5"
                   >
                     <span>{createLoading ? 'Creando...' : 'Crear y Activar Licencia'}</span>
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+        {/* MODAL GESTIONAR LICENCIA Y PRÓRROGA TEMPORAL */}
+        {editingLicenseTenant && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-sm animate-fadeIn">
+            <div className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-lg p-6 space-y-4 shadow-2xl relative">
+              <button
+                onClick={() => setEditingLicenseTenant(null)}
+                className="w-8 h-8 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white flex items-center justify-center absolute top-4 right-4"
+              >
+                <X className="w-4 h-4" />
+              </button>
+
+              <div className="flex items-center gap-3 border-b border-slate-800 pb-3">
+                <div className="w-10 h-10 rounded-2xl bg-amber-500/20 text-amber-400 flex items-center justify-center">
+                  <Settings className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-black text-white">Gestionar Licencia y Prórroga</h3>
+                  <p className="text-xs text-slate-400">
+                    Almacén: <b className="text-white">{editingLicenseTenant.business_name}</b> (RUC: {editingLicenseTenant.tax_id || 'Sin RUC'})
+                  </p>
+                </div>
+              </div>
+
+              {licenseSuccessMsg && (
+                <div className="p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-xl text-emerald-300 text-xs flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-400" />
+                  <span>{licenseSuccessMsg}</span>
+                </div>
+              )}
+
+              <form onSubmit={handleSaveLicense} className="space-y-4 pt-1">
+                {/* SELECCIÓN DE PLAN */}
+                <div>
+                  <label className="text-xs font-bold text-slate-300 mb-1.5 block">
+                    Plan de Suscripción Manual
+                  </label>
+                  <div className="grid grid-cols-3 gap-2">
+                    {[
+                      { id: 'vecinal_monthly', label: 'Vecinal', desc: 'Básico' },
+                      { id: 'pro_monthly', label: 'Pro Almacén', desc: 'Estándar' },
+                      { id: 'cadena_monthly', label: 'Cadena', desc: 'Multi-Caja' },
+                    ].map((p) => (
+                      <button
+                        key={p.id}
+                        type="button"
+                        onClick={() => setLicensePlan(p.id as any)}
+                        className={`p-2.5 rounded-xl border text-left transition cursor-pointer ${
+                          licensePlan === p.id
+                            ? 'bg-indigo-600/20 border-indigo-500 text-white shadow-sm ring-1 ring-indigo-500'
+                            : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-white'
+                        }`}
+                      >
+                        <div className="text-xs font-black">{p.label}</div>
+                        <div className="text-[10px] text-slate-400">{p.desc}</div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* ESTADO DE LA LICENCIA */}
+                <div>
+                  <label className="text-xs font-bold text-slate-300 mb-1.5 block">
+                    Estado de la Cuenta
+                  </label>
+                  <div className="grid grid-cols-3 gap-2">
+                    {[
+                      { id: 'active', label: 'Activo / Prórroga', color: 'emerald' },
+                      { id: 'trialing', label: 'Prueba (Trial)', color: 'blue' },
+                      { id: 'past_due', label: 'Vencido / Bloqueado', color: 'rose' },
+                    ].map((st) => (
+                      <button
+                        key={st.id}
+                        type="button"
+                        onClick={() => setLicenseStatus(st.id as any)}
+                        className={`p-2 rounded-xl border text-center transition cursor-pointer ${
+                          licenseStatus === st.id
+                            ? st.color === 'emerald'
+                              ? 'bg-emerald-500/20 border-emerald-500 text-emerald-300 ring-1 ring-emerald-500'
+                              : st.color === 'blue'
+                              ? 'bg-blue-500/20 border-blue-500 text-blue-300 ring-1 ring-blue-500'
+                              : 'bg-rose-500/20 border-rose-500 text-rose-300 ring-1 ring-rose-500'
+                            : 'bg-slate-950 border-slate-800 text-slate-500 hover:text-slate-300'
+                        }`}
+                      >
+                        <div className="text-xs font-bold">{st.label}</div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* EXTENSIÓN TEMPORAL / DÍAS DE GRACIA */}
+                <div className="p-4 bg-slate-950/70 border border-slate-800/80 rounded-2xl space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-black text-amber-400 flex items-center gap-1.5">
+                      <Clock className="w-3.5 h-3.5" /> Conceder Prórroga Rápida
+                    </span>
+                    <span className="text-[10px] text-slate-400">Extiende días y desbloquea</span>
+                  </div>
+
+                  <div className="grid grid-cols-5 gap-1.5">
+                    {[
+                      { days: 3, label: '+3 días' },
+                      { days: 5, label: '+5 días' },
+                      { days: 7, label: '+7 días' },
+                      { days: 15, label: '+15 días' },
+                      { days: 30, label: '+30 días' },
+                    ].map((b) => (
+                      <button
+                        key={b.days}
+                        type="button"
+                        onClick={() => handleAddGraceDays(b.days)}
+                        className="py-1.5 px-1 bg-amber-500/10 hover:bg-amber-500 text-amber-300 hover:text-slate-950 border border-amber-500/30 rounded-lg text-xs font-black transition active:scale-95 cursor-pointer"
+                      >
+                        {b.label}
+                      </button>
+                    ))}
+                  </div>
+
+                  <div>
+                    <label className="text-[11px] font-bold text-slate-400 mb-1 block">
+                      Fecha Límite de Vencimiento:
+                    </label>
+                    <div className="relative">
+                      <CalendarDays className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                      <input
+                        type="date"
+                        required
+                        value={licenseEndDate}
+                        onChange={(e) => setLicenseEndDate(e.target.value)}
+                        className="w-full pl-9 pr-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-xs text-white font-mono font-bold focus:outline-none focus:border-indigo-500"
+                      />
+                    </div>
+                    <p className="text-[10px] text-slate-500 mt-1">
+                      El comercio podrá registrar ventas y cobros sin bloqueo hasta el fin de este día.
+                    </p>
+                  </div>
+                </div>
+
+                {/* NOTA ADMINISTRATIVA */}
+                <div>
+                  <label className="text-xs font-bold text-slate-300 mb-1 block">
+                    Nota Administrativa Interna (Opcional)
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Ej. Prometió pagar en efectivo este viernes / Acuerdo de pago"
+                    value={licenseAdminNote}
+                    onChange={(e) => setLicenseAdminNote(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white placeholder-slate-600 focus:outline-none focus:border-indigo-500"
+                  />
+                </div>
+
+                {/* BOTONES ACCIÓN */}
+                <div className="flex gap-2 pt-2 border-t border-slate-800">
+                  <button
+                    type="button"
+                    onClick={() => setEditingLicenseTenant(null)}
+                    className="w-1/3 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold rounded-xl text-xs transition cursor-pointer"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={savingLicense}
+                    className="w-2/3 py-2.5 bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-500 hover:to-blue-500 text-white font-black rounded-xl text-xs flex items-center justify-center gap-1.5 shadow-lg shadow-indigo-950 transition active:scale-98 disabled:opacity-50 cursor-pointer"
+                  >
+                    <Check className="w-4 h-4" />
+                    <span>{savingLicense ? 'Guardando Prórroga...' : 'Guardar y Aplicar Prórroga'}</span>
                   </button>
                 </div>
               </form>
