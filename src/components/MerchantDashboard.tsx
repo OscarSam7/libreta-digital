@@ -141,6 +141,12 @@ export function MerchantDashboard() {
   const [newCustPhone, setNewCustPhone] = useState('');
   const [newCustLimit, setNewCustLimit] = useState('');
   const [newCustError, setNewCustError] = useState('');
+  const [isNoPhoneException, setIsNoPhoneException] = useState(false);
+  const [newCustomerAlert, setNewCustomerAlert] = useState<{
+    id: string;
+    name: string;
+    phone?: string;
+  } | null>(null);
 
   const loadData = () => {
     const data = getStoredData();
@@ -174,11 +180,101 @@ export function MerchantDashboard() {
     const handleUpdate = () => loadData();
     window.addEventListener('libreta_data_updated', handleUpdate);
     window.addEventListener('storage', handleUpdate);
+
+    // Auto-sincronización en vivo con el servidor central para clientes auto-registrados
+    let isMounted = true;
+    const syncCloudCustomers = async () => {
+      const currentTenantId = tenant?.id;
+      if (!currentTenantId) return;
+
+      try {
+        const res = await fetch(`/api/customers?tenantId=${currentTenantId}`);
+        if (!res.ok) return;
+        const json = await res.json();
+        if (json.success && Array.isArray(json.customers) && isMounted) {
+          setCustomers((prevCustomers) => {
+            const prevIds = new Set(prevCustomers.map((c) => c.id));
+            const newOnes = json.customers.filter((c: Customer) => !prevIds.has(c.id));
+
+            if (newOnes.length > 0) {
+              const merged = [...newOnes, ...prevCustomers];
+              saveCustomers(merged);
+
+              // Disparar notificación del cliente auto-registrado
+              const latest = newOnes[0];
+              setNewCustomerAlert({
+                id: latest.id,
+                name: latest.full_name,
+                phone: latest.phone,
+              });
+
+              // Reproducir alerta sonora de bienvenida (Web Audio API)
+              try {
+                const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(587.33, ctx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(880, ctx.currentTime + 0.15);
+                gain.gain.setValueAtTime(0.25, ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.35);
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+                osc.start();
+                osc.stop(ctx.currentTime + 0.35);
+              } catch (e) {}
+
+              return merged;
+            }
+            return prevCustomers;
+          });
+        }
+      } catch (err) {}
+    };
+
+    syncCloudCustomers();
+    const interval = setInterval(syncCloudCustomers, 4000);
+
+    // BroadcastChannel para sincronización instantánea entre pestañas
+    let bc: BroadcastChannel | null = null;
+    try {
+      if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+        bc = new BroadcastChannel('libretadigital_customers_channel');
+        bc.onmessage = (event) => {
+          if (event.data?.type === 'NEW_CUSTOMER_REGISTERED' && event.data.customer) {
+            const newC = event.data.customer;
+            setCustomers((prev) => {
+              if (prev.some((c) => c.id === newC.id)) return prev;
+              const merged = [newC, ...prev];
+              saveCustomers(merged);
+              setNewCustomerAlert({
+                id: newC.id,
+                name: newC.full_name,
+                phone: newC.phone,
+              });
+              return merged;
+            });
+          }
+        };
+      }
+    } catch (e) {}
+
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        syncCloudCustomers();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+
     return () => {
+      isMounted = false;
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', handleVisibility);
       window.removeEventListener('libreta_data_updated', handleUpdate);
       window.removeEventListener('storage', handleUpdate);
+      if (bc) bc.close();
     };
-  }, []);
+  }, [tenant?.id]);
 
   if (!tenant) return null;
 
@@ -232,13 +328,20 @@ export function MerchantDashboard() {
 
   const handleCreateCustomer = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newCustName.trim() || !newCustPhone.trim()) {
-      setNewCustError('Nombre y teléfono son obligatorios.');
+    if (!newCustName.trim()) {
+      setNewCustError('El nombre completo del cliente es obligatorio.');
+      return;
+    }
+    if (!isNoPhoneException && !newCustPhone.trim()) {
+      setNewCustError('El teléfono WhatsApp es obligatorio (o activa la casilla de excepción sin celular).');
       return;
     }
 
     const token = 'cli-' + Math.random().toString(36).substring(2, 9) + '-' + Date.now().toString(36);
     const pin = Math.floor(1000 + Math.random() * 9000).toString();
+    const finalPhone = isNoPhoneException && !newCustPhone.trim()
+      ? 'Sin celular (Excepción Dueño)'
+      : sanitizeText(newCustPhone, 30);
 
     const newCustomer: Customer = {
       id: `cust-${Date.now()}`,
@@ -246,18 +349,38 @@ export function MerchantDashboard() {
       full_name: sanitizeText(newCustName, 100),
       nickname: newCustNickname.trim() ? sanitizeText(newCustNickname, 50) : undefined,
       document_id: newCustDoc.trim() ? sanitizeText(newCustDoc, 30) : undefined,
-      phone: sanitizeText(newCustPhone, 30),
+      phone: finalPhone,
       credit_limit: validateAmount(newCustLimit, 0).value,
       current_balance: 0,
       qr_token: token,
       security_pin: pin,
       pin_hash: `$2a$06$hash_${pin}`,
       is_blocked: false,
+      registered_via: isNoPhoneException ? 'EXCEPTION_NO_PHONE' : 'IN_STORE_COUNTER',
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     };
 
-    saveCustomers([newCustomer, ...customers]);
+    const updated = [newCustomer, ...customers];
+    saveCustomers(updated);
+    setCustomers(updated);
+
+    // Sincronizar de inmediato al servidor para reflejo en la nube
+    fetch('/api/customers', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(newCustomer),
+    }).catch(() => {});
+
+    // BroadcastChannel para reflejo entre pestañas
+    try {
+      if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+        const bc = new BroadcastChannel('libretadigital_customers_channel');
+        bc.postMessage({ type: 'NEW_CUSTOMER_REGISTERED', customer: newCustomer });
+        bc.close();
+      }
+    } catch (e) {}
+
     setShowNewCustomerModal(false);
     setNewCustName('');
     setNewCustNickname('');
@@ -265,6 +388,7 @@ export function MerchantDashboard() {
     setNewCustPhone('');
     setNewCustLimit('');
     setNewCustError('');
+    setIsNoPhoneException(false);
     setActiveQRCustomer(newCustomer);
   };
 
@@ -351,6 +475,51 @@ export function MerchantDashboard() {
 
   return (
     <div className="min-h-screen bg-slate-100/70 pb-24 text-slate-900 font-sans">
+      {/* BANNER FLOTANTE DE NOTIFICACIÓN EN TIEMPO REAL: AUTO-REGISTRO DE CLIENTES */}
+      {newCustomerAlert && (
+        <div className="fixed top-4 left-4 right-4 z-50 max-w-lg mx-auto bg-slate-900 text-white p-4 rounded-2xl shadow-2xl border-2 border-emerald-500 flex items-start justify-between gap-3 animate-in slide-in-from-top-4 duration-300">
+          <div className="flex items-start gap-3 min-w-0">
+            <div className="w-10 h-10 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0 mt-0.5">
+              <Sparkles className="w-5 h-5 animate-pulse" />
+            </div>
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-[10px] font-black uppercase tracking-wider bg-emerald-500 text-slate-950 px-2 py-0.5 rounded-full">
+                  📱 Nuevo Auto-Registro
+                </span>
+                <span className="text-[11px] text-emerald-400 font-bold">¡En Tiempo Real!</span>
+              </div>
+              <h4 className="text-sm font-black text-white mt-1 truncate">
+                {newCustomerAlert.name}
+              </h4>
+              <p className="text-xs text-slate-300 mt-0.5 leading-snug">
+                Se acaba de registrar desde su celular y ya aparece automáticamente en tus Cuentas Corrientes.
+              </p>
+            </div>
+          </div>
+          <div className="flex flex-col gap-1.5 shrink-0">
+            <button
+              onClick={() => {
+                const found = customers.find((c) => c.id === newCustomerAlert.id);
+                if (found) {
+                  setActiveLimitCustomer(found);
+                }
+                setNewCustomerAlert(null);
+              }}
+              className="px-2.5 py-1.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-[11px] rounded-xl transition cursor-pointer"
+            >
+              Asignar Límite
+            </button>
+            <button
+              onClick={() => setNewCustomerAlert(null)}
+              className="text-[11px] text-slate-400 hover:text-white text-center py-1 transition cursor-pointer"
+            >
+              Cerrar
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* BARRA DE DEMOSTRACIÓN EXCLUSIVA PARA SUPER ADMIN */}
       {(tenant.id === '019339aa-7824-7662-8e39-165f123d9101' || tenant.business_name.toLowerCase().includes('don mario')) && (
         <div className="bg-indigo-950 text-indigo-200 text-xs py-1.5 px-4 flex items-center justify-between border-b border-indigo-800/80">
@@ -714,6 +883,28 @@ export function MerchantDashboard() {
                               BLOQUEADO
                             </span>
                           )}
+                          {cust.registered_via === 'SELF_MOBILE_LINK' ? (
+                            <span
+                              className="text-[9px] bg-sky-100 text-sky-800 font-extrabold px-1.5 py-0.5 rounded flex items-center gap-1"
+                              title="Cliente auto-registrado desde su celular vía link WhatsApp"
+                            >
+                              📱 Por Enlace
+                            </span>
+                          ) : cust.registered_via === 'EXCEPTION_NO_PHONE' || cust.phone?.includes('Excepción') ? (
+                            <span
+                              className="text-[9px] bg-amber-100 text-amber-900 font-extrabold px-1.5 py-0.5 rounded flex items-center gap-1"
+                              title="Alta en mostrador: Excepción sin celular autorizada por el dueño"
+                            >
+                              📝 Sin Celular
+                            </span>
+                          ) : (
+                            <span
+                              className="text-[9px] bg-slate-100 text-slate-700 font-semibold px-1.5 py-0.5 rounded flex items-center gap-1"
+                              title="Alta manual en mostrador"
+                            >
+                              🏪 Mostrador
+                            </span>
+                          )}
                           {cust.terms_accepted ? (
                             <button
                               onClick={() => setTermsModalCustomer(cust)}
@@ -1051,18 +1242,53 @@ export function MerchantDashboard() {
                 </div>
               </div>
 
+              {/* MODALIDAD HÍBRIDA: EXCEPCIÓN SIN CELULAR AUTORIZADA POR EL DUEÑO */}
+              <div className="bg-amber-50/60 border border-amber-200/80 rounded-2xl p-3">
+                <label className="flex items-start gap-2.5 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={isNoPhoneException}
+                    onChange={(e) => {
+                      const checked = e.target.checked;
+                      setIsNoPhoneException(checked);
+                      if (checked) {
+                        setNewCustPhone('Sin celular (Excepción Dueño)');
+                      } else {
+                        if (newCustPhone === 'Sin celular (Excepción Dueño)') {
+                          setNewCustPhone('');
+                        }
+                      }
+                    }}
+                    className="mt-0.5 rounded text-amber-600 focus:ring-amber-500 w-4 h-4 cursor-pointer"
+                  />
+                  <div>
+                    <span className="text-xs font-bold text-amber-950 block">
+                      Excepción: Cliente sin celular en este momento
+                    </span>
+                    <span className="text-[11px] text-amber-800/80 block leading-tight">
+                      Autorizado por el dueño del comercio para registrar en mostrador sin WhatsApp.
+                    </span>
+                  </div>
+                </label>
+              </div>
+
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="text-[11px] font-bold uppercase tracking-wider text-slate-400 block mb-1">
-                    WhatsApp *
+                    WhatsApp {isNoPhoneException ? '(Opcional)' : '*'}
                   </label>
                   <input
                     type="tel"
-                    required
-                    placeholder="Ej: 595981..."
+                    required={!isNoPhoneException}
+                    disabled={isNoPhoneException}
+                    placeholder={isNoPhoneException ? 'Excepción autorizada' : 'Ej: 595981...'}
                     value={newCustPhone}
                     onChange={(e) => setNewCustPhone(e.target.value)}
-                    className="w-full p-3 bg-slate-50 border-2 border-slate-200 rounded-xl text-sm font-medium focus:border-blue-600 focus:bg-white focus:outline-none"
+                    className={`w-full p-3 border-2 rounded-xl text-sm font-medium focus:border-blue-600 focus:outline-none transition ${
+                      isNoPhoneException
+                        ? 'bg-slate-100 border-slate-200 text-slate-400 italic'
+                        : 'bg-slate-50 border-slate-200 text-slate-800 focus:bg-white'
+                    }`}
                   />
                 </div>
                 <div>

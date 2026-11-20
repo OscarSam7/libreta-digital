@@ -62,6 +62,7 @@ export interface Customer {
     acceptedVersion?: string;
   };
   credit_cycle?: CreditCycle;
+  registered_via?: 'SELF_MOBILE_LINK' | 'IN_STORE_COUNTER' | 'EXCEPTION_NO_PHONE';
   created_at: string;
   updated_at: string;
 }

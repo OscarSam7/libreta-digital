@@ -64,6 +64,28 @@ function ClientRegisterContent() {
   useEffect(() => {
     async function fetchTenants() {
       try {
+        const res = await fetch('/api/tenants');
+        if (res.ok) {
+          const json = await res.json();
+          if (json.success && Array.isArray(json.tenants) && json.tenants.length > 0) {
+            setTenants(json.tenants);
+            if (preselectedTenantId) {
+              const match = json.tenants.find((t: Tenant) => t.id === preselectedTenantId);
+              if (match) {
+                setSelectedTenantId(match.id);
+              } else {
+                setSelectedTenantId(preselectedTenantId);
+              }
+            } else {
+              setSelectedTenantId(json.tenants[0].id);
+            }
+            setLoadingTenants(false);
+            return;
+          }
+        }
+      } catch (apiErr) {}
+
+      try {
         const supabase = createClient();
         if (supabase) {
           const { data, error } = await supabase.from('tenants').select('*').order('business_name');
@@ -71,6 +93,8 @@ function ClientRegisterContent() {
             setTenants(data);
             if (!preselectedTenantId) {
               setSelectedTenantId(data[0].id);
+            } else {
+              setSelectedTenantId(preselectedTenantId);
             }
             setLoadingTenants(false);
             return;
@@ -84,7 +108,7 @@ function ClientRegisterContent() {
       const stored = getStoredData();
       if (stored.tenant) {
         setTenants([stored.tenant]);
-        setSelectedTenantId(stored.tenant.id);
+        setSelectedTenantId(preselectedTenantId || stored.tenant.id);
       }
       setLoadingTenants(false);
     }
@@ -163,11 +187,32 @@ function ClientRegisterContent() {
           registeredVia: 'SELF_REGISTER_FORM',
           registrationDate: new Date().toISOString()
         },
+        registered_via: 'SELF_MOBILE_LINK' as const,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       };
 
-      // Guardar en Supabase si está disponible
+      // 1. Sincronizar de inmediato con el servidor central para que el almacenero lo vea al instante
+      try {
+        await fetch('/api/customers', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(newCustomer),
+        });
+      } catch (apiErr) {
+        console.warn('API cloud sync notice:', apiErr);
+      }
+
+      // 2. BroadcastChannel para actualización en vivo entre pestañas/navegadores
+      try {
+        if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+          const bc = new BroadcastChannel('libretadigital_customers_channel');
+          bc.postMessage({ type: 'NEW_CUSTOMER_REGISTERED', customer: newCustomer });
+          bc.close();
+        }
+      } catch (e) {}
+
+      // 3. Guardar en Supabase si está disponible
       const supabase = createClient();
       if (supabase) {
         const { error: sbError } = await supabase.from('customers').insert(newCustomer);
