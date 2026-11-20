@@ -200,6 +200,14 @@ export function MerchantAuthModal({ onSuccess, onCancel }: Props) {
                   No hay almacenes cargados. Registra el primero abajo.
                 </div>
               )}
+              <div className="flex justify-end pt-1">
+                <a
+                  href="/recuperar-password"
+                  className="text-[11px] font-bold text-blue-600 hover:underline"
+                >
+                  ¿Olvidaste tu contraseña?
+                </a>
+              </div>
             </div>
 
             <button

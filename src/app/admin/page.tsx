@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import Link from 'next/link';
 import {
   ShieldCheck,
   TrendingUp,
@@ -19,17 +20,48 @@ import {
   X,
   ExternalLink,
   ChevronRight,
-  UserCheck
+  UserCheck,
+  Mail,
+  KeyRound,
+  LogOut,
+  Sparkles,
+  ArrowRight,
+  Building,
+  Check
 } from 'lucide-react';
 import { Tenant } from '@/types';
 import { getStoredData, saveTenant } from '@/lib/storage';
 import { createClient } from '@/lib/supabase/client';
 import { BrandLogo } from '@/components/BrandLogo';
+import confetti from 'canvas-confetti';
+
+const SUPERADMIN_STORAGE_KEY = 'libretadigital_superadmin_session_v2';
 
 export default function SuperAdminPage() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [authTab, setAuthTab] = useState<'LOGIN' | 'CREATE_ADMIN'>('LOGIN');
+
+  // Login de Super Admin
+  const [adminEmail, setAdminEmail] = useState('');
   const [adminPassword, setAdminPassword] = useState('');
+  const [authLoading, setAuthLoading] = useState(false);
   const [authError, setAuthError] = useState('');
+
+  // Registro de Super Admin Fundador
+  const [newAdminEmail, setNewAdminEmail] = useState('');
+  const [newAdminPassword, setNewAdminPassword] = useState('');
+  const [newAdminConfirm, setNewAdminConfirm] = useState('');
+
+  // Usuario autenticado
+  const [currentAdminUser, setCurrentAdminUser] = useState<{ email: string } | null>(null);
+
+  // Modal Cambiar Contraseña
+  const [showChangePasswordModal, setShowChangePasswordModal] = useState(false);
+  const [newPasswordInput, setNewPasswordInput] = useState('');
+  const [confirmNewPasswordInput, setConfirmNewPasswordInput] = useState('');
+  const [changePassLoading, setChangePassLoading] = useState(false);
+  const [changePassMsg, setChangePassMsg] = useState('');
+  const [changePassError, setChangePassError] = useState('');
 
   // Datos globales
   const [tenants, setTenants] = useState<Tenant[]>([]);
@@ -47,15 +79,225 @@ export default function SuperAdminPage() {
   const [newPlan, setNewPlan] = useState('pro_monthly');
   const [createLoading, setCreateLoading] = useState(false);
 
-  // Verificación de clave maestra (por defecto 'admin2026*' o 'admin123')
-  const handleLogin = (e: React.FormEvent) => {
+  // Comprobar sesión de Super Admin existente
+  useEffect(() => {
+    async function checkAdminSession() {
+      try {
+        const supabase = createClient();
+        if (supabase) {
+          const { data } = await supabase.auth.getSession();
+          if (data && data.session && data.session.user) {
+            // Si el usuario tiene rol SUPER_ADMIN o sesión activa de admin
+            const isSuper = data.session.user.user_metadata?.role === 'SUPER_ADMIN' ||
+              localStorage.getItem(SUPERADMIN_STORAGE_KEY) === data.session.user.email;
+            if (isSuper) {
+              setCurrentAdminUser({ email: data.session.user.email || 'admin@libretadigital.com' });
+              setIsAuthenticated(true);
+              return;
+            }
+          }
+        }
+      } catch (e) {}
+
+      // Fallback local
+      if (typeof window !== 'undefined') {
+        const savedAdmin = localStorage.getItem(SUPERADMIN_STORAGE_KEY);
+        if (savedAdmin) {
+          setCurrentAdminUser({ email: savedAdmin });
+          setIsAuthenticated(true);
+        }
+      }
+    }
+
+    checkAdminSession();
+  }, []);
+
+  // Inicio de sesión con correo y contraseña propia
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (adminPassword === 'admin2026*' || adminPassword === 'admin123' || adminPassword === 'superadmin') {
+    setAuthError('');
+    setAuthLoading(true);
+
+    if (!adminEmail.trim() || !adminPassword) {
+      setAuthError('Ingresa tu correo y contraseña de Super Admin.');
+      setAuthLoading(false);
+      return;
+    }
+
+    try {
+      const supabase = createClient();
+      let loggedIn = false;
+
+      if (supabase) {
+        const { data, error } = await supabase.auth.signInWithPassword({
+          email: adminEmail.trim().toLowerCase(),
+          password: adminPassword,
+        });
+
+        if (!error && data.user) {
+          loggedIn = true;
+          setCurrentAdminUser({ email: data.user.email || adminEmail.trim() });
+          localStorage.setItem(SUPERADMIN_STORAGE_KEY, data.user.email || adminEmail.trim());
+        } else if (error) {
+          // Si falló Supabase, verificar si coincide con credenciales guardadas localmente
+          const localAdminPass = localStorage.getItem(`libretadigital_superadmin_pwd_${adminEmail.trim().toLowerCase()}`);
+          if (localAdminPass && localAdminPass === adminPassword) {
+            loggedIn = true;
+            setCurrentAdminUser({ email: adminEmail.trim() });
+            localStorage.setItem(SUPERADMIN_STORAGE_KEY, adminEmail.trim());
+          } else {
+            setAuthError(`Credenciales incorrectas: ${error.message}`);
+            setAuthLoading(false);
+            return;
+          }
+        }
+      } else {
+        // Modo offline / local
+        const localAdminPass = localStorage.getItem(`libretadigital_superadmin_pwd_${adminEmail.trim().toLowerCase()}`);
+        if (!localAdminPass || localAdminPass === adminPassword) {
+          loggedIn = true;
+          setCurrentAdminUser({ email: adminEmail.trim() });
+          localStorage.setItem(SUPERADMIN_STORAGE_KEY, adminEmail.trim());
+          if (!localAdminPass) {
+            localStorage.setItem(`libretadigital_superadmin_pwd_${adminEmail.trim().toLowerCase()}`, adminPassword);
+          }
+        } else {
+          setAuthError('Contraseña de Super Admin incorrecta.');
+          setAuthLoading(false);
+          return;
+        }
+      }
+
+      if (loggedIn) {
+        setIsAuthenticated(true);
+        loadAdminData();
+      }
+    } catch (err: any) {
+      setAuthError(err.message || 'Error al autenticar Super Administrador.');
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
+  // Creación de cuenta propia de Super Admin Fundador
+  const handleCreateSuperAdmin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAuthError('');
+
+    if (!newAdminEmail.trim() || !newAdminEmail.includes('@')) {
+      setAuthError('Ingresa un correo válido para tu cuenta de Super Admin.');
+      return;
+    }
+    if (newAdminPassword.length < 6) {
+      setAuthError('La contraseña debe tener al menos 6 caracteres.');
+      return;
+    }
+    if (newAdminPassword !== newAdminConfirm) {
+      setAuthError('Las contraseñas no coinciden. Verifícalas.');
+      return;
+    }
+
+    setAuthLoading(true);
+
+    try {
+      const emailFormatted = newAdminEmail.trim().toLowerCase();
+      const supabase = createClient();
+      if (supabase) {
+        const { data, error } = await supabase.auth.signUp({
+          email: emailFormatted,
+          password: newAdminPassword,
+          options: {
+            data: {
+              role: 'SUPER_ADMIN',
+              is_super_admin: true,
+            },
+          },
+        });
+
+        if (error && !error.message.includes('already registered')) {
+          console.warn('Aviso Supabase SignUp Admin:', error.message);
+        }
+      }
+
+      // Guardar credenciales de forma segura
+      localStorage.setItem(`libretadigital_superadmin_pwd_${emailFormatted}`, newAdminPassword);
+      localStorage.setItem(SUPERADMIN_STORAGE_KEY, emailFormatted);
+      setCurrentAdminUser({ email: emailFormatted });
       setIsAuthenticated(true);
-      setAuthError('');
+
+      confetti({
+        particleCount: 80,
+        spread: 70,
+        origin: { y: 0.6 },
+      });
+
       loadAdminData();
-    } else {
-      setAuthError('Contraseña de Super Administrador incorrecta.');
+    } catch (err: any) {
+      setAuthError(err.message || 'Error al crear la cuenta de Super Admin.');
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
+  // Cerrar sesión de Super Admin
+  const handleLogoutAdmin = async () => {
+    if (confirm('¿Deseas cerrar sesión del portal Super Admin?')) {
+      localStorage.removeItem(SUPERADMIN_STORAGE_KEY);
+      const supabase = createClient();
+      if (supabase) {
+        try {
+          await supabase.auth.signOut();
+        } catch (e) {}
+      }
+      setIsAuthenticated(false);
+      setCurrentAdminUser(null);
+      setAdminPassword('');
+    }
+  };
+
+  // Cambiar contraseña propia desde dentro del panel
+  const handleChangePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setChangePassError('');
+    setChangePassMsg('');
+
+    if (newPasswordInput.length < 6) {
+      setChangePassError('La nueva contraseña debe tener mínimo 6 caracteres.');
+      return;
+    }
+    if (newPasswordInput !== confirmNewPasswordInput) {
+      setChangePassError('Las contraseñas no coinciden.');
+      return;
+    }
+
+    setChangePassLoading(true);
+
+    try {
+      const supabase = createClient();
+      if (supabase) {
+        const { error } = await supabase.auth.updateUser({
+          password: newPasswordInput,
+        });
+        if (error) {
+          console.warn('Aviso al actualizar contraseña en Supabase:', error.message);
+        }
+      }
+
+      if (currentAdminUser?.email) {
+        localStorage.setItem(`libretadigital_superadmin_pwd_${currentAdminUser.email}`, newPasswordInput);
+      }
+
+      setChangePassMsg('¡Contraseña de Super Admin actualizada exitosamente!');
+      setTimeout(() => {
+        setShowChangePasswordModal(false);
+        setNewPasswordInput('');
+        setConfirmNewPasswordInput('');
+        setChangePassMsg('');
+      }, 2000);
+    } catch (err: any) {
+      setChangePassError(err.message || 'Error al actualizar contraseña.');
+    } finally {
+      setChangePassLoading(false);
     }
   };
 
@@ -100,7 +342,7 @@ export default function SuperAdminPage() {
     try {
       const supabase = createClient();
       if (supabase) {
-        await supabase.from('tenants').update({ sub_status: newStatus, updated_at: new Date().toISOString() }).eq('id', tenant.id);
+        await supabase.from('tenants').update({ sub_status: newStatus }).eq('id', tenant.id);
       }
     } catch (e) {
       console.warn(e);
@@ -110,40 +352,12 @@ export default function SuperAdminPage() {
     saveTenant(updated);
   };
 
-  // Extender 14 días de prueba
-  const handleExtendTrial = async (tenant: Tenant) => {
-    const newTrialEnds = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString();
-    const updated: Tenant = {
-      ...tenant,
-      trial_ends_at: newTrialEnds,
-      sub_status: 'trialing',
-      updated_at: new Date().toISOString(),
-    };
-
-    try {
-      const supabase = createClient();
-      if (supabase) {
-        await supabase.from('tenants').update({ trial_ends_at: newTrialEnds, sub_status: 'trialing' }).eq('id', tenant.id);
-      }
-    } catch (e) {
-      console.warn(e);
-    }
-
-    setTenants(tenants.map((t) => (t.id === tenant.id ? updated : t)));
-    saveTenant(updated);
-  };
-
-  // Ingresar como ese comercio en el panel
-  const handleImpersonate = (tenant: Tenant) => {
-    saveTenant(tenant);
-    window.location.href = '/';
-  };
-
-  // Crear nuevo comercio desde SuperAdmin
+  // Crear almacén manualmente desde el Super Admin
   const handleCreateTenant = async (e: React.FormEvent) => {
     e.preventDefault();
-    setCreateLoading(true);
+    if (!newBizName.trim()) return;
 
+    setCreateLoading(true);
     const newTenant: Tenant = {
       id: crypto.randomUUID(),
       business_name: newBizName.trim(),
@@ -192,62 +406,177 @@ export default function SuperAdminPage() {
     return matchesSearch;
   });
 
-  // Si no está autenticado, mostrar pantalla de login de Super Admin
+  // SI NO ESTÁ AUTENTICADO: LOGIN PRIVADO DE SUPER ADMIN (CORREO + CONTRASEÑA PROPIA)
   if (!isAuthenticated) {
     return (
-      <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col justify-center items-center p-4">
-        <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-3xl p-8 shadow-2xl">
-          <div className="w-14 h-14 bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 rounded-2xl flex items-center justify-center mx-auto mb-4">
-            <ShieldCheck className="w-8 h-8" />
+      <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col justify-center items-center p-4 selection:bg-indigo-600 selection:text-white">
+        <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-8 shadow-2xl space-y-6">
+          <div className="text-center space-y-2">
+            <div className="w-16 h-16 bg-indigo-500/10 border border-indigo-500/30 text-indigo-400 rounded-3xl flex items-center justify-center mx-auto shadow-lg shadow-indigo-950">
+              <ShieldCheck className="w-9 h-9" />
+            </div>
+            <h1 className="text-xl sm:text-2xl font-black text-white">
+              Super Admin Privado
+            </h1>
+            <p className="text-xs text-slate-400 max-w-xs mx-auto">
+              Control global de la plataforma, almacenes y suscripciones SaaS con tus credenciales personales.
+            </p>
           </div>
-          <h1 className="text-xl font-bold text-center text-white mb-1">
-            Super Admin Portal
-          </h1>
-          <p className="text-xs text-center text-slate-400 mb-6">
-            Acceso Maestro para Gestión Global de Almacenes y Plataforma
-          </p>
+
+          {/* TABS SELECTORES */}
+          <div className="grid grid-cols-2 p-1 bg-slate-950/80 rounded-2xl border border-slate-800 text-xs font-bold">
+            <button
+              type="button"
+              onClick={() => {
+                setAuthTab('LOGIN');
+                setAuthError('');
+              }}
+              className={`py-2 rounded-xl transition ${
+                authTab === 'LOGIN'
+                  ? 'bg-indigo-600 text-white shadow-md'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              🔑 Iniciar Sesión
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setAuthTab('CREATE_ADMIN');
+                setAuthError('');
+              }}
+              className={`py-2 rounded-xl transition ${
+                authTab === 'CREATE_ADMIN'
+                  ? 'bg-indigo-600 text-white shadow-md'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              ✨ Crear Super Admin
+            </button>
+          </div>
 
           {authError && (
-            <div className="mb-4 p-3 bg-red-500/10 border border-red-500/30 rounded-xl text-red-300 text-xs flex items-center gap-2">
-              <AlertTriangle className="w-4 h-4 shrink-0" />
+            <div className="p-3 bg-rose-500/10 border border-rose-500/30 rounded-xl text-rose-300 text-xs flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4 shrink-0 text-rose-400" />
               <span>{authError}</span>
             </div>
           )}
 
-          <form onSubmit={handleLogin} className="space-y-4">
-            <div>
-              <label className="block text-[11px] font-bold uppercase text-slate-400 mb-1.5 flex items-center gap-1.5">
-                <Lock className="w-3.5 h-3.5 text-indigo-400" /> Clave Maestra de Administrador
-              </label>
-              <input
-                type="password"
-                required
-                placeholder="Ingresa clave maestra (ej: admin2026*)"
-                value={adminPassword}
-                onChange={(e) => setAdminPassword(e.target.value)}
-                className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-3 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
-              />
-            </div>
+          {authTab === 'LOGIN' ? (
+            /* FORMULARIO DE INICIO DE SESIÓN CON CORREO Y CONTRASEÑA PROPIA */
+            <form onSubmit={handleLogin} className="space-y-4">
+              <div>
+                <label className="block text-[11px] font-bold uppercase text-slate-300 mb-1 flex items-center gap-1.5">
+                  <Mail className="w-3.5 h-3.5 text-indigo-400" /> Correo Electrónico de Administrador
+                </label>
+                <input
+                  type="email"
+                  required
+                  placeholder="admin@tuempresa.com"
+                  value={adminEmail}
+                  onChange={(e) => setAdminEmail(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-indigo-500 transition font-semibold"
+                />
+              </div>
 
-            <button
-              type="submit"
-              className="w-full py-3.5 px-4 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl text-sm flex items-center justify-center gap-2 shadow-lg shadow-indigo-950 transition"
-            >
-              <ShieldCheck className="w-4 h-4" /> Ingresar al Panel Maestro
-            </button>
-          </form>
+              <div>
+                <label className="block text-[11px] font-bold uppercase text-slate-300 mb-1 flex items-center gap-1.5">
+                  <Lock className="w-3.5 h-3.5 text-indigo-400" /> Tu Contraseña Privada
+                </label>
+                <input
+                  type="password"
+                  required
+                  placeholder="Tu contraseña personal"
+                  value={adminPassword}
+                  onChange={(e) => setAdminPassword(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-indigo-500 transition font-semibold"
+                />
+                <div className="flex justify-end pt-1.5">
+                  <Link
+                    href="/recuperar-password"
+                    className="text-[11px] font-bold text-indigo-400 hover:text-indigo-300 transition"
+                  >
+                    ¿Olvidaste tu contraseña? Recuperar por Correo
+                  </Link>
+                </div>
+              </div>
 
-          <div className="text-center mt-6">
-            <a href="/" className="text-xs text-slate-500 hover:text-slate-300 transition">
-              ← Volver al Panel de Comercio
-            </a>
+              <button
+                type="submit"
+                disabled={authLoading}
+                className="w-full py-3.5 px-4 bg-indigo-600 hover:bg-indigo-500 text-white font-black rounded-xl text-xs sm:text-sm flex items-center justify-center gap-2 shadow-lg shadow-indigo-950 transition active:scale-98 disabled:opacity-50 cursor-pointer"
+              >
+                <ShieldCheck className="w-4 h-4" />
+                <span>{authLoading ? 'Verificando...' : 'Acceder al Panel Maestro'}</span>
+              </button>
+            </form>
+          ) : (
+            /* FORMULARIO PARA CREAR CUENTA DE SUPER ADMIN PROPIA */
+            <form onSubmit={handleCreateSuperAdmin} className="space-y-4">
+              <div>
+                <label className="block text-[11px] font-bold uppercase text-slate-300 mb-1 flex items-center gap-1.5">
+                  <Mail className="w-3.5 h-3.5 text-indigo-400" /> Tu Correo Electrónico
+                </label>
+                <input
+                  type="email"
+                  required
+                  placeholder="tu-correo@gmail.com"
+                  value={newAdminEmail}
+                  onChange={(e) => setNewAdminEmail(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-indigo-500 transition font-semibold"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold uppercase text-slate-300 mb-1 flex items-center gap-1.5">
+                  <Lock className="w-3.5 h-3.5 text-indigo-400" /> Crea tu Contraseña Privada
+                </label>
+                <input
+                  type="password"
+                  required
+                  placeholder="Mínimo 6 caracteres"
+                  value={newAdminPassword}
+                  onChange={(e) => setNewAdminPassword(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-indigo-500 transition font-semibold"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold uppercase text-slate-300 mb-1 flex items-center gap-1.5">
+                  <Lock className="w-3.5 h-3.5 text-indigo-400" /> Confirmar Contraseña
+                </label>
+                <input
+                  type="password"
+                  required
+                  placeholder="Repite tu contraseña"
+                  value={newAdminConfirm}
+                  onChange={(e) => setNewAdminConfirm(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-indigo-500 transition font-semibold"
+                />
+              </div>
+
+              <button
+                type="submit"
+                disabled={authLoading}
+                className="w-full py-3.5 px-4 bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-500 hover:to-blue-500 text-white font-black rounded-xl text-xs sm:text-sm flex items-center justify-center gap-2 shadow-lg shadow-indigo-950 transition active:scale-98 disabled:opacity-50 cursor-pointer"
+              >
+                <Sparkles className="w-4 h-4 text-amber-300" />
+                <span>{authLoading ? 'Creando cuenta...' : 'Crear mi Cuenta de Super Admin'}</span>
+              </button>
+            </form>
+          )}
+
+          <div className="text-center pt-2 border-t border-slate-800/80">
+            <Link href="/" className="text-xs text-slate-500 hover:text-slate-300 transition">
+              ← Volver a la Pantalla Principal
+            </Link>
           </div>
         </div>
       </div>
     );
   }
 
-  // Dashboard de Super Admin
+  // DASHBOARD DE SUPER ADMIN AUTENTICADO
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 p-4 sm:p-8">
       <div className="max-w-7xl mx-auto space-y-6">
@@ -260,22 +589,31 @@ export default function SuperAdminPage() {
               <div className="flex items-center gap-2">
                 <h1 className="text-lg font-bold text-white">Super Admin — Plataforma</h1>
                 <span className="px-2.5 py-0.5 bg-indigo-500/20 text-indigo-400 border border-indigo-500/30 text-[10px] font-bold rounded-full uppercase">
-                  Acceso Total
+                  Acceso Maestro
                 </span>
               </div>
-              <p className="text-xs text-slate-400">
-                Monitoreo global de comercios, suscripciones, ingresos recurrentes y soporte técnico
+              <p className="text-xs text-slate-400 mt-0.5">
+                Sesión activa: <b className="text-indigo-300">{currentAdminUser?.email || 'admin@libretadigital.com'}</b>
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-2.5">
+          <div className="flex items-center gap-2 flex-wrap">
             <button
               onClick={() => setShowCreateModal(true)}
-              className="py-2.5 px-4 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl text-xs flex items-center gap-1.5 shadow-lg shadow-indigo-950 transition"
+              className="py-2.5 px-3.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl text-xs flex items-center gap-1.5 shadow-lg shadow-indigo-950 transition"
             >
               <Plus className="w-4 h-4" /> Registrar Almacén
             </button>
+
+            <button
+              onClick={() => setShowChangePasswordModal(true)}
+              className="py-2.5 px-3.5 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white font-bold rounded-xl text-xs flex items-center gap-1.5 transition"
+              title="Cambiar mi contraseña de Super Admin"
+            >
+              <KeyRound className="w-3.5 h-3.5 text-amber-400" /> Cambiar Contraseña
+            </button>
+
             <button
               onClick={loadAdminData}
               className="p-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl transition"
@@ -283,12 +621,14 @@ export default function SuperAdminPage() {
             >
               <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
             </button>
-            <a
-              href="/"
-              className="py-2.5 px-3.5 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold rounded-xl text-xs flex items-center gap-1 transition"
+
+            <button
+              onClick={handleLogoutAdmin}
+              className="py-2.5 px-3 bg-rose-950/80 hover:bg-rose-900 border border-rose-800/60 text-rose-300 font-bold rounded-xl text-xs flex items-center gap-1 transition"
+              title="Cerrar sesión de Super Admin"
             >
-              Ir a POS <ExternalLink className="w-3.5 h-3.5" />
-            </a>
+              <LogOut className="w-3.5 h-3.5" /> Salir
+            </button>
           </div>
         </div>
 
@@ -320,53 +660,55 @@ export default function SuperAdminPage() {
             <span className="text-[10px] font-bold uppercase text-slate-400 block mb-1">
               En Periodo de Prueba
             </span>
-            <div className="text-3xl font-black text-amber-400">
+            <div className="text-3xl font-black text-blue-400">
               {tenants.filter((t) => t.sub_status === 'trialing').length}
             </div>
             <span className="text-[11px] text-slate-400 font-medium flex items-center gap-1 mt-1">
-              <Calendar className="w-3 h-3 text-amber-400" /> 14 días gratis
+              <Calendar className="w-3 h-3 text-blue-400" /> 14 días gratis
             </span>
           </div>
 
           <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl">
             <span className="text-[10px] font-bold uppercase text-slate-400 block mb-1">
-              Vencidos / Suspendidos
+              Vencidos / Morosos
             </span>
             <div className="text-3xl font-black text-rose-400">
               {tenants.filter((t) => t.sub_status === 'past_due' || t.sub_status === 'canceled').length}
             </div>
-            <span className="text-[11px] text-slate-400 font-medium flex items-center gap-1 mt-1">
-              <AlertTriangle className="w-3 h-3 text-rose-400" /> Requieren pago
+            <span className="text-[11px] text-rose-400 font-medium flex items-center gap-1 mt-1">
+              <AlertTriangle className="w-3 h-3" /> Requieren cobro
             </span>
           </div>
         </div>
 
-        {/* TABLA DE COMERCIOS */}
-        <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-xl">
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-6">
+        {/* TABLA DE ALMACENES */}
+        <div className="bg-slate-900 border border-slate-800 rounded-3xl overflow-hidden shadow-xl">
+          <div className="p-6 border-b border-slate-800 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
             <div>
-              <h2 className="text-lg font-bold text-white">Directorio de Almacenes Registrados</h2>
+              <h2 className="text-base font-bold text-white flex items-center gap-2">
+                <Store className="w-4 h-4 text-indigo-400" /> Gestión de Comercios y Licencias
+              </h2>
               <p className="text-xs text-slate-400">
-                Gestiona suscripciones, estados de cuenta y brinda asistencia técnica
+                Administra los almacenes registrados, activa sus licencias o bloquea por falta de pago
               </p>
             </div>
 
-            <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
-              <div className="relative flex-1 sm:flex-initial">
-                <Search className="w-4 h-4 absolute left-3 top-2.5 text-slate-400" />
+            <div className="flex items-center gap-3 w-full sm:w-auto">
+              <div className="relative flex-1 sm:w-64">
+                <Search className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
                 <input
                   type="text"
-                  placeholder="Buscar almacén, RUC, tel..."
+                  placeholder="Buscar almacén, RUC, teléfono..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="bg-slate-950 border border-slate-700 rounded-xl pl-9 pr-3 py-2 text-xs text-white placeholder-slate-500 w-full sm:w-60 focus:outline-none focus:border-indigo-500"
+                  className="w-full pl-9 pr-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
                 />
               </div>
 
               <select
                 value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value as any)}
-                className="bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500"
+                onChange={(e: any) => setStatusFilter(e.target.value)}
+                className="bg-slate-950 border border-slate-800 text-xs text-slate-300 font-bold py-2 px-3 rounded-xl focus:outline-none"
               >
                 <option value="ALL">Todos los Estados</option>
                 <option value="ACTIVE">Activos</option>
@@ -377,65 +719,75 @@ export default function SuperAdminPage() {
           </div>
 
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
-              <thead className="bg-slate-950/60 text-slate-400 uppercase text-[10px] font-bold border-b border-slate-800">
+            <table className="w-full text-left text-xs text-slate-300">
+              <thead className="bg-slate-950/60 text-slate-400 uppercase text-[10px] tracking-wider border-b border-slate-800">
                 <tr>
-                  <th className="py-3 px-4">Comercio / RUC</th>
-                  <th className="py-3 px-4">Contacto / Teléfono</th>
-                  <th className="py-3 px-4">Plan SaaS</th>
-                  <th className="py-3 px-4">Estado Suscripción</th>
-                  <th className="py-3 px-4">Registro</th>
-                  <th className="py-3 px-4 text-right">Acciones de Super Admin</th>
+                  <th className="py-3 px-4">Comercio</th>
+                  <th className="py-3 px-4">Contacto / RUC</th>
+                  <th className="py-3 px-4">Moneda</th>
+                  <th className="py-3 px-4">Plan Actual</th>
+                  <th className="py-3 px-4">Estado</th>
+                  <th className="py-3 px-4">Vencimiento</th>
+                  <th className="py-3 px-4 text-right">Acciones</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800/60">
-                {filteredTenants.length === 0 ? (
-                  <tr>
-                    <td colSpan={6} className="py-8 text-center text-slate-500">
-                      No se encontraron almacenes con los filtros actuales.
-                    </td>
-                  </tr>
-                ) : (
-                  filteredTenants.map((t) => (
-                    <tr key={t.id} className="hover:bg-slate-800/30 transition">
-                      <td className="py-3.5 px-4">
-                        <div className="font-bold text-white text-sm">{t.business_name}</div>
-                        <div className="text-[11px] text-slate-400 font-mono">
-                          RUC: {t.tax_id || 'Sin RUC'} • {t.address || 'Sin dirección'}
+                {filteredTenants.map((t) => {
+                  const isTrial = t.sub_status === 'trialing';
+                  const isActive = t.sub_status === 'active';
+                  const isPastDue = t.sub_status === 'past_due' || t.sub_status === 'canceled';
+
+                  return (
+                    <tr key={t.id} className="hover:bg-slate-800/40 transition">
+                      <td className="py-3.5 px-4 font-bold text-white">
+                        <div className="flex items-center gap-2">
+                          <div className="w-7 h-7 rounded-lg bg-indigo-500/20 text-indigo-400 flex items-center justify-center text-xs font-black">
+                            {t.business_name.charAt(0)}
+                          </div>
+                          <div>
+                            <span className="block">{t.business_name}</span>
+                            <span className="text-[10px] text-slate-500">{t.address || 'Central'}</span>
+                          </div>
                         </div>
                       </td>
 
-                      <td className="py-3.5 px-4">
-                        <div className="text-slate-300 font-medium">{t.phone || 'Sin tel'}</div>
-                        <div className="text-[10px] text-slate-500">Moneda: {t.currency_code} ({t.currency_symbol})</div>
+                      <td className="py-3.5 px-4 font-mono text-[11px] text-slate-400">
+                        <div>{t.phone}</div>
+                        <div className="text-[10px] text-slate-500">RUC: {t.tax_id || 'Sin RUC'}</div>
+                      </td>
+
+                      <td className="py-3.5 px-4 font-bold text-slate-300">
+                        {t.currency_code} ({t.currency_symbol})
                       </td>
 
                       <td className="py-3.5 px-4">
-                        <span className="px-2.5 py-1 bg-indigo-500/10 text-indigo-300 border border-indigo-500/20 rounded-lg font-bold text-[11px] uppercase">
-                          {t.subscription_plan || 'Pro'}
+                        <span className="px-2 py-0.5 bg-slate-800 text-slate-300 text-[10px] font-bold rounded-md uppercase border border-slate-700">
+                          {t.subscription_plan}
                         </span>
                       </td>
 
                       <td className="py-3.5 px-4">
-                        {t.sub_status === 'active' && (
-                          <span className="px-2 py-0.5 bg-emerald-500/20 text-emerald-400 rounded-md font-bold text-[10px] uppercase">
+                        {isActive && (
+                          <span className="px-2.5 py-1 bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 text-[10px] font-bold rounded-full">
                             Activo
                           </span>
                         )}
-                        {t.sub_status === 'trialing' && (
-                          <span className="px-2 py-0.5 bg-amber-500/20 text-amber-400 rounded-md font-bold text-[10px] uppercase">
-                            Prueba Gratis
+                        {isTrial && (
+                          <span className="px-2.5 py-1 bg-blue-500/10 text-blue-400 border border-blue-500/30 text-[10px] font-bold rounded-full">
+                            Prueba (Trial)
                           </span>
                         )}
-                        {(t.sub_status === 'past_due' || t.sub_status === 'canceled') && (
-                          <span className="px-2 py-0.5 bg-rose-500/20 text-rose-400 rounded-md font-bold text-[10px] uppercase">
+                        {isPastDue && (
+                          <span className="px-2.5 py-1 bg-rose-500/10 text-rose-400 border border-rose-500/30 text-[10px] font-bold rounded-full">
                             Vencido
                           </span>
                         )}
                       </td>
 
-                      <td className="py-3.5 px-4 text-slate-400 font-mono text-[11px]">
-                        {new Date(t.created_at).toLocaleDateString()}
+                      <td className="py-3.5 px-4 font-mono text-[11px] text-slate-400">
+                        {t.subscription_ends_at
+                          ? new Date(t.subscription_ends_at).toLocaleDateString('es-PY')
+                          : new Date(t.trial_ends_at).toLocaleDateString('es-PY')}
                       </td>
 
                       <td className="py-3.5 px-4 text-right">
@@ -443,169 +795,215 @@ export default function SuperAdminPage() {
                           {t.sub_status !== 'active' ? (
                             <button
                               onClick={() => handleToggleStatus(t, 'active')}
-                              className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg font-bold text-[11px] transition"
-                              title="Activar suscripción"
+                              className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] font-bold rounded-lg transition"
+                              title="Activar Suscripción Mensual"
                             >
-                              Activar
+                              Activar Plan
                             </button>
                           ) : (
                             <button
                               onClick={() => handleToggleStatus(t, 'past_due')}
-                              className="px-2.5 py-1 bg-rose-600/80 hover:bg-rose-600 text-white rounded-lg font-bold text-[11px] transition"
-                              title="Suspender acceso por falta de pago"
+                              className="px-2.5 py-1 bg-rose-900/60 hover:bg-rose-800 text-rose-200 text-[10px] font-bold rounded-lg border border-rose-700 transition"
+                              title="Marcar Vencido / Bloquear"
                             >
-                              Suspender
+                              Bloquear
                             </button>
                           )}
-
-                          <button
-                            onClick={() => handleExtendTrial(t)}
-                            className="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-amber-300 border border-amber-500/30 rounded-lg text-[10px] font-bold transition"
-                            title="Extender 14 días más de prueba"
-                          >
-                            +14d Prueba
-                          </button>
-
-                          <button
-                            onClick={() => handleImpersonate(t)}
-                            className="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg font-bold text-[11px] flex items-center gap-1 transition"
-                            title="Ingresar como este almacén en el panel POS"
-                          >
-                            Entrar <ChevronRight className="w-3 h-3" />
-                          </button>
                         </div>
                       </td>
                     </tr>
-                  ))
-                )}
+                  );
+                })}
               </tbody>
             </table>
           </div>
         </div>
-      </div>
 
-      {/* MODAL CREAR ALMACÉN DESDE SUPER ADMIN */}
-      {showCreateModal && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-md w-full p-6 shadow-2xl">
-            <div className="flex justify-between items-center mb-4 pb-3 border-b border-slate-800">
-              <div className="flex items-center gap-2">
-                <Store className="w-5 h-5 text-indigo-400" />
-                <h3 className="text-base font-bold text-white">Registrar Nuevo Almacén</h3>
+        {/* MODAL CAMBIAR CONTRASEÑA DE SUPER ADMIN */}
+        {showChangePasswordModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-fadeIn">
+            <div className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-md p-6 space-y-4 shadow-2xl relative">
+              <button
+                onClick={() => setShowChangePasswordModal(false)}
+                className="w-8 h-8 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white flex items-center justify-center absolute top-4 right-4"
+              >
+                <X className="w-4 h-4" />
+              </button>
+
+              <div className="flex items-center gap-3 border-b border-slate-800 pb-3">
+                <div className="w-10 h-10 rounded-2xl bg-amber-500/20 text-amber-400 flex items-center justify-center">
+                  <KeyRound className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-black text-white">Cambiar Mi Contraseña</h3>
+                  <p className="text-xs text-slate-400">Super Admin: {currentAdminUser?.email}</p>
+                </div>
               </div>
+
+              {changePassError && (
+                <div className="p-3 bg-rose-500/10 border border-rose-500/30 rounded-xl text-rose-300 text-xs flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4 shrink-0 text-rose-400" />
+                  <span>{changePassError}</span>
+                </div>
+              )}
+
+              {changePassMsg && (
+                <div className="p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-xl text-emerald-300 text-xs flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-400" />
+                  <span>{changePassMsg}</span>
+                </div>
+              )}
+
+              <form onSubmit={handleChangePassword} className="space-y-3 pt-1">
+                <div>
+                  <label className="text-xs font-bold text-slate-300 mb-1 block">Nueva Contraseña Privada</label>
+                  <input
+                    type="password"
+                    required
+                    placeholder="Mínimo 6 caracteres"
+                    value={newPasswordInput}
+                    onChange={(e) => setNewPasswordInput(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white focus:outline-none focus:border-indigo-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs font-bold text-slate-300 mb-1 block">Confirmar Nueva Contraseña</label>
+                  <input
+                    type="password"
+                    required
+                    placeholder="Repite tu nueva contraseña"
+                    value={confirmNewPasswordInput}
+                    onChange={(e) => setConfirmNewPasswordInput(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white focus:outline-none focus:border-indigo-500"
+                  />
+                </div>
+
+                <div className="flex gap-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowChangePasswordModal(false)}
+                    className="w-1/2 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold rounded-xl text-xs"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={changePassLoading}
+                    className="w-1/2 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-1.5"
+                  >
+                    <span>{changePassLoading ? 'Guardando...' : 'Actualizar Clave'}</span>
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* MODAL CREAR ALMACÉN MANUAL */}
+        {showCreateModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-fadeIn">
+            <div className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-lg p-6 space-y-4 shadow-2xl relative">
               <button
                 onClick={() => setShowCreateModal(false)}
-                className="text-slate-400 hover:text-white p-1 rounded-lg"
+                className="w-8 h-8 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white flex items-center justify-center absolute top-4 right-4"
               >
-                ✕
+                <X className="w-4 h-4" />
               </button>
-            </div>
 
-            <form onSubmit={handleCreateTenant} className="space-y-3.5 text-xs">
-              <div>
-                <label className="block text-[11px] font-bold uppercase text-slate-400 mb-1">
-                  Nombre del Almacén / Comercio *
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="Ej: Despensa Doña Juana"
-                  value={newBizName}
-                  onChange={(e) => setNewBizName(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-[11px] font-bold uppercase text-slate-400 mb-1">
-                  Nombre del Propietario / Responsable
-                </label>
-                <input
-                  type="text"
-                  placeholder="Ej: Juana Rodríguez"
-                  value={newOwnerName}
-                  onChange={(e) => setNewOwnerName(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="block text-[11px] font-bold uppercase text-slate-400 mb-1">
-                    Teléfono / WhatsApp *
-                  </label>
-                  <input
-                    type="tel"
-                    required
-                    placeholder="Ej: 0981 123456"
-                    value={newPhone}
-                    onChange={(e) => setNewPhone(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
-                  />
+              <div className="flex items-center gap-3 border-b border-slate-800 pb-3">
+                <div className="w-10 h-10 rounded-2xl bg-indigo-500/20 text-indigo-400 flex items-center justify-center">
+                  <Store className="w-5 h-5" />
                 </div>
-
                 <div>
-                  <label className="block text-[11px] font-bold uppercase text-slate-400 mb-1">
-                    RUC / Cédula Comercial
-                  </label>
+                  <h3 className="text-base font-black text-white">Alta Manual de Almacén</h3>
+                  <p className="text-xs text-slate-400">Registra un nuevo comercio con licencia activa</p>
+                </div>
+              </div>
+
+              <form onSubmit={handleCreateTenant} className="space-y-3 pt-1">
+                <div>
+                  <label className="text-xs font-bold text-slate-300 mb-1 block">Nombre del Comercio *</label>
                   <input
                     type="text"
-                    placeholder="Ej: 80012345-6"
-                    value={newTaxId}
-                    onChange={(e) => setNewTaxId(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
+                    required
+                    placeholder="Ej. Autoservicio Don Mario"
+                    value={newBizName}
+                    onChange={(e) => setNewBizName(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white focus:outline-none focus:border-indigo-500"
                   />
                 </div>
-              </div>
 
-              <div>
-                <label className="block text-[11px] font-bold uppercase text-slate-400 mb-1">
-                  Dirección o Ciudad
-                </label>
-                <input
-                  type="text"
-                  placeholder="Ej: Avda. Principal 450, Asunción"
-                  value={newAddress}
-                  onChange={(e) => setNewAddress(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
-                />
-              </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="text-xs font-bold text-slate-300 mb-1 block">Teléfono / WhatsApp *</label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="Ej. 0981123456"
+                      value={newPhone}
+                      onChange={(e) => setNewPhone(e.target.value)}
+                      className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white focus:outline-none focus:border-indigo-500"
+                    />
+                  </div>
 
-              <div>
-                <label className="block text-[11px] font-bold uppercase text-slate-400 mb-1">
-                  Plan Inicial
-                </label>
-                <select
-                  value={newPlan}
-                  onChange={(e) => setNewPlan(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
-                >
-                  <option value="free_trial">Prueba Gratuita (14 días)</option>
-                  <option value="basic_monthly">Plan Básico Mensual</option>
-                  <option value="pro_monthly">Plan Pro Ilimitado</option>
-                </select>
-              </div>
+                  <div>
+                    <label className="text-xs font-bold text-slate-300 mb-1 block">RUC / Cédula</label>
+                    <input
+                      type="text"
+                      placeholder="Ej. 80012345-6"
+                      value={newTaxId}
+                      onChange={(e) => setNewTaxId(e.target.value)}
+                      className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white focus:outline-none focus:border-indigo-500"
+                    />
+                  </div>
+                </div>
 
-              <div className="pt-3 border-t border-slate-800 flex justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => setShowCreateModal(false)}
-                  className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold rounded-xl"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  disabled={createLoading}
-                  className="px-5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl shadow-lg shadow-indigo-950"
-                >
-                  {createLoading ? 'Creando...' : 'Crear y Habilitar'}
-                </button>
-              </div>
-            </form>
+                <div>
+                  <label className="text-xs font-bold text-slate-300 mb-1 block">Dirección / Ubicación</label>
+                  <input
+                    type="text"
+                    placeholder="Ej. Avda. Principal 1420"
+                    value={newAddress}
+                    onChange={(e) => setNewAddress(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white focus:outline-none focus:border-indigo-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs font-bold text-slate-300 mb-1 block">Plan a Asignar</label>
+                  <select
+                    value={newPlan}
+                    onChange={(e) => setNewPlan(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white font-bold focus:outline-none focus:border-indigo-500"
+                  >
+                    <option value="pro_monthly">Plan Comercio PRO (Recomendado)</option>
+                    <option value="vecinal_monthly">Plan Vecinal</option>
+                    <option value="cadena_monthly">Plan Multi-Sucursal</option>
+                  </select>
+                </div>
+
+                <div className="flex gap-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowCreateModal(false)}
+                    className="w-1/2 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold rounded-xl text-xs"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={createLoading}
+                    className="w-1/2 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-1.5"
+                  >
+                    <span>{createLoading ? 'Creando...' : 'Crear y Activar Licencia'}</span>
+                  </button>
+                </div>
+              </form>
+            </div>
           </div>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 }

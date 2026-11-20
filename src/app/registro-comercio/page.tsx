@@ -624,6 +624,14 @@ function MerchantRegisterContent() {
                       className="w-full pl-10 pr-3 py-2.5 bg-slate-950/70 border border-slate-800 rounded-xl text-white text-xs font-semibold focus:outline-none focus:border-blue-500 transition"
                     />
                   </div>
+                  <div className="flex justify-end pt-1.5">
+                    <Link
+                      href="/recuperar-password"
+                      className="text-[11px] font-bold text-blue-400 hover:text-blue-300 transition"
+                    >
+                      ¿Olvidaste tu contraseña?
+                    </Link>
+                  </div>
                 </div>
 
                 <button
