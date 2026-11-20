@@ -313,16 +313,25 @@ export function MerchantAuthModal({ onSuccess, onCancel }: Props) {
 
         <div className="mt-5 text-center pt-4 border-t border-slate-100 flex justify-between items-center text-xs">
           {mode === 'LOGIN' ? (
-            <button
-              type="button"
-              onClick={() => {
-                setMode('REGISTER');
-                setErrorMsg('');
-              }}
-              className="font-bold text-blue-600 hover:underline"
-            >
-              + Registrar nuevo almacén
-            </button>
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setMode('REGISTER');
+                  setErrorMsg('');
+                }}
+                className="font-bold text-blue-600 hover:underline"
+              >
+                + Registrar almacén rápido
+              </button>
+              <span className="text-slate-300">•</span>
+              <a
+                href="/registro-comercio"
+                className="font-bold text-indigo-600 hover:underline"
+              >
+                Crear cuenta con correo →
+              </a>
+            </div>
           ) : (
             <button
               type="button"

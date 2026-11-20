@@ -413,6 +413,15 @@ export function MerchantDashboard() {
               <Users className="w-3.5 h-3.5 text-blue-400" /> Equipo / Roles
             </button>
 
+            {/* Alta de Nuevo Almacén / Onboarding */}
+            <a
+              href="/registro-comercio"
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-950/70 hover:bg-indigo-900/80 border border-indigo-800/60 text-indigo-300 rounded-xl text-xs font-bold transition whitespace-nowrap shrink-0 shadow-xs"
+              title="Registrar nuevo comercio o crear otra sucursal"
+            >
+              <Store className="w-3.5 h-3.5 text-indigo-400" /> + Almacén
+            </a>
+
             {/* Informes */}
             <button
               onClick={() => checkPermissionAndExecute('can_view_financial_reports', 'Ver Reportes Financieros', () => setShowReportsModal(true))}
