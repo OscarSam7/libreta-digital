@@ -63,9 +63,46 @@ export function loginDemoDonMario(): void {
     localStorage.setItem(STORAGE_KEYS.IS_LOGGED_IN, 'true');
     localStorage.setItem(STORAGE_KEYS.TENANT, JSON.stringify(INITIAL_TENANT));
     localStorage.setItem(STORAGE_KEYS.STAFF, JSON.stringify(INITIAL_STAFF));
-    localStorage.setItem(STORAGE_KEYS.CUSTOMERS, JSON.stringify(INITIAL_CUSTOMERS));
-    localStorage.setItem(STORAGE_KEYS.TRANSACTIONS, JSON.stringify(INITIAL_TRANSACTIONS));
     localStorage.setItem(STORAGE_KEYS.CURRENT_OPERATOR, JSON.stringify(INITIAL_STAFF[0]));
+
+    // PRESERVAR CLIENTES REALES REGISTRADOS EN EL DEMO (no sobreescribir con solo los 3 mocks)
+    const existingCustRaw = localStorage.getItem(STORAGE_KEYS.CUSTOMERS);
+    let finalCustomers = INITIAL_CUSTOMERS;
+    if (existingCustRaw) {
+      try {
+        const existing: Customer[] = JSON.parse(existingCustRaw);
+        if (Array.isArray(existing) && existing.length > 0) {
+          const baseIds = new Set(INITIAL_CUSTOMERS.map((c) => c.id));
+          const newRealCustomers = existing.filter((c) => !baseIds.has(c.id));
+          finalCustomers = [...newRealCustomers, ...INITIAL_CUSTOMERS];
+        }
+      } catch (e) {}
+    }
+    localStorage.setItem(STORAGE_KEYS.CUSTOMERS, JSON.stringify(finalCustomers));
+
+    // PRESERVAR TRANSACCIONES REALES REGISTRADAS EN EL DEMO
+    const existingTxRaw = localStorage.getItem(STORAGE_KEYS.TRANSACTIONS);
+    let finalTxs = INITIAL_TRANSACTIONS;
+    if (existingTxRaw) {
+      try {
+        const existingTx: Transaction[] = JSON.parse(existingTxRaw);
+        if (Array.isArray(existingTx) && existingTx.length > 0) {
+          const baseTxIds = new Set(INITIAL_TRANSACTIONS.map((t) => t.id));
+          const newRealTxs = existingTx.filter((t) => !baseTxIds.has(t.id));
+          finalTxs = [...newRealTxs, ...INITIAL_TRANSACTIONS];
+        }
+      } catch (e) {}
+    }
+    localStorage.setItem(STORAGE_KEYS.TRANSACTIONS, JSON.stringify(finalTxs));
+
+    // Sincronizar Don Mario a Supabase si las credenciales están presentes
+    try {
+      const supabase = createClient();
+      if (supabase) {
+        supabase.from('tenants').upsert(INITIAL_TENANT).catch(() => {});
+      }
+    } catch (e) {}
+
     window.dispatchEvent(new Event('libreta_auth_changed'));
     window.dispatchEvent(new Event('libreta_data_updated'));
   }

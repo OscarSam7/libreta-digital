@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { Customer } from '@/types';
 import { sanitizeText, validateAmount } from '@/lib/validation';
+import { INITIAL_CUSTOMERS, INITIAL_TENANT } from '@/lib/storage';
 import { createClient as createSupabaseClient } from '@supabase/supabase-js';
 
 // Repositorio en memoria compartido a nivel de servidor (Node / Edge runtime en Vercel)
@@ -13,6 +14,8 @@ declare global {
 
 if (!globalThis.__LIBRETA_SHARED_CUSTOMERS__) {
   globalThis.__LIBRETA_SHARED_CUSTOMERS__ = new Map<string, Customer[]>();
+  // Inicializar clientes iniciales de Don Mario para que funcionen de manera real inmediata
+  globalThis.__LIBRETA_SHARED_CUSTOMERS__.set(INITIAL_TENANT.id, [...INITIAL_CUSTOMERS]);
 }
 
 const customerStore = globalThis.__LIBRETA_SHARED_CUSTOMERS__;
@@ -37,30 +40,88 @@ function getServerSupabase() {
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
+    const token = searchParams.get('token');
     const tenantId = searchParams.get('tenantId');
+
+    // BÚSQUEDA POR TOKEN QR (Para visualización real en el celular del cliente /portal/[token])
+    if (token) {
+      // 1. Buscar en memoria compartida
+      for (const [tId, custList] of customerStore.entries()) {
+        const found = custList.find((c) => c.qr_token === token);
+        if (found) {
+          const tenant = tId === INITIAL_TENANT.id ? INITIAL_TENANT : null;
+          return NextResponse.json({
+            success: true,
+            customer: found,
+            tenant: tenant || INITIAL_TENANT,
+          });
+        }
+      }
+
+      // 2. Buscar en clientes base de Don Mario
+      const initialMatch = INITIAL_CUSTOMERS.find((c) => c.qr_token === token);
+      if (initialMatch) {
+        return NextResponse.json({
+          success: true,
+          customer: initialMatch,
+          tenant: INITIAL_TENANT,
+        });
+      }
+
+      // 3. Buscar en Supabase
+      const supabase = getServerSupabase();
+      if (supabase) {
+        try {
+          const { data: cData } = await supabase.from('customers').select('*').eq('qr_token', token).single();
+          if (cData) {
+            const { data: tData } = await supabase.from('tenants').select('*').eq('id', cData.tenant_id).single();
+            return NextResponse.json({
+              success: true,
+              customer: cData,
+              tenant: tData || INITIAL_TENANT,
+            });
+          }
+        } catch (e) {}
+      }
+
+      return NextResponse.json({ success: false, error: 'Código o cliente no encontrado' }, { status: 404 });
+    }
 
     if (!tenantId) {
       return NextResponse.json(
-        { success: false, error: 'tenantId es requerido' },
+        { success: false, error: 'tenantId o token es requerido' },
         { status: 400 }
       );
     }
 
-    const memoryList = customerStore.get(tenantId) || [];
+    if (tenantId === INITIAL_TENANT.id && !customerStore.has(INITIAL_TENANT.id)) {
+      customerStore.set(INITIAL_TENANT.id, [...INITIAL_CUSTOMERS]);
+    }
+
+    const memoryList = customerStore.get(tenantId) || (tenantId === INITIAL_TENANT.id ? [...INITIAL_CUSTOMERS] : []);
 
     // Si Supabase está configurado, consultar también en Supabase y combinar
     const supabase = getServerSupabase();
     if (supabase) {
       try {
+        if (tenantId === INITIAL_TENANT.id) {
+          await supabase.from('tenants').upsert(INITIAL_TENANT);
+        }
+
         const { data, error } = await supabase
           .from('customers')
           .select('*')
           .eq('tenant_id', tenantId)
           .order('created_at', { ascending: false });
 
-        if (!error && data && data.length > 0) {
+        if (!error && data) {
           // Combinar registros sin duplicar IDs
           const map = new Map<string, Customer>();
+          if (tenantId === INITIAL_TENANT.id) {
+            for (const c of INITIAL_CUSTOMERS) {
+              map.set(c.id, c);
+            }
+          }
           for (const c of data as Customer[]) {
             map.set(c.id, c);
           }
@@ -109,10 +170,15 @@ export async function POST(req: NextRequest) {
     const qrToken = sanitizeText(body.qr_token, 100);
     const securityPin = body.security_pin ? String(body.security_pin).slice(0, 6) : '1234';
     const creditLimit = validateAmount(body.credit_limit, 0).value;
+    const currentBalance = validateAmount(body.current_balance, 0).value;
     const registeredVia = body.registered_via || (body.phone?.includes('Excepción') ? 'EXCEPTION_NO_PHONE' : 'SELF_MOBILE_LINK');
 
+    // Garantizar UUID válido para evitar rechazos en bases de datos relacionales
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    const customerId = body.id && uuidRegex.test(body.id) ? body.id : crypto.randomUUID();
+
     const customer: Customer = {
-      id: body.id || `cust-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      id: customerId,
       tenant_id: tenantId,
       full_name: fullName,
       nickname,
@@ -122,7 +188,7 @@ export async function POST(req: NextRequest) {
       security_pin: securityPin,
       pin_hash: `$2a$06$hash_${securityPin}`,
       credit_limit: creditLimit,
-      current_balance: 0,
+      current_balance: currentBalance,
       is_blocked: Boolean(body.is_blocked),
       credit_cycle: body.credit_cycle || 'MENSUAL',
       terms_accepted: Boolean(body.terms_accepted),
@@ -138,6 +204,9 @@ export async function POST(req: NextRequest) {
     };
 
     // 1. Guardar en store compartido en servidor
+    if (tenantId === INITIAL_TENANT.id && !customerStore.has(INITIAL_TENANT.id)) {
+      customerStore.set(INITIAL_TENANT.id, [...INITIAL_CUSTOMERS]);
+    }
     const currentList = customerStore.get(tenantId) || [];
     // Evitar duplicados por id o qr_token
     const filtered = currentList.filter((c) => c.id !== customer.id && c.qr_token !== customer.qr_token);
@@ -148,6 +217,9 @@ export async function POST(req: NextRequest) {
     const supabase = getServerSupabase();
     if (supabase) {
       try {
+        if (tenantId === INITIAL_TENANT.id) {
+          await supabase.from('tenants').upsert(INITIAL_TENANT);
+        }
         const { error: sbError } = await supabase.from('customers').upsert(customer);
         if (sbError) {
           console.warn('Supabase upsert warning:', sbError.message);

@@ -342,9 +342,12 @@ export function MerchantDashboard() {
     const finalPhone = isNoPhoneException && !newCustPhone.trim()
       ? 'Sin celular (Excepción Dueño)'
       : sanitizeText(newCustPhone, 30);
+    const newCustomerId = typeof crypto !== 'undefined' && crypto.randomUUID
+      ? crypto.randomUUID()
+      : '019339bb-' + Math.random().toString(36).substring(2, 6) + '-7662-8e39-165f123d9299';
 
     const newCustomer: Customer = {
-      id: `cust-${Date.now()}`,
+      id: newCustomerId,
       tenant_id: tenant.id,
       full_name: sanitizeText(newCustName, 100),
       nickname: newCustNickname.trim() ? sanitizeText(newCustNickname, 50) : undefined,

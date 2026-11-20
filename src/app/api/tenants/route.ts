@@ -40,6 +40,9 @@ export async function GET(req: NextRequest) {
     const supabase = getServerSupabase();
     if (supabase) {
       try {
+        // Asegurar que INITIAL_TENANT (Don Mario) exista en Supabase para evitar fallos de claves foráneas
+        await supabase.from('tenants').upsert(INITIAL_TENANT);
+
         if (id) {
           const { data } = await supabase.from('tenants').select('*').eq('id', id).single();
           if (data) {
@@ -49,6 +52,10 @@ export async function GET(req: NextRequest) {
         } else {
           const { data } = await supabase.from('tenants').select('*').order('business_name');
           if (data && data.length > 0) {
+            // Asegurar que INITIAL_TENANT esté incluido en la lista devuelta
+            if (!data.some((t: any) => t.id === INITIAL_TENANT.id)) {
+              data.unshift(INITIAL_TENANT);
+            }
             for (const t of data) {
               tenantStore.set(t.id, t);
             }
@@ -59,11 +66,17 @@ export async function GET(req: NextRequest) {
     }
 
     if (id) {
-      const found = tenantStore.get(id) || INITIAL_TENANT;
-      return NextResponse.json({ success: true, tenant: found });
+      const found = tenantStore.get(id) || (id === INITIAL_TENANT.id ? INITIAL_TENANT : null);
+      if (found) {
+        return NextResponse.json({ success: true, tenant: found });
+      }
+      return NextResponse.json({ success: true, tenant: INITIAL_TENANT });
     }
 
     const all = Array.from(tenantStore.values());
+    if (!all.some((t) => t.id === INITIAL_TENANT.id)) {
+      all.unshift(INITIAL_TENANT);
+    }
     return NextResponse.json({ success: true, tenants: all });
   } catch (err: any) {
     return NextResponse.json(

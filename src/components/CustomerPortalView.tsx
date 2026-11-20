@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Customer, Transaction, Tenant } from '@/types';
-import { getStoredData, syncFromSupabase } from '@/lib/storage';
+import { getStoredData, syncFromSupabase, saveCustomers } from '@/lib/storage';
 import { certifyTransactionWithPin } from '@/lib/ledger';
 import { acceptCustomerTerms } from '@/lib/customers';
 import { exportTransactionsToCSV } from '@/lib/reports';
@@ -42,15 +42,50 @@ export function CustomerPortalView({ token }: Props) {
   const [termsAcceptedCheckbox, setTermsAcceptedCheckbox] = useState(false);
   const [termsError, setTermsError] = useState('');
   const [showContractModal, setShowContractModal] = useState(false);
+  const [isLoadingCloud, setIsLoadingCloud] = useState(true);
 
-  const loadData = () => {
+  const loadData = async () => {
+    // 1. Cargar datos locales de inmediato si existen
     const data = getStoredData();
-    setTenant(data.tenant);
+    if (data.tenant) setTenant(data.tenant);
     const found = data.customers.find((c) => c.qr_token === token);
     if (found) {
       setCustomer(found);
       const custTxs = data.transactions.filter((t) => t.customer_id === found.id);
       setTransactions(custTxs);
+      setIsLoadingCloud(false);
+    }
+
+    // 2. Consultar siempre la nube central para sincronización real en cualquier celular
+    try {
+      const res = await fetch(`/api/customers?token=${encodeURIComponent(token)}`);
+      if (res.ok) {
+        const json = await res.json();
+        if (json.success && json.customer) {
+          setCustomer(json.customer);
+          if (json.tenant) setTenant(json.tenant);
+
+          // Cargar transacciones del cliente desde la API central
+          const txRes = await fetch(`/api/transactions?tenantId=${json.customer.tenant_id}&customerId=${json.customer.id}`);
+          if (txRes.ok) {
+            const txJson = await txRes.json();
+            if (txJson.success && Array.isArray(txJson.transactions)) {
+              setTransactions(txJson.transactions);
+            }
+          }
+
+          // Guardar localmente para disponibilidad offline
+          const currentData = getStoredData();
+          if (!currentData.customers.some((c) => c.id === json.customer.id)) {
+            const updatedCusts = [json.customer, ...currentData.customers];
+            saveCustomers(updatedCusts);
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('Error fetching cloud customer token:', err);
+    } finally {
+      setIsLoadingCloud(false);
     }
   };
 
@@ -67,6 +102,17 @@ export function CustomerPortalView({ token }: Props) {
       window.removeEventListener('storage', handleUpdate);
     };
   }, [token]);
+
+  if (isLoadingCloud && (!customer || !tenant)) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-4">
+        <div className="flex flex-col items-center gap-3 animate-pulse">
+          <BrandLogo size="md" theme="light" />
+          <p className="text-xs font-bold text-slate-500">Cargando libreta digital y cuenta corriente...</p>
+        </div>
+      </div>
+    );
+  }
 
   if (!customer || !tenant) {
     return (
@@ -89,6 +135,22 @@ export function CustomerPortalView({ token }: Props) {
       confetti({ particleCount: 70, spread: 60, origin: { y: 0.7 } });
       setSigningTxId(null);
       setPinInput('');
+
+      // Sincronizar certificación en la API central
+      const targetTx = transactions.find((t) => t.id === txId);
+      if (targetTx) {
+        fetch('/api/transactions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            ...targetTx,
+            status: 'CERTIFIED_BOTH',
+            validated_at: new Date().toISOString(),
+            validation_method: 'REMOTE_QR_APPROVAL',
+          }),
+        }).catch(() => {});
+      }
+
       loadData();
     } else {
       setSignError(res.message);
@@ -126,6 +188,13 @@ export function CustomerPortalView({ token }: Props) {
 
     setCustomer(res.customer);
     setTermsPin('');
+
+    // Sincronizar con la API central
+    fetch('/api/customers', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(res.customer),
+    }).catch(() => {});
   };
 
   const isOverLimit =

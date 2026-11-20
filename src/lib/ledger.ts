@@ -149,6 +149,21 @@ export function executeLedgerTransaction(input: CreateTxInput): {
   saveCustomers(customers);
   saveTransactions(updatedTransactions);
 
+  // Sincronizar en tiempo real con la API en la nube central
+  if (typeof window !== 'undefined') {
+    fetch('/api/transactions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(newTx),
+    }).catch(() => {});
+
+    fetch('/api/customers', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updatedCustomer),
+    }).catch(() => {});
+  }
+
   return { success: true, transaction: newTx };
 }
 
@@ -197,6 +212,14 @@ export function certifyTransactionWithPin(
 
   transactions[txIndex] = certifiedTx;
   saveTransactions(transactions);
+
+  if (typeof window !== 'undefined') {
+    fetch('/api/transactions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(certifiedTx),
+    }).catch(() => {});
+  }
 
   return { success: true, message: 'Operación certificada exitosamente' };
 }
