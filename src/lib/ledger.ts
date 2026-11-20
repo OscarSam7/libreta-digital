@@ -13,6 +13,8 @@ export interface CreateTxInput {
   status?: ValidationStatus;
   validationMethod?: string;
   validationMetadata?: Record<string, any>;
+  operatorId?: string;
+  operatorName?: string;
 }
 
 export function executeLedgerTransaction(input: CreateTxInput): {
@@ -20,7 +22,7 @@ export function executeLedgerTransaction(input: CreateTxInput): {
   transaction?: Transaction;
   error?: string;
 } {
-  const { customers, transactions, tenant } = getStoredData();
+  const { customers, transactions, tenant, currentOperator } = getStoredData();
   const customerIndex = customers.findIndex((c) => c.id === input.customerId);
 
   if (customerIndex === -1) {
@@ -97,6 +99,8 @@ export function executeLedgerTransaction(input: CreateTxInput): {
     tenant_id: tenant.id,
     customer_id: customer.id,
     created_by: 'user-active-session',
+    operator_id: input.operatorId || currentOperator?.id,
+    operator_name: input.operatorName || currentOperator?.full_name,
     type: input.type,
     amount: input.amount,
     previous_balance: previousBalance,
@@ -255,7 +259,7 @@ export function processHistoricalBatchTransactions(
   finalBalance?: number;
   error?: string;
 } {
-  const { customers, transactions, tenant } = getStoredData();
+  const { customers, transactions, tenant, currentOperator } = getStoredData();
   const customerIndex = customers.findIndex((c) => c.id === customerId);
 
   if (customerIndex === -1) {
@@ -298,6 +302,8 @@ export function processHistoricalBatchTransactions(
       tenant_id: tenant.id,
       customer_id: customer.id,
       created_by: 'comerciante-carga-historica',
+      operator_id: currentOperator?.id,
+      operator_name: currentOperator?.full_name,
       type: entry.type,
       amount: entry.amount,
       previous_balance: prevBalance,

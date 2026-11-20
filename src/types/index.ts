@@ -77,6 +77,8 @@ export interface Transaction {
   tenant_id: string;
   customer_id: string;
   created_by: string;
+  operator_id?: string;
+  operator_name?: string;
   type: TransactionType;
   amount: number;
   previous_balance: number;
@@ -91,6 +93,30 @@ export interface Transaction {
   validation_metadata?: Record<string, any>;
   validation_pin?: string;
   created_at: string;
+}
+
+export type StaffRole = 'OWNER' | 'ADMIN' | 'CASHIER' | 'COLLECTOR';
+
+export interface StaffPermissions {
+  can_register_sales: boolean;      // Cargar compras fiadas
+  can_register_payments: boolean;   // Cargar cobros / abonos
+  can_edit_credit_limits: boolean;  // Modificar límites de crédito de clientes
+  can_adjust_credit_notes: boolean; // Emitir notas de crédito / anular asientos
+  can_view_financial_reports: boolean; // Ver reportes de ventas, caja y morosidad
+  can_manage_staff: boolean;        // Crear, editar y suspender colaboradores
+}
+
+export interface StaffMember {
+  id: string;
+  tenant_id: string;
+  full_name: string;
+  role: StaffRole;
+  phone?: string;
+  pin: string; // PIN de 4 dígitos para login rápido en el terminal POS
+  is_active: boolean;
+  permissions: StaffPermissions;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface AuditLog {

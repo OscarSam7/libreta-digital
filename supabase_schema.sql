@@ -58,6 +58,8 @@ CREATE TABLE transactions (
   tenant_id UUID REFERENCES tenants(id) ON DELETE CASCADE,
   customer_id UUID REFERENCES customers(id) ON DELETE CASCADE,
   created_by TEXT DEFAULT 'user-owner-001',
+  operator_id TEXT,
+  operator_name TEXT,
   type TEXT NOT NULL, -- 'DEBIT_PURCHASE', 'CREDIT_PAYMENT', 'ADJUSTMENT_DEBIT', 'ADJUSTMENT_CREDIT'
   amount NUMERIC NOT NULL,
   previous_balance NUMERIC NOT NULL,
@@ -75,14 +77,30 @@ CREATE TABLE transactions (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- 5.1 TABLA DE COLABORADORES Y PERMISOS (STAFF & ROLES)
+CREATE TABLE staff_members (
+  id TEXT PRIMARY KEY,
+  tenant_id UUID REFERENCES tenants(id) ON DELETE CASCADE,
+  full_name TEXT NOT NULL,
+  role TEXT NOT NULL DEFAULT 'CASHIER', -- 'OWNER', 'ADMIN', 'CASHIER', 'COLLECTOR'
+  phone TEXT,
+  pin TEXT NOT NULL DEFAULT '1234',
+  is_active BOOLEAN DEFAULT TRUE,
+  permissions JSONB NOT NULL DEFAULT '{}'::jsonb,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
 -- 6. POLÍTICAS DE SEGURIDAD (RLS)
 ALTER TABLE tenants ENABLE ROW LEVEL SECURITY;
 ALTER TABLE customers ENABLE ROW LEVEL SECURITY;
 ALTER TABLE transactions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE staff_members ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY "Permitir todo a tenants" ON tenants FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Permitir todo a customers" ON customers FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Permitir todo a transactions" ON transactions FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Permitir todo a staff_members" ON staff_members FOR ALL USING (true) WITH CHECK (true);
 
 -- 7. DATOS DEMO INICIALES
 INSERT INTO tenants (id, business_name, tax_id, phone, address, currency_code, currency_symbol, subscription_plan, sub_status)
@@ -179,4 +197,37 @@ VALUES
   '[{"name": "Carne molida", "qty": 1, "price": 36000}, {"name": "Gaseosa 2L", "qty": 2, "price": 24000}]'::jsonb,
   'CERTIFIED_BOTH',
   'EFECTIVO'
+);
+
+INSERT INTO staff_members (id, tenant_id, full_name, role, phone, pin, is_active, permissions)
+VALUES
+(
+  'staff-001',
+  '019339aa-7824-7662-8e39-165f123d9101',
+  'Don Mario Gómez',
+  'OWNER',
+  '595981123456',
+  '1234',
+  true,
+  '{"can_register_sales": true, "can_register_payments": true, "can_edit_credit_limits": true, "can_adjust_credit_notes": true, "can_view_financial_reports": true, "can_manage_staff": true}'::jsonb
+),
+(
+  'staff-002',
+  '019339aa-7824-7662-8e39-165f123d9101',
+  'Juan Pérez',
+  'CASHIER',
+  '595981999888',
+  '1111',
+  true,
+  '{"can_register_sales": true, "can_register_payments": true, "can_edit_credit_limits": false, "can_adjust_credit_notes": false, "can_view_financial_reports": false, "can_manage_staff": false}'::jsonb
+),
+(
+  'staff-003',
+  '019339aa-7824-7662-8e39-165f123d9101',
+  'María Benítez',
+  'CASHIER',
+  '595982777666',
+  '2222',
+  true,
+  '{"can_register_sales": true, "can_register_payments": true, "can_edit_credit_limits": false, "can_adjust_credit_notes": false, "can_view_financial_reports": false, "can_manage_staff": false}'::jsonb
 );

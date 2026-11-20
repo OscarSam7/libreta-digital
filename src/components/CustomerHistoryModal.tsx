@@ -587,6 +587,11 @@ export function CustomerHistoryModal({
                             <span className="font-semibold text-slate-800 block text-xs">
                               {tx.description || (isPurchase ? 'Compra al fiado' : 'Abono a cuenta')}
                             </span>
+                            {tx.operator_name && (
+                              <span className="inline-flex items-center gap-1 text-[10px] text-blue-700 font-bold bg-blue-50/80 px-1.5 py-0.5 rounded mt-1 border border-blue-200/50">
+                                👤 {tx.operator_name}
+                              </span>
+                            )}
                             {tx.items && tx.items.length > 0 && (
                               <div className="flex flex-wrap gap-1 mt-1">
                                 {tx.items.map((it, idx) => (

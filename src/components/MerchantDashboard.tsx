@@ -1,8 +1,8 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Customer, Transaction, Tenant, TransactionType, PaymentMethod } from '@/types';
-import { getStoredData, saveCustomers, saveTransactions, saveTenant, syncFromSupabase } from '@/lib/storage';
+import { Customer, Transaction, Tenant, TransactionType, PaymentMethod, StaffMember, StaffRole, StaffPermissions } from '@/types';
+import { getStoredData, saveCustomers, saveTransactions, saveTenant, syncFromSupabase, saveStaff, setCurrentOperator } from '@/lib/storage';
 import { executeLedgerTransaction, certifyTransactionWithPin } from '@/lib/ledger';
 import { exportTransactionsToCSV, generateWhatsAppReminderUrl } from '@/lib/reports';
 import { CustomerQRModal } from '@/components/CustomerQRModal';
@@ -17,6 +17,8 @@ import { HistoricalBatchImportModal } from '@/components/HistoricalBatchImportMo
 import { PDFReportPreviewModal } from '@/components/PDFReportPreviewModal';
 import { CustomerHistoryModal } from '@/components/CustomerHistoryModal';
 import { TermsAndConditionsModal } from '@/components/TermsAndConditionsModal';
+import { StaffManagementModal } from '@/components/StaffManagementModal';
+import { StaffSwitchModal } from '@/components/StaffSwitchModal';
 import { BrandLogo } from '@/components/BrandLogo';
 import {
   TrendingUp,
@@ -105,6 +107,17 @@ export function MerchantDashboard() {
   const [termsModalCustomer, setTermsModalCustomer] = useState<Customer | null>(null);
   const [txToAdjust, setTxToAdjust] = useState<Transaction | null>(null);
 
+  // Estados de Personal, Operadores y Roles
+  const [staff, setStaff] = useState<StaffMember[]>([]);
+  const [currentOperator, setCurrentOperatorState] = useState<StaffMember | null>(null);
+  const [showStaffModal, setShowStaffModal] = useState(false);
+  const [showStaffSwitchModal, setShowStaffSwitchModal] = useState(false);
+  const [elevatedAction, setElevatedAction] = useState<{
+    permission: keyof StaffPermissions;
+    label: string;
+    action: () => void;
+  } | null>(null);
+
   // Formulario Transacción Rápida
   const [txType, setTxType] = useState<TransactionType>('DEBIT_PURCHASE');
   const [txAmount, setTxAmount] = useState('');
@@ -130,6 +143,25 @@ export function MerchantDashboard() {
     setTenant(data.tenant);
     setCustomers(data.customers);
     setTransactions(data.transactions);
+    setStaff(data.staff);
+    setCurrentOperatorState(data.currentOperator);
+  };
+
+  const checkPermissionAndExecute = (
+    permission: keyof StaffPermissions,
+    label: string,
+    action: () => void
+  ) => {
+    if (!currentOperator || currentOperator.role === 'OWNER' || currentOperator.permissions[permission]) {
+      action();
+    } else {
+      setElevatedAction({
+        permission,
+        label,
+        action,
+      });
+      setShowStaffSwitchModal(true);
+    }
   };
 
   useEffect(() => {
@@ -237,6 +269,15 @@ export function MerchantDashboard() {
     if (!activeTxCustomer) return;
     setTxError('');
 
+    if (txType === 'DEBIT_PURCHASE' && currentOperator && currentOperator.role !== 'OWNER' && !currentOperator.permissions.can_register_sales) {
+      setTxError(`El operador actual (${currentOperator.full_name}) no tiene permisos para registrar compras al fiado.`);
+      return;
+    }
+    if (txType === 'CREDIT_PAYMENT' && currentOperator && currentOperator.role !== 'OWNER' && !currentOperator.permissions.can_register_payments) {
+      setTxError(`El operador actual (${currentOperator.full_name}) no tiene permisos para registrar pagos / cobranzas.`);
+      return;
+    }
+
     const parsedAmount = parseFloat(txAmount);
     if (isNaN(parsedAmount) || parsedAmount <= 0) {
       setTxError('Ingrese un monto válido mayor a 0');
@@ -257,6 +298,8 @@ export function MerchantDashboard() {
       createdAt: txDate ? `${txDate}T12:00:00.000Z` : undefined,
       status: txDate && txType === 'DEBIT_PURCHASE' ? 'CERTIFIED_BOTH' : undefined,
       validationMethod: txDate ? 'CARGA_HISTORICA_MANUAL' : undefined,
+      operatorId: currentOperator?.id,
+      operatorName: currentOperator?.full_name,
     });
 
     if (!res.success || !res.transaction) {
@@ -309,7 +352,7 @@ export function MerchantDashboard() {
         <div className="max-w-5xl mx-auto flex flex-col gap-2.5">
           {/* FILA 1: Logo de Marca a la izquierda, y Acciones Principales a la derecha */}
           <div className="flex items-center justify-between gap-2 w-full">
-            <div className="flex items-center gap-2.5 min-w-0">
+            <div className="flex items-center gap-2 min-w-0">
               <BrandLogo size="sm" theme="dark" className="shrink-0" />
               <div className="h-6 w-px bg-slate-800 hidden md:block shrink-0" />
               <div className="hidden md:block truncate">
@@ -318,40 +361,35 @@ export function MerchantDashboard() {
               </div>
             </div>
 
-            {/* Controles Rápidos de la derecha */}
+            {/* Controles Principales de la derecha: Operador Activo y Nuevo Cliente */}
             <div className="flex items-center gap-1.5 shrink-0">
-              {/* Selector de Moneda */}
-              <div className="flex items-center gap-1 bg-slate-900 border border-slate-800 rounded-xl px-2 py-1.5 text-xs">
-                <Globe2 className="w-3 h-3 text-slate-400 shrink-0" />
-                <select
-                  value={tenant.currency_code}
-                  onChange={(e) => handleCurrencyChange(e.target.value)}
-                  className="bg-transparent text-white font-bold outline-none cursor-pointer text-xs"
-                >
-                  {REGIONAL_CURRENCIES.map((c) => (
-                    <option key={c.code} value={c.code} className="bg-slate-900 text-white">
-                      {c.code} ({c.symbol})
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Botón Cuenta Comercio */}
+              {/* Botón de Operador Activo / Turno */}
               <button
-                onClick={() => setShowAuthModal(true)}
-                className="p-2 bg-slate-900 hover:bg-slate-800 border border-slate-800 rounded-xl text-xs font-semibold transition"
-                title="Cuenta de Comercio"
+                onClick={() => {
+                  setElevatedAction(null);
+                  setShowStaffSwitchModal(true);
+                }}
+                className="flex items-center gap-1.5 px-2.5 py-1.5 bg-slate-900 hover:bg-slate-800 border border-slate-700/80 text-white rounded-xl text-xs font-bold transition shadow-xs"
+                title="Cambiar de Operador / Iniciar Turno POS"
               >
-                <UserCheck className="w-3.5 h-3.5 text-blue-400" />
-              </button>
-
-              {/* Botón SuperAdmin */}
-              <button
-                onClick={() => setShowSuperAdminModal(true)}
-                className="p-2 bg-slate-900 hover:bg-slate-800 border border-slate-800 rounded-xl text-xs font-semibold transition"
-                title="Panel SuperAdmin (Dueño SaaS)"
-              >
-                <SlidersHorizontal className="w-3.5 h-3.5 text-indigo-300" />
+                <div className="w-5 h-5 rounded-lg bg-blue-600 flex items-center justify-center text-[10px] font-black shrink-0">
+                  {currentOperator ? currentOperator.full_name.charAt(0) : 'U'}
+                </div>
+                <div className="text-left hidden xs:block">
+                  <span className="block leading-none text-[11px] font-bold truncate max-w-[85px] sm:max-w-[120px]">
+                    {currentOperator ? currentOperator.full_name.split(' ')[0] : 'Operador'}
+                  </span>
+                  <span className="text-[9px] text-blue-400 font-semibold block leading-tight">
+                    {currentOperator?.role === 'OWNER'
+                      ? 'Dueño'
+                      : currentOperator?.role === 'ADMIN'
+                      ? 'Admin'
+                      : currentOperator?.role === 'CASHIER'
+                      ? 'Cajero'
+                      : 'Cobrador'}
+                  </span>
+                </div>
+                <ChevronDown className="w-3 h-3 text-slate-400 shrink-0 ml-0.5" />
               </button>
 
               {/* Botón Nuevo Cliente */}
@@ -359,21 +397,32 @@ export function MerchantDashboard() {
                 onClick={() => setShowNewCustomerModal(true)}
                 className="flex items-center gap-1 px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-bold shadow-md shadow-blue-600/30 transition shrink-0"
               >
-                <Plus className="w-3.5 h-3.5" /> <span>Nuevo Cliente</span>
+                <Plus className="w-3.5 h-3.5" /> <span className="hidden xs:inline">Nuevo Cliente</span><span className="xs:hidden">Cliente</span>
               </button>
             </div>
           </div>
 
           {/* FILA 2: SUB-BARRA DE ACCESOS DIRECTOS (DESPLAZAMIENTO SUAVE EN MÓVIL SIN OVERFLOW) */}
           <div className="flex items-center gap-2 overflow-x-auto no-scrollbar py-0.5 w-full">
+            {/* Gestión de Personal y Roles */}
             <button
-              onClick={() => setShowReportsModal(true)}
+              onClick={() => checkPermissionAndExecute('can_manage_staff', 'Gestionar Colaboradores y Roles', () => setShowStaffModal(true))}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-200 rounded-xl text-xs font-bold transition whitespace-nowrap shrink-0 shadow-xs"
+              title="Gestionar Colaboradores, Roles y Permisos"
+            >
+              <Users className="w-3.5 h-3.5 text-blue-400" /> Equipo / Roles
+            </button>
+
+            {/* Informes */}
+            <button
+              onClick={() => checkPermissionAndExecute('can_view_financial_reports', 'Ver Reportes Financieros', () => setShowReportsModal(true))}
               className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-200 rounded-xl text-xs font-bold transition whitespace-nowrap shrink-0 shadow-xs"
               title="Informes por Fechas y Clientes"
             >
               <FileText className="w-3.5 h-3.5 text-indigo-400" /> Informes
             </button>
 
+            {/* Cobranzas WhatsApp */}
             <button
               onClick={() => setShowWhatsAppModal(true)}
               className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-950/80 hover:bg-emerald-900/80 border border-emerald-800/60 text-emerald-300 rounded-xl text-xs font-bold transition whitespace-nowrap shrink-0 shadow-xs"
@@ -382,6 +431,7 @@ export function MerchantDashboard() {
               <Send className="w-3.5 h-3.5 text-emerald-400" /> Cobranzas WA
             </button>
 
+            {/* Link Clientes */}
             <button
               onClick={() => {
                 const url = `${typeof window !== 'undefined' ? window.location.origin : ''}/registro-cliente?almacen=${tenant.id}`;
@@ -398,6 +448,41 @@ export function MerchantDashboard() {
               <Share2 className="w-3.5 h-3.5 text-emerald-400" /> Link Clientes
             </button>
 
+            {/* Selector de Moneda */}
+            <div className="flex items-center gap-1 bg-slate-900 border border-slate-800 rounded-xl px-2 py-1.5 text-xs whitespace-nowrap shrink-0">
+              <Globe2 className="w-3 h-3 text-slate-400 shrink-0" />
+              <select
+                value={tenant.currency_code}
+                onChange={(e) => handleCurrencyChange(e.target.value)}
+                className="bg-transparent text-white font-bold outline-none cursor-pointer text-xs"
+              >
+                {REGIONAL_CURRENCIES.map((c) => (
+                  <option key={c.code} value={c.code} className="bg-slate-900 text-white">
+                    {c.code} ({c.symbol})
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Botón Cuenta Comercio */}
+            <button
+              onClick={() => setShowAuthModal(true)}
+              className="flex items-center gap-1 px-2.5 py-1.5 bg-slate-900 hover:bg-slate-800 border border-slate-800 rounded-xl text-xs font-semibold transition whitespace-nowrap shrink-0"
+              title="Cuenta de Comercio"
+            >
+              <UserCheck className="w-3.5 h-3.5 text-blue-400" /> Cuenta
+            </button>
+
+            {/* Botón SuperAdmin */}
+            <button
+              onClick={() => setShowSuperAdminModal(true)}
+              className="flex items-center gap-1 px-2.5 py-1.5 bg-slate-900 hover:bg-slate-800 border border-slate-800 rounded-xl text-xs font-semibold transition whitespace-nowrap shrink-0"
+              title="Panel SuperAdmin (Dueño SaaS)"
+            >
+              <SlidersHorizontal className="w-3.5 h-3.5 text-indigo-300" /> SaaS Admin
+            </button>
+
+            {/* Plan de Suscripción */}
             <button
               onClick={() => setShowSubscriptionModal(true)}
               className="flex items-center gap-1.5 px-2.5 py-1.5 bg-blue-950/60 border border-blue-800/40 text-blue-300 rounded-xl text-[11px] font-bold uppercase transition whitespace-nowrap shrink-0 sm:ml-auto"
@@ -648,7 +733,7 @@ export function MerchantDashboard() {
                         </button>
 
                         <button
-                          onClick={() => setActiveLimitCustomer(cust)}
+                          onClick={() => checkPermissionAndExecute('can_edit_credit_limits', 'Modificar Límite de Crédito', () => setActiveLimitCustomer(cust))}
                           className="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 transition"
                           title="Editar Límite de Crédito / Bloqueo"
                         >
@@ -683,7 +768,7 @@ export function MerchantDashboard() {
                           Límite Autorizado
                         </span>
                         <button
-                          onClick={() => setActiveLimitCustomer(cust)}
+                          onClick={() => checkPermissionAndExecute('can_edit_credit_limits', 'Modificar Límite de Crédito', () => setActiveLimitCustomer(cust))}
                           className="text-xs font-bold text-blue-600 hover:underline flex items-center justify-end gap-1 ml-auto"
                           title="Clic para cambiar límite"
                         >
@@ -768,7 +853,7 @@ export function MerchantDashboard() {
             </div>
             <div className="flex items-center gap-2">
               <button
-                onClick={() => setShowReportsModal(true)}
+                onClick={() => checkPermissionAndExecute('can_view_financial_reports', 'Ver Reportes Financieros', () => setShowReportsModal(true))}
                 className="text-xs font-bold text-indigo-600 hover:text-indigo-800 flex items-center gap-1"
               >
                 <FileText className="w-4 h-4" /> Ver Informe con Fechas
@@ -831,6 +916,7 @@ export function MerchantDashboard() {
                         <p className="text-xs text-slate-600 truncate max-w-[200px] sm:max-w-md">
                           {tx.description}
                           {tx.payment_reference ? ` • Ref: ${tx.payment_reference}` : ''}
+                          {tx.operator_name ? ` • 👤 ${tx.operator_name}` : ''}
                         </p>
                       </div>
                     </div>
@@ -858,7 +944,7 @@ export function MerchantDashboard() {
 
                       {!isAdjustment && (
                         <button
-                          onClick={() => setTxToAdjust(tx)}
+                          onClick={() => checkPermissionAndExecute('can_adjust_credit_notes', 'Emitir Nota de Crédito / Ajustar Asiento', () => setTxToAdjust(tx))}
                           className="p-1.5 rounded-lg text-slate-400 hover:text-amber-600 hover:bg-amber-50 transition ml-1"
                           title="Emitir Nota de Crédito / Ajustar error"
                         >
@@ -1364,6 +1450,45 @@ export function MerchantDashboard() {
           onSuccess={(_updated) => {
             setTermsModalCustomer(null);
             loadData();
+          }}
+        />
+      )}
+
+      {/* MODAL GESTIÓN DE PERSONAL Y PERMISOS */}
+      {showStaffModal && currentOperator && (
+        <StaffManagementModal
+          tenant={tenant}
+          staff={staff}
+          currentOperator={currentOperator}
+          onClose={() => setShowStaffModal(false)}
+          onUpdate={() => loadData()}
+        />
+      )}
+
+      {/* MODAL CAMBIO RÁPIDO DE OPERADOR / INICIO DE TURNO CON PIN */}
+      {showStaffSwitchModal && currentOperator && (
+        <StaffSwitchModal
+          tenant={tenant}
+          staff={staff}
+          currentOperator={currentOperator}
+          requiredPermission={elevatedAction?.permission}
+          permissionLabel={elevatedAction?.label}
+          onSuccess={(operator) => {
+            setShowStaffSwitchModal(false);
+            loadData();
+            if (elevatedAction) {
+              const act = elevatedAction.action;
+              setElevatedAction(null);
+              act();
+            }
+          }}
+          onClose={() => {
+            setShowStaffSwitchModal(false);
+            setElevatedAction(null);
+          }}
+          onOpenManagement={() => {
+            setShowStaffSwitchModal(false);
+            checkPermissionAndExecute('can_manage_staff', 'Gestionar Colaboradores y Roles', () => setShowStaffModal(true));
           }}
         />
       )}

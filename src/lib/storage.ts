@@ -1,11 +1,73 @@
-import { Tenant, Customer, Transaction } from '@/types';
+import { Tenant, Customer, Transaction, StaffMember } from '@/types';
 import { createClient } from '@/lib/supabase/client';
 
 const STORAGE_KEYS = {
   TENANT: 'libretadigital_tenant_v2',
   CUSTOMERS: 'libretadigital_customers_v2',
   TRANSACTIONS: 'libretadigital_transactions_v2',
+  STAFF: 'libretadigital_staff_v2',
+  CURRENT_OPERATOR: 'libretadigital_current_operator_v2',
 };
+
+export const INITIAL_STAFF: StaffMember[] = [
+  {
+    id: 'staff-001',
+    tenant_id: '019339aa-7824-7662-8e39-165f123d9101',
+    full_name: 'Don Mario Gómez',
+    role: 'OWNER',
+    phone: '595981123456',
+    pin: '1234',
+    is_active: true,
+    permissions: {
+      can_register_sales: true,
+      can_register_payments: true,
+      can_edit_credit_limits: true,
+      can_adjust_credit_notes: true,
+      can_view_financial_reports: true,
+      can_manage_staff: true,
+    },
+    created_at: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(),
+    updated_at: new Date().toISOString(),
+  },
+  {
+    id: 'staff-002',
+    tenant_id: '019339aa-7824-7662-8e39-165f123d9101',
+    full_name: 'Juan Pérez (Cajero Turno Mañana)',
+    role: 'CASHIER',
+    phone: '595981999888',
+    pin: '1111',
+    is_active: true,
+    permissions: {
+      can_register_sales: true,
+      can_register_payments: true,
+      can_edit_credit_limits: false,
+      can_adjust_credit_notes: false,
+      can_view_financial_reports: false,
+      can_manage_staff: false,
+    },
+    created_at: new Date(Date.now() - 15 * 24 * 60 * 60 * 1000).toISOString(),
+    updated_at: new Date().toISOString(),
+  },
+  {
+    id: 'staff-003',
+    tenant_id: '019339aa-7824-7662-8e39-165f123d9101',
+    full_name: 'María Benítez (Cajera Turno Tarde)',
+    role: 'CASHIER',
+    phone: '595982777666',
+    pin: '2222',
+    is_active: true,
+    permissions: {
+      can_register_sales: true,
+      can_register_payments: true,
+      can_edit_credit_limits: false,
+      can_adjust_credit_notes: false,
+      can_view_financial_reports: false,
+      can_manage_staff: false,
+    },
+    created_at: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString(),
+    updated_at: new Date().toISOString(),
+  },
+];
 
 export const INITIAL_TENANT: Tenant = {
   id: '019339aa-7824-7662-8e39-165f123d9101',
@@ -136,22 +198,55 @@ export function getStoredData() {
       tenant: INITIAL_TENANT,
       customers: INITIAL_CUSTOMERS,
       transactions: INITIAL_TRANSACTIONS,
+      staff: INITIAL_STAFF,
+      currentOperator: INITIAL_STAFF[0],
     };
   }
 
   const tenantRaw = localStorage.getItem(STORAGE_KEYS.TENANT);
   const customersRaw = localStorage.getItem(STORAGE_KEYS.CUSTOMERS);
   const txRaw = localStorage.getItem(STORAGE_KEYS.TRANSACTIONS);
+  const staffRaw = localStorage.getItem(STORAGE_KEYS.STAFF);
+  const operatorRaw = localStorage.getItem(STORAGE_KEYS.CURRENT_OPERATOR);
 
   const tenant: Tenant = tenantRaw ? JSON.parse(tenantRaw) : INITIAL_TENANT;
   const customers: Customer[] = customersRaw ? JSON.parse(customersRaw) : INITIAL_CUSTOMERS;
   const transactions: Transaction[] = txRaw ? JSON.parse(txRaw) : INITIAL_TRANSACTIONS;
+  const staff: StaffMember[] = staffRaw ? JSON.parse(staffRaw) : INITIAL_STAFF;
+  const currentOperator: StaffMember = operatorRaw ? JSON.parse(operatorRaw) : (staff[0] || INITIAL_STAFF[0]);
 
   if (!tenantRaw) localStorage.setItem(STORAGE_KEYS.TENANT, JSON.stringify(INITIAL_TENANT));
   if (!customersRaw) localStorage.setItem(STORAGE_KEYS.CUSTOMERS, JSON.stringify(INITIAL_CUSTOMERS));
   if (!txRaw) localStorage.setItem(STORAGE_KEYS.TRANSACTIONS, JSON.stringify(INITIAL_TRANSACTIONS));
+  if (!staffRaw) localStorage.setItem(STORAGE_KEYS.STAFF, JSON.stringify(INITIAL_STAFF));
+  if (!operatorRaw) localStorage.setItem(STORAGE_KEYS.CURRENT_OPERATOR, JSON.stringify(currentOperator));
 
-  return { tenant, customers, transactions };
+  return { tenant, customers, transactions, staff, currentOperator };
+}
+
+export function saveStaff(staff: StaffMember[]) {
+  if (typeof window !== 'undefined') {
+    localStorage.setItem(STORAGE_KEYS.STAFF, JSON.stringify(staff));
+    window.dispatchEvent(new Event('libreta_data_updated'));
+
+    try {
+      const supabase = createClient();
+      if (supabase) {
+        supabase.from('staff_members').upsert(staff).then(({ error }: { error: any }) => {
+          if (error) console.warn('Supabase staff sync notice:', error.message);
+        });
+      }
+    } catch (e) {
+      // Offline fallback
+    }
+  }
+}
+
+export function setCurrentOperator(operator: StaffMember) {
+  if (typeof window !== 'undefined') {
+    localStorage.setItem(STORAGE_KEYS.CURRENT_OPERATOR, JSON.stringify(operator));
+    window.dispatchEvent(new Event('libreta_data_updated'));
+  }
 }
 
 export function saveTransactions(transactions: Transaction[]) {
@@ -214,10 +309,11 @@ export async function syncFromSupabase() {
     const supabase = createClient();
     if (!supabase) return;
 
-    const [tenantsRes, custRes, txRes] = await Promise.all([
+    const [tenantsRes, custRes, txRes, staffRes] = await Promise.all([
       supabase.from('tenants').select('*').limit(1),
       supabase.from('customers').select('*').order('created_at', { ascending: false }),
       supabase.from('transactions').select('*').order('created_at', { ascending: false }),
+      supabase.from('staff_members').select('*').order('created_at', { ascending: false }),
     ]);
 
     let changed = false;
@@ -234,6 +330,11 @@ export async function syncFromSupabase() {
 
     if (txRes.data && txRes.data.length > 0) {
       localStorage.setItem(STORAGE_KEYS.TRANSACTIONS, JSON.stringify(txRes.data));
+      changed = true;
+    }
+
+    if (staffRes.data && staffRes.data.length > 0) {
+      localStorage.setItem(STORAGE_KEYS.STAFF, JSON.stringify(staffRes.data));
       changed = true;
     }
 

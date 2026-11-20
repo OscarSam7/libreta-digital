@@ -327,6 +327,7 @@ export function PDFReportPreviewModal({
                                 <td className="py-2 px-3 text-slate-800 text-[11px]">
                                   {t.description || '-'}
                                   {t.payment_method ? ` (${t.payment_method})` : ''}
+                                  {t.operator_name ? ` • Atendió: ${t.operator_name}` : ''}
                                 </td>
                                 <td className="py-2 px-2 text-right font-black whitespace-nowrap">
                                   <span className={isPurchase ? 'text-rose-600' : 'text-emerald-600'}>
