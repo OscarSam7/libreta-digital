@@ -26,7 +26,7 @@ import {
   ReceiptText
 } from 'lucide-react';
 import { Tenant, StaffMember } from '@/types';
-import { saveTenant, saveStaff, setCurrentOperator, getStoredData, setMerchantLoggedIn, loginDemoDonMario } from '@/lib/storage';
+import { saveTenant, saveStaff, setCurrentOperator, getStoredData, setMerchantLoggedIn, loginDemoDonMario, isSuperAdminLoggedIn } from '@/lib/storage';
 import { createClient } from '@/lib/supabase/client';
 import confetti from 'canvas-confetti';
 import { BrandLogo } from '@/components/BrandLogo';
@@ -599,26 +599,28 @@ function MerchantRegisterContent() {
                   </p>
                 </div>
 
-                {/* BOTÓN RÁPIDO ACCESO DEMO DON MARIO */}
-                <div className="p-3 bg-blue-500/10 border border-blue-500/30 rounded-2xl flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-2">
-                    <span className="text-lg">🏪</span>
-                    <div>
-                      <div className="text-xs font-black text-white">¿Quieres probar la Demo?</div>
-                      <div className="text-[10px] text-blue-300">Almacén Don Mario con datos de ejemplo</div>
+                {/* ACCESO A DEMO RESTRINGIDO EXCLUSIVAMENTE AL SUPER ADMIN */}
+                {isSuperAdminLoggedIn() && (
+                  <div className="p-3 bg-indigo-500/10 border border-indigo-500/30 rounded-2xl flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2">
+                      <ShieldCheck className="w-4 h-4 text-indigo-400" />
+                      <div>
+                        <div className="text-xs font-bold text-white">Modo Super Admin</div>
+                        <div className="text-[10px] text-indigo-300">Terminal Demo Almacén Don Mario</div>
+                      </div>
                     </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        loginDemoDonMario();
+                        router.push('/');
+                      }}
+                      className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold transition shadow-sm cursor-pointer shrink-0"
+                    >
+                      Abrir Demo
+                    </button>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      loginDemoDonMario();
-                      router.push('/');
-                    }}
-                    className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-bold transition shadow-sm cursor-pointer shrink-0"
-                  >
-                    Entrar al Demo
-                  </button>
-                </div>
+                )}
 
                 <div>
                   <label className="text-xs font-bold text-slate-300 mb-1 block">

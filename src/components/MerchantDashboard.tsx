@@ -348,6 +348,24 @@ export function MerchantDashboard() {
 
   return (
     <div className="min-h-screen bg-slate-100/70 pb-24 text-slate-900 font-sans">
+      {/* BARRA DE DEMOSTRACIÓN EXCLUSIVA PARA SUPER ADMIN */}
+      {(tenant.id === '019339aa-7824-7662-8e39-165f123d9101' || tenant.business_name.toLowerCase().includes('don mario')) && (
+        <div className="bg-indigo-950 text-indigo-200 text-xs py-1.5 px-4 flex items-center justify-between border-b border-indigo-800/80">
+          <div className="flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+            <span className="text-[11px] font-medium">
+              <b className="text-white">Terminal Demo de Ejemplo:</b> {tenant.business_name} (Acceso reservado al Super Admin)
+            </span>
+          </div>
+          <a
+            href="/admin"
+            className="text-white hover:text-indigo-300 font-bold flex items-center gap-1 text-[11px] bg-indigo-900/60 px-2.5 py-0.5 rounded-lg border border-indigo-700/60 transition"
+          >
+            ← Volver al Super Admin
+          </a>
+        </div>
+      )}
+
       {/* HEADER PRINCIPAL RESPONSIVO */}
       <header className="bg-slate-950 text-white px-3 sm:px-4 py-3 shadow-lg sticky top-0 z-30">
         <div className="max-w-5xl mx-auto flex flex-col gap-2.5">

@@ -35,7 +35,7 @@ import {
   Moon
 } from 'lucide-react';
 import { Tenant } from '@/types';
-import { getStoredData, saveTenant } from '@/lib/storage';
+import { getStoredData, saveTenant, loginDemoDonMario } from '@/lib/storage';
 import { createClient } from '@/lib/supabase/client';
 import { BrandLogo } from '@/components/BrandLogo';
 import confetti from 'canvas-confetti';
@@ -778,19 +778,18 @@ export default function SuperAdminPage() {
               <span>{isLight ? 'Tema Oscuro' : 'Tema Blanco'}</span>
             </button>
 
-            {/* ACCESO A ALMACÉN DON MARIO */}
-            <Link
-              href="/"
-              className={`py-2 px-3 border font-bold rounded-xl text-xs flex items-center gap-1.5 transition ${
-                isLight
-                  ? 'bg-blue-50 hover:bg-blue-100 text-blue-700 border-blue-200'
-                  : 'bg-blue-950/70 hover:bg-blue-900 text-blue-300 border-blue-800/60'
-              }`}
-              title="Abrir la Terminal POS de Almacén Don Mario"
+            {/* ACCESO EXCLUSIVO SUPER ADMIN AL DEMO (ALMACÉN DON MARIO) */}
+            <button
+              onClick={() => {
+                loginDemoDonMario();
+                window.open('/', '_blank');
+              }}
+              className="py-2 px-3.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold rounded-xl text-xs flex items-center gap-1.5 shadow-md shadow-blue-600/30 transition cursor-pointer"
+              title="Abrir la Terminal Demo de Almacén Don Mario como Super Admin"
             >
-              <Store className="w-3.5 h-3.5 text-blue-500" />
-              <span>Ver POS Don Mario</span>
-            </Link>
+              <Store className="w-3.5 h-3.5" />
+              <span>Abrir Demo (Don Mario)</span>
+            </button>
 
             <button
               onClick={() => setShowCreateModal(true)}
@@ -1046,6 +1045,20 @@ export default function SuperAdminPage() {
 
                       <td className="py-3.5 px-4 text-right">
                         <div className="flex items-center justify-end gap-1.5">
+                          {(t.id === '019339aa-7824-7662-8e39-165f123d9101' || t.business_name.toLowerCase().includes('don mario')) && (
+                            <button
+                              onClick={() => {
+                                loginDemoDonMario();
+                                window.open('/', '_blank');
+                              }}
+                              className="px-2 py-1 bg-blue-600 hover:bg-blue-500 text-white text-[10px] font-bold rounded-lg transition flex items-center gap-1 cursor-pointer shadow-xs"
+                              title="Abrir la Terminal Demo de este comercio como Super Admin"
+                            >
+                              <Store className="w-3 h-3" />
+                              <span>Entrar Demo</span>
+                            </button>
+                          )}
+
                           <button
                             onClick={() => openEditLicenseModal(t)}
                             className={`px-2.5 py-1 border text-[10px] font-bold rounded-lg transition flex items-center gap-1 cursor-pointer ${

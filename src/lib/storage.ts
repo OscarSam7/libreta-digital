@@ -42,6 +42,14 @@ export function logoutMerchant(): void {
   }
 }
 
+export const SUPERADMIN_STORAGE_KEY = 'libretadigital_superadmin_session_v2';
+
+export function isSuperAdminLoggedIn(): boolean {
+  if (typeof window === 'undefined') return false;
+  const admin = localStorage.getItem(SUPERADMIN_STORAGE_KEY);
+  return Boolean(admin && admin.length > 0);
+}
+
 export function loginDemoDonMario(): void {
   if (typeof window !== 'undefined') {
     localStorage.setItem(STORAGE_KEYS.IS_LOGGED_IN, 'true');
