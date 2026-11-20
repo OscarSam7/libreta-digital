@@ -273,17 +273,20 @@ export function TermsAndConditionsModal({
               <p>
                 <b>1. Línea de Crédito Rotativa ("Fiado"):</b> Autorización de compras hasta el monto pactado de {formatCurrency(customer.credit_limit)}.
               </p>
-              <p>
-                <b>2. Convalidación Electrónica por PIN / QR:</b> Cada compra validada con PIN o QR en mostrador constituye constancia legal de entrega y recepción conforme de mercaderías (Ley N° 6822/21).
+              <p className="bg-amber-50 text-amber-900 p-2 rounded-xl border border-amber-200/80 font-medium">
+                <b>2. Determinación Exclusiva por el Dueño del Comercio:</b> El dueño del almacén es quien determina, modifica y aprueba de manera exclusiva el límite de crédito otorgado y el plazo de pago acordado para conceder o pausar el crédito según su evaluación comercial y el historial del cliente.
               </p>
               <p>
-                <b>3. Facturación a Crédito al Cierre de Ciclo:</b> Al cierre de cada ciclo ({customer.credit_cycle || 'Mensual'}), el comercio emite la Factura a Crédito consolidada con plazo de pago acordado.
+                <b>3. Convalidación Electrónica por PIN / QR:</b> Cada compra validada con PIN o QR en mostrador constituye constancia legal de entrega y recepción conforme de mercaderías (Ley N° 6822/21).
+              </p>
+              <p>
+                <b>4. Facturación a Crédito al Cierre de Ciclo:</b> Al cierre de cada ciclo ({customer.credit_cycle || 'Mensual'}), el comercio emite la Factura a Crédito consolidada con plazo de pago acordado.
               </p>
               <p className="bg-rose-50 text-rose-800 p-2.5 rounded-xl border border-rose-200 font-medium">
-                <b>4. Cláusula Expresa INFORMCONF (Ley N° 6534/20):</b> El cliente autoriza irrevocablemente la consulta crediticia y el **reporte en la base de datos de morosos de INFORMCONF** en caso de incumplimiento de pagos por el plazo legal de mora.
+                <b>5. Cláusula Expresa INFORMCONF (Ley N° 6534/20):</b> El cliente autoriza irrevocablemente la consulta crediticia y el **reporte en la base de datos de morosos de INFORMCONF** en caso de incumplimiento de pagos por el plazo legal de mora.
               </p>
               <p>
-                <b>5. Bloqueo Automático por Mora:</b> La falta de pago inhabilita inmediatamente nuevos créditos.
+                <b>6. Bloqueo Automático por Mora:</b> La falta de pago inhabilita inmediatamente nuevos créditos.
               </p>
             </div>
           </div>

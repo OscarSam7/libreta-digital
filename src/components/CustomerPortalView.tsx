@@ -7,6 +7,7 @@ import { certifyTransactionWithPin } from '@/lib/ledger';
 import { acceptCustomerTerms } from '@/lib/customers';
 import { exportTransactionsToCSV } from '@/lib/reports';
 import { PDFReportPreviewModal } from '@/components/PDFReportPreviewModal';
+import { PaymentReceiptModal } from '@/components/PaymentReceiptModal';
 import {
   ShieldCheck,
   CheckCircle2,
@@ -19,7 +20,8 @@ import {
   ShoppingBag,
   FileText,
   Check,
-  HelpCircle
+  HelpCircle,
+  Receipt
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { BrandLogo } from '@/components/BrandLogo';
@@ -43,6 +45,7 @@ export function CustomerPortalView({ token }: Props) {
   const [termsError, setTermsError] = useState('');
   const [showContractModal, setShowContractModal] = useState(false);
   const [isLoadingCloud, setIsLoadingCloud] = useState(true);
+  const [viewingReceiptTx, setViewingReceiptTx] = useState<Transaction | null>(null);
 
   const loadData = async () => {
     // 1. Cargar datos locales de inmediato si existen
@@ -298,8 +301,11 @@ export function CustomerPortalView({ token }: Props) {
             <p>
               <b>1. Factura a Crédito:</b> Al cierre de cada ciclo ({customer.credit_cycle || 'Mensual'}), el local emitirá una factura legal a crédito por el total acumulado de tus compras.
             </p>
+            <p className="text-amber-900 bg-amber-50/80 p-2.5 rounded-xl border border-amber-200 font-medium">
+              <b>2. Facultad Exclusiva del Dueño del Almacén:</b> El dueño del almacén o comercio es quien determina de manera exclusiva el límite de crédito otorgado y el plazo para conceder, renovar o suspender la línea de crédito según su evaluación comercial y el cumplimiento del cliente.
+            </p>
             <p className="text-rose-800 font-semibold bg-rose-50 p-2.5 rounded-xl border border-rose-200">
-              <b>2. Informconf (Ley N° 6534/20):</b> Autorizas a {tenant.business_name} a consultar tu historial crediticio y a reportar tus datos a la base de morosidad de INFORMCONF en caso de incumplimiento de pagos por el plazo legal.
+              <b>3. Informconf (Ley N° 6534/20):</b> Autorizas a {tenant.business_name} a consultar tu historial crediticio y a reportar tus datos a la base de morosidad de INFORMCONF en caso de incumplimiento de pagos por el plazo legal.
             </p>
           </div>
 
@@ -493,6 +499,18 @@ export function CustomerPortalView({ token }: Props) {
                         </div>
                       </div>
 
+                      {/* Botón de Comprobante de Recibo Oficial para Abonos/Pagos */}
+                      {!isPurchase && (
+                        <button
+                          type="button"
+                          onClick={() => setViewingReceiptTx(tx)}
+                          className="w-full py-2.5 px-3 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-bold rounded-xl text-xs flex items-center justify-center gap-1.5 border border-emerald-200 transition cursor-pointer"
+                        >
+                          <Receipt className="w-4 h-4 text-emerald-600" />
+                          <span>Ver Comprobante de Recibo Oficial</span>
+                        </button>
+                      )}
+
                       {/* Acciones de Firma Remota si está pendiente */}
                       {isPending && (
                         <div className="bg-indigo-50/50 p-3 rounded-2xl border border-indigo-100 space-y-2">
@@ -564,6 +582,16 @@ export function CustomerPortalView({ token }: Props) {
           tenant={tenant}
           customer={customer}
           onClose={() => setShowContractModal(false)}
+        />
+      )}
+
+      {/* MODAL COMPROBANTE DE RECIBO DE PAGO OFICIAL */}
+      {viewingReceiptTx && customer && tenant && (
+        <PaymentReceiptModal
+          transaction={viewingReceiptTx}
+          customer={customer}
+          tenant={tenant}
+          onClose={() => setViewingReceiptTx(null)}
         />
       )}
     </main>

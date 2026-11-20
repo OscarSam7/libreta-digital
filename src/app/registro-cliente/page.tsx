@@ -537,14 +537,17 @@ function ClientRegisterContent() {
               <p>
                 <strong>1. OBJETO Y LÍMITE DE CRÉDITO:</strong> El establecimiento ({activeTenant ? activeTenant.business_name : 'El Comercio'}) otorga una línea de crédito rotativo de consumo familiar (&quot;fiado&quot;) conforme a su evaluación comercial.
               </p>
-              <p>
-                <strong>2. FIRMA DIGITAL MEDIANTE PIN:</strong> Conforme a la <strong>Ley N° 6822/21</strong>, cada compra confirmada mediante el PIN de 4 dígitos creado por el cliente constituye prueba fehaciente de la recepción de mercaderías con plena validez probatoria.
+              <p className="bg-amber-950/40 p-2.5 rounded-xl border border-amber-800/50 text-amber-200">
+                <strong>2. FACULTAD EXCLUSIVA DEL DUEÑO DEL COMERCIO:</strong> El dueño del almacén es la única persona facultada para determinar, evaluar y fijar el límite máximo de crédito autorizado y los plazos de pago para conceder, ampliar o suspender el crédito en función al historial y cumplimiento del cliente.
               </p>
               <p>
-                <strong>3. FACTURACIÓN Y CICLO:</strong> Al cierre de cada ciclo (semanal, quincenal o mensual), el comercio emitirá una factura legal a crédito por el total adeudado.
+                <strong>3. FIRMA DIGITAL MEDIANTE PIN:</strong> Conforme a la <strong>Ley N° 6822/21</strong>, cada compra confirmada mediante el PIN de 4 dígitos creado por el cliente constituye prueba fehaciente de la recepción de mercaderías con plena validez probatoria.
               </p>
               <p>
-                <strong>4. AUTORIZACIÓN INFORMCONF (Ley N° 6534/20):</strong> En caso de mora superior a los plazos legales, el cliente autoriza irrevocablemente al comercio a comunicar sus datos a las bases de datos de información crediticia (Equifax / Informconf u otras autorizadas por el BCP).
+                <strong>4. FACTURACIÓN Y CICLO:</strong> Al cierre de cada ciclo (semanal, quincenal o mensual), el comercio emitirá una factura legal a crédito por el total adeudado.
+              </p>
+              <p>
+                <strong>5. AUTORIZACIÓN INFORMCONF (Ley N° 6534/20):</strong> En caso de mora superior a los plazos legales, el cliente autoriza irrevocablemente al comercio a comunicar sus datos a las bases de datos de información crediticia (Equifax / Informconf u otras autorizadas por el BCP).
               </p>
             </div>
 

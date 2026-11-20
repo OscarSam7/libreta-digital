@@ -4,6 +4,7 @@ import React, { useState, useMemo } from 'react';
 import { Customer, Transaction, Tenant, PaymentMethod } from '@/types';
 import { exportTransactionsToCSV, generateWhatsAppReminderUrl } from '@/lib/reports';
 import { PDFReportPreviewModal } from '@/components/PDFReportPreviewModal';
+import { PaymentReceiptModal } from '@/components/PaymentReceiptModal';
 import { CustomDateInput } from '@/components/ui/CustomDatePickerModal';
 import { CustomSelect } from '@/components/ui/CustomSelectModal';
 import {
@@ -70,6 +71,7 @@ export function CustomerHistoryModal({
   // Fechas aplicadas tras pulsar "Generar Historial"
   const [appliedDateFrom, setAppliedDateFrom] = useState(ninetyDaysAgoStr);
   const [appliedDateTo, setAppliedDateTo] = useState(todayStr);
+  const [selectedReceiptTx, setSelectedReceiptTx] = useState<Transaction | null>(null);
   const [generatedAt, setGeneratedAt] = useState<string>(
     new Date().toLocaleTimeString('es-PY', { hour: '2-digit', minute: '2-digit' })
   );
@@ -529,6 +531,7 @@ export function CustomerHistoryModal({
                     <th className="py-3 px-3 text-right">Monto</th>
                     <th className="py-3 px-3 text-right">Saldo Posterior</th>
                     <th className="py-3 px-3 text-center">Validación</th>
+                    <th className="py-3 px-3 text-center">Comprobante</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 font-medium">
@@ -543,7 +546,7 @@ export function CustomerHistoryModal({
                     if (listToDisplay.length === 0) {
                       return (
                         <tr>
-                          <td colSpan={7} className="text-center py-10 text-slate-400 text-xs">
+                          <td colSpan={8} className="text-center py-10 text-slate-400 text-xs">
                             No se registran movimientos para este criterio en las fechas seleccionadas.
                           </td>
                         </tr>
@@ -644,6 +647,22 @@ export function CustomerHistoryModal({
                               {tx.status === 'CERTIFIED_BOTH' ? '✓ Certificado' : 'Pendiente PIN'}
                             </span>
                           </td>
+
+                          <td className="py-3 px-3 text-center whitespace-nowrap">
+                            {isPurchase ? (
+                              <span className="text-slate-300 text-[10px]">-</span>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => setSelectedReceiptTx(tx)}
+                                className="px-2 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 rounded-lg text-[10px] font-black border border-emerald-200 inline-flex items-center gap-1 transition cursor-pointer"
+                                title="Ver comprobante oficial de pago y enviar por WhatsApp"
+                              >
+                                <Receipt className="w-3 h-3 text-emerald-600" />
+                                <span>Recibo WA</span>
+                              </button>
+                            )}
+                          </td>
                         </tr>
                       );
                     });
@@ -665,6 +684,16 @@ export function CustomerHistoryModal({
           dateTo={appliedDateTo}
           transactions={customerTransactions}
           onClose={() => setShowPDFModal(false)}
+        />
+      )}
+
+      {/* MODAL DE COMPROBANTE DE RECIBO DE PAGO OFICIAL */}
+      {selectedReceiptTx && currentCustomer && (
+        <PaymentReceiptModal
+          transaction={selectedReceiptTx}
+          customer={currentCustomer}
+          tenant={tenant}
+          onClose={() => setSelectedReceiptTx(null)}
         />
       )}
     </div>

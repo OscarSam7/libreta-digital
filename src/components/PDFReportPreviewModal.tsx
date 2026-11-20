@@ -574,17 +574,20 @@ export function PDFReportPreviewModal({
                     <p>
                       <b>PRIMERA (OBJETO):</b> El COMERCIO otorga al CLIENTE una línea de crédito rotativo de consumo para retiro de mercaderías ("fiado") hasta el monto autorizado, sujeto a puntualidad en sus pagos.
                     </p>
-                    <p>
-                      <b>SEGUNDA (CONVALIDACIÓN):</b> Cada retiro de mercaderías convalidado mediante el PIN de seguridad o tarjeta QR del CLIENTE constituye constancia legal de recepción de mercaderías con fuerza vinculante (Ley N° 6822/21).
+                    <p className="bg-amber-50 text-amber-900 p-2 rounded-lg border border-amber-200 font-semibold">
+                      <b>SEGUNDA (FACULTAD EXCLUSIVA DEL COMERCIO SOBRE LÍMITES Y PLAZOS):</b> El dueño del COMERCIO determina y aprueba de forma privativa y exclusiva el límite de crédito autorizado y los plazos concedidos para otorgar, renovar o suspender la línea de crédito según su evaluación comercial y el cumplimiento del CLIENTE.
                     </p>
                     <p>
-                      <b>TERCERA (FACTURACIÓN):</b> Al cierre de cada ciclo ({customer.credit_cycle || 'Mensual'}), el COMERCIO emitirá la Factura Legal a Crédito por el saldo acumulado, contando el CLIENTE con el plazo convenido para su cancelación.
+                      <b>TERCERA (CONVALIDACIÓN):</b> Cada retiro de mercaderías convalidado mediante el PIN de seguridad o tarjeta QR del CLIENTE constituye constancia legal de recepción de mercaderías con fuerza vinculante (Ley N° 6822/21).
                     </p>
                     <p>
-                      <b>CUARTA (MORA):</b> El incumplimiento de pago al vencimiento producirá la mora automática de pleno derecho y el bloqueo inmediato de la línea de crédito.
+                      <b>CUARTA (FACTURACIÓN):</b> Al cierre de cada ciclo ({customer.credit_cycle || 'Mensual'}), el COMERCIO emitirá la Factura Legal a Crédito por el saldo acumulado, contando el CLIENTE con el plazo convenido para su cancelación.
+                    </p>
+                    <p>
+                      <b>QUINTA (MORA):</b> El incumplimiento de pago al vencimiento producirá la mora automática de pleno derecho y el bloqueo inmediato de la línea de crédito.
                     </p>
                     <p className="bg-rose-50 text-rose-900 p-2 rounded-lg border border-rose-200 font-semibold">
-                      <b>QUINTA (AUTORIZACIÓN INFORMCONF - LEY N° 6534/20):</b> El CLIENTE presta su expreso e irrevocable consentimiento para que el COMERCIO consulte su historial crediticio y, en caso de incurrir en mora superior al plazo legal estipulado, reporte sus datos personales y saldo impago a la base de datos de INFORMCONF (Equifax Paraguay S.A.) y/o buroes autorizados.
+                      <b>SEXTA (AUTORIZACIÓN INFORMCONF - LEY N° 6534/20):</b> El CLIENTE presta su expreso e irrevocable consentimiento para que el COMERCIO consulte su historial crediticio y, en caso de incurrir en mora superior al plazo legal estipulado, reporte sus datos personales y saldo impago a la base de datos de INFORMCONF (Equifax Paraguay S.A.) y/o buroes autorizados.
                     </p>
                   </div>
 

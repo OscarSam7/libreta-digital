@@ -20,6 +20,7 @@ import { TermsAndConditionsModal } from '@/components/TermsAndConditionsModal';
 import { StaffManagementModal } from '@/components/StaffManagementModal';
 import { StaffSwitchModal } from '@/components/StaffSwitchModal';
 import { BrandLogo } from '@/components/BrandLogo';
+import { PaymentReceiptModal } from '@/components/PaymentReceiptModal';
 import { CustomDateInput } from '@/components/ui/CustomDatePickerModal';
 import { sanitizeText, validateAmount } from '@/lib/validation';
 import {
@@ -147,6 +148,7 @@ export function MerchantDashboard() {
     name: string;
     phone?: string;
   } | null>(null);
+  const [receiptData, setReceiptData] = useState<{ transaction: Transaction; customer: Customer } | null>(null);
 
   const loadData = () => {
     const data = getStoredData();
@@ -438,8 +440,22 @@ export function MerchantDashboard() {
       return;
     }
 
-    // Los pagos y operaciones históricas quedan certificados inmediatamente
-    if (txType === 'CREDIT_PAYMENT' || (txDate && res.transaction.status === 'CERTIFIED_BOTH')) {
+    // Los pagos abren automáticamente el comprobante de recibo para enviar por WhatsApp
+    if (txType === 'CREDIT_PAYMENT') {
+      const finishedTx = res.transaction;
+      const targetCustomer = activeTxCustomer;
+      setTxStep('SUCCESS');
+      setTimeout(() => {
+        setActiveTxCustomer(null);
+        setTxStep('INPUT');
+        setTxAmount('');
+        setTxDescription('');
+        setPaymentRef('');
+        setTxDate('');
+        loadData();
+        setReceiptData({ transaction: finishedTx, customer: targetCustomer });
+      }, 700);
+    } else if (txDate && res.transaction.status === 'CERTIFIED_BOTH') {
       setTxStep('SUCCESS');
       setTimeout(() => {
         setActiveTxCustomer(null);
@@ -1824,6 +1840,16 @@ export function MerchantDashboard() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* MODAL DE COMPROBANTE DE RECIBO DE PAGO (WHATSAPP & IMPRIMIBLE) */}
+      {receiptData && (
+        <PaymentReceiptModal
+          transaction={receiptData.transaction}
+          customer={receiptData.customer}
+          tenant={tenant}
+          onClose={() => setReceiptData(null)}
+        />
       )}
     </div>
   );

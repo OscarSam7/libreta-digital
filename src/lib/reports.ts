@@ -147,3 +147,57 @@ export function generateWhatsAppReminderUrl(customer: Customer, tenant: Tenant) 
   const cleanPhone = (customer.phone || '').replace(/[^0-9]/g, '');
   return `https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`;
 }
+
+export function generatePaymentReceiptWhatsAppUrl(
+  customer: Customer,
+  tenant: Tenant,
+  transaction: Transaction
+): string {
+  const origin = typeof window !== 'undefined' ? window.location.origin : 'https://libretadigital.app';
+  const portalUrl = `${origin}/portal/${customer.qr_token}`;
+  const isFullPayment = transaction.new_balance <= 0;
+  const paymentBadge = isFullPayment
+    ? '✅ CANCELACIÓN TOTAL DE DEUDA'
+    : '💳 ABONO PARCIAL A CUENTA CORRIENTE';
+
+  const dateStr = new Date(transaction.created_at).toLocaleString('es-PY', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+
+  const receiptNum = `REC-${new Date(transaction.created_at).getFullYear()}-${transaction.id.slice(-6).toUpperCase()}`;
+
+  const message =
+    `🧾 *COMPROBANTE OFICIAL DE PAGO*\n` +
+    `🏪 *${tenant.business_name.toUpperCase()}*\n` +
+    (tenant.tax_id ? `📋 *RUC / Ident:* ${tenant.tax_id}\n` : '') +
+    (tenant.phone ? `📞 *Tel / WhatsApp:* ${tenant.phone}\n` : '') +
+    (tenant.address ? `📍 *Dirección:* ${tenant.address}\n` : '') +
+    `━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+    `📄 *Recibo N°:* ${receiptNum}\n` +
+    `📅 *Fecha:* ${dateStr}\n` +
+    `👤 *Cliente:* ${customer.full_name}${customer.nickname ? ` (${customer.nickname})` : ''}\n` +
+    (customer.document_id ? `🪪 *Cédula/DNI:* ${customer.document_id}\n` : '') +
+    `━━━━━━━━━━━━━━━━━━━━━━━━━\n\n` +
+    `💵 *DESGLOSE DEL PAGO:*\n` +
+    `• *Tipo:* ${paymentBadge}\n` +
+    `• Saldo Anterior: ${tenant.currency_symbol} ${transaction.previous_balance.toLocaleString('es-PY')}\n` +
+    `• *MONTO RECIBIDO:* *${tenant.currency_symbol} ${transaction.amount.toLocaleString('es-PY')}*\n` +
+    `• *SALDO RESTANTE:* *${tenant.currency_symbol} ${transaction.new_balance.toLocaleString('es-PY')}*` +
+    (isFullPayment ? ' 🎉 *(¡DEUDA PAGADA TOTALMENTE - AL DÍA!)*' : '') + `\n` +
+    `• *Medio de Pago:* ${transaction.payment_method || 'Efectivo en Caja'}` +
+    (transaction.payment_reference ? ` (Ref: ${transaction.payment_reference})` : '') + `\n` +
+    (transaction.operator_name ? `• *Operador/Cajero:* ${transaction.operator_name}\n` : '') +
+    `• *Estado:* Certificado y Registrado en Libro Mayor\n` +
+    (transaction.blockchain_hash ? `🔐 *Hash Inmutable:* ${transaction.blockchain_hash}\n` : '') +
+    `━━━━━━━━━━━━━━━━━━━━━━━━━\n\n` +
+    `📱 *Ver libreta digital y recibo oficial en vivo:*\n` +
+    `${portalUrl}\n\n` +
+    `_¡Muchas gracias por su pago y preferencia en ${tenant.business_name}!_`;
+
+  const cleanPhone = (customer.phone || '').replace(/[^0-9]/g, '');
+  return `https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`;
+}
