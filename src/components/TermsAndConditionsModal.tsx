@@ -5,6 +5,7 @@ import { Customer, Tenant, CreditCycle } from '@/types';
 import { acceptCustomerTerms } from '@/lib/customers';
 import { generateWhatsAppReminderUrl } from '@/lib/reports';
 import { PDFReportPreviewModal } from '@/components/PDFReportPreviewModal';
+import { CustomSelect } from '@/components/ui/CustomSelectModal';
 import {
   ShieldCheck,
   FileText,
@@ -226,15 +227,16 @@ export function TermsAndConditionsModal({
                   <label className="text-[10px] font-bold uppercase text-slate-500 block mb-1">
                     Ciclo de Facturación a Crédito
                   </label>
-                  <select
+                  <CustomSelect
                     value={selectedCycle}
-                    onChange={(e) => setSelectedCycle(e.target.value as CreditCycle)}
-                    className="w-full p-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none"
-                  >
-                    <option value="MENSUAL">Cierre Mensual (Fin de mes)</option>
-                    <option value="QUINCENAL">Cierre Quincenal (Día 15 y 30)</option>
-                    <option value="SEMANAL">Cierre Semanal (Sábados)</option>
-                  </select>
+                    onChange={(val) => setSelectedCycle(val as CreditCycle)}
+                    title="Ciclo de Facturación a Crédito"
+                    options={[
+                      { value: 'MENSUAL', label: 'Cierre Mensual', sublabel: 'Fin de cada mes calendario' },
+                      { value: 'QUINCENAL', label: 'Cierre Quincenal', sublabel: 'Día 15 y 30 de cada mes' },
+                      { value: 'SEMANAL', label: 'Cierre Semanal', sublabel: 'Todos los Sábados' },
+                    ]}
+                  />
                 </div>
 
                 <div>

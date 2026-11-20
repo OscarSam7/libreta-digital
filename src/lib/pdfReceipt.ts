@@ -1,17 +1,12 @@
 import { jsPDF } from 'jspdf';
-import { Customer, Tenant, Transaction } from '@/types';
+import { Customer, Tenant, Transaction, PrinterFormat } from '@/types';
 
 export function generateReceiptPDFBlob(
   transaction: Transaction,
   customer: Customer,
-  tenant: Tenant
+  tenant: Tenant,
+  format: PrinterFormat = 'TICKET_80MM'
 ): Blob {
-  const doc = new jsPDF({
-    orientation: 'portrait',
-    unit: 'mm',
-    format: 'a4',
-  });
-
   const isFullPayment = transaction.new_balance <= 0;
   const receiptNum = `REC-${new Date(transaction.created_at).getFullYear()}-${transaction.id.slice(-6).toUpperCase()}`;
   const dateFormatted = new Date(transaction.created_at).toLocaleString('es-PY', {
@@ -28,7 +23,163 @@ export function generateReceiptPDFBlob(
     ).format(val)}`;
   };
 
-  // --- HEADER / ENCABEZADO ---
+  // =========================================================================
+  // FORMATO 1: TICKET TÉRMICO POS 80mm (8.0 cm)
+  // =========================================================================
+  if (format === 'TICKET_80MM') {
+    const doc = new jsPDF({
+      orientation: 'portrait',
+      unit: 'mm',
+      format: [80, 220],
+    });
+
+    let y = 8;
+    const leftMargin = 5;
+    const rightMargin = 75;
+    const centerX = 40;
+
+    // Encabezado
+    doc.setFont('courier', 'bold');
+    doc.setFontSize(11);
+    doc.setTextColor(0, 0, 0);
+    doc.text('LibretaDigital PRO', centerX, y, { align: 'center' });
+
+    y += 5;
+    doc.setFontSize(10);
+    doc.text(tenant.business_name.toUpperCase(), centerX, y, { align: 'center' });
+
+    y += 4;
+    doc.setFont('courier', 'normal');
+    doc.setFontSize(7.5);
+    if (tenant.tax_id) {
+      doc.text(`RUC: ${tenant.tax_id}`, centerX, y, { align: 'center' });
+      y += 3.5;
+    }
+    if (tenant.phone) {
+      doc.text(`Tel/WA: ${tenant.phone}`, centerX, y, { align: 'center' });
+      y += 3.5;
+    }
+    if (tenant.address) {
+      doc.text(tenant.address.slice(0, 36), centerX, y, { align: 'center' });
+      y += 3.5;
+    }
+
+    // Línea divisoria
+    doc.text('------------------------------------------', centerX, y, { align: 'center' });
+    y += 4;
+
+    // Título del Ticket
+    doc.setFont('courier', 'bold');
+    doc.setFontSize(9);
+    doc.text('RECIBO OFICIAL DE PAGO', centerX, y, { align: 'center' });
+    y += 4;
+    doc.setFontSize(8);
+    doc.text(isFullPayment ? '*** CANCELACION TOTAL DE DEUDA ***' : '*** ABONO PARCIAL A CUENTA ***', centerX, y, { align: 'center' });
+    y += 4;
+    doc.setFont('courier', 'normal');
+    doc.setFontSize(7.5);
+    doc.text(`Nro: ${receiptNum}`, centerX, y, { align: 'center' });
+    y += 3.5;
+    doc.text(`Fecha: ${dateFormatted}`, centerX, y, { align: 'center' });
+    y += 3.5;
+
+    // Línea divisoria
+    doc.text('------------------------------------------', centerX, y, { align: 'center' });
+    y += 4;
+
+    // Datos del Cliente
+    doc.setFont('courier', 'bold');
+    doc.text(`CLIENTE: ${customer.full_name.slice(0, 26)}`, leftMargin, y);
+    y += 3.5;
+    doc.setFont('courier', 'normal');
+    if (customer.document_id) {
+      doc.text(`DOC/CI : ${customer.document_id}`, leftMargin, y);
+      y += 3.5;
+    }
+    if (customer.phone) {
+      doc.text(`TEL/WA : ${customer.phone}`, leftMargin, y);
+      y += 3.5;
+    }
+
+    // Línea divisoria
+    doc.text('------------------------------------------', centerX, y, { align: 'center' });
+    y += 5;
+
+    // Desglose de importes
+    doc.setFont('courier', 'normal');
+    doc.setFontSize(8);
+    doc.text('Saldo Anterior:', leftMargin, y);
+    doc.text(formatCurrency(transaction.previous_balance), rightMargin, y, { align: 'right' });
+    y += 5;
+
+    doc.setFont('courier', 'bold');
+    doc.setFontSize(9.5);
+    doc.text('(-) PAGO RECIBIDO:', leftMargin, y);
+    doc.text(formatCurrency(transaction.amount), rightMargin, y, { align: 'right' });
+    y += 5.5;
+
+    doc.setFont('courier', 'bold');
+    doc.setFontSize(8.5);
+    doc.text('SALDO RESTANTE:', leftMargin, y);
+    doc.text(formatCurrency(transaction.new_balance), rightMargin, y, { align: 'right' });
+    y += 4;
+
+    if (isFullPayment) {
+      doc.setFontSize(8);
+      doc.text('>>> CUENTA AL DIA (DEUDA 0) <<<', centerX, y, { align: 'center' });
+      y += 4;
+    }
+
+    // Línea divisoria
+    doc.setFont('courier', 'normal');
+    doc.setFontSize(7.5);
+    doc.text('------------------------------------------', centerX, y, { align: 'center' });
+    y += 4;
+
+    // Medios y caja
+    doc.text(`Medio Pago : ${transaction.payment_method || 'Efectivo en Caja'}`, leftMargin, y);
+    y += 3.5;
+    if (transaction.payment_reference) {
+      doc.text(`Referencia : ${transaction.payment_reference.slice(0, 24)}`, leftMargin, y);
+      y += 3.5;
+    }
+    doc.text(`Atendido por: ${transaction.operator_name || 'Caja Central'}`, leftMargin, y);
+    y += 3.5;
+    doc.text('Estado      : Certificado en Libro Mayor', leftMargin, y);
+    y += 4;
+
+    if (transaction.blockchain_hash) {
+      doc.setFontSize(6.5);
+      doc.text(`Hash: ${transaction.blockchain_hash.slice(0, 32)}`, leftMargin, y);
+      y += 3.5;
+    }
+
+    doc.setFontSize(7.5);
+    doc.text('------------------------------------------', centerX, y, { align: 'center' });
+    y += 4;
+
+    // Pie legal
+    doc.setFontSize(6.5);
+    doc.text('Validez legal probatoria Ley 6822/21 y 6534/20', centerX, y, { align: 'center' });
+    y += 3;
+    doc.text('El titular determina limites y plazos de credito', centerX, y, { align: 'center' });
+    y += 4;
+    doc.setFont('courier', 'bold');
+    doc.setFontSize(7.5);
+    doc.text('¡Muchas gracias por su pago!', centerX, y, { align: 'center' });
+
+    return doc.output('blob');
+  }
+
+  // =========================================================================
+  // FORMATO 2: HOJA ESTÁNDAR A4 (210mm x 297mm)
+  // =========================================================================
+  const doc = new jsPDF({
+    orientation: 'portrait',
+    unit: 'mm',
+    format: 'a4',
+  });
+
   // Barra superior decorativa
   doc.setFillColor(15, 23, 42); // slate-900
   doc.rect(0, 0, 210, 36, 'F');
@@ -55,7 +206,7 @@ export function generateReceiptPDFBlob(
   doc.setFont('helvetica', 'normal');
   doc.setTextColor(203, 213, 225); // slate-300
   doc.text(`Fecha: ${dateFormatted}`, 196, 23, { align: 'right' });
-  doc.text('DOCUMENTO DIGITAL VÁLIDO', 196, 29, { align: 'right' });
+  doc.text('FORMATO A4 • DOCUMENTO VÁLIDO', 196, 29, { align: 'right' });
 
   // --- DATOS DEL COMERCIO Y DEL CLIENTE ---
   let y = 46;
@@ -116,22 +267,22 @@ export function generateReceiptPDFBlob(
 
   // --- DISTINTIVO DE TIPO DE PAGO ---
   if (isFullPayment) {
-    doc.setFillColor(209, 250, 229); // emerald-100
+    doc.setFillColor(209, 250, 229);
     doc.roundedRect(14, y, 182, 12, 3, 3, 'F');
     doc.setDrawColor(52, 211, 153);
     doc.roundedRect(14, y, 182, 12, 3, 3, 'S');
 
-    doc.setTextColor(6, 95, 70); // emerald-800
+    doc.setTextColor(6, 95, 70);
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(10);
     doc.text('COMPROBANTE DE CANCELACIÓN TOTAL DE DEUDA - CUENTA AL DÍA', 105, y + 8, { align: 'center' });
   } else {
-    doc.setFillColor(238, 242, 255); // indigo-50
+    doc.setFillColor(238, 242, 255);
     doc.roundedRect(14, y, 182, 12, 3, 3, 'F');
     doc.setDrawColor(165, 180, 252);
     doc.roundedRect(14, y, 182, 12, 3, 3, 'S');
 
-    doc.setTextColor(49, 46, 129); // indigo-900
+    doc.setTextColor(49, 46, 129);
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(10);
     doc.text('COMPROBANTE DE ABONO PARCIAL A CUENTA CORRIENTE', 105, y + 8, { align: 'center' });
@@ -140,8 +291,7 @@ export function generateReceiptPDFBlob(
   y += 18;
 
   // --- TABLA DE DESGLOSE ECONÓMICO ---
-  // Cabecera de tabla
-  doc.setFillColor(241, 245, 249); // slate-100
+  doc.setFillColor(241, 245, 249);
   doc.rect(14, y, 182, 8, 'F');
   doc.setDrawColor(203, 213, 225);
   doc.line(14, y + 8, 196, y + 8);
@@ -168,11 +318,11 @@ export function generateReceiptPDFBlob(
   y += 10;
 
   // Fila 2: Monto Abonado (Destacado)
-  doc.setFillColor(236, 253, 245); // emerald-50
+  doc.setFillColor(236, 253, 245);
   doc.rect(14, y, 182, 12, 'F');
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(10);
-  doc.setTextColor(6, 95, 70); // emerald-800
+  doc.setTextColor(6, 95, 70);
   doc.text('(-) PAGO / ABONO EFECTUADO', 18, y + 8);
 
   const paymentMethodLabel = transaction.payment_method || 'Efectivo en Caja';
@@ -274,15 +424,17 @@ export function generateReceiptPDFBlob(
 export function downloadReceiptPDF(
   transaction: Transaction,
   customer: Customer,
-  tenant: Tenant
+  tenant: Tenant,
+  format: PrinterFormat = 'TICKET_80MM'
 ): void {
-  const blob = generateReceiptPDFBlob(transaction, customer, tenant);
+  const blob = generateReceiptPDFBlob(transaction, customer, tenant, format);
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url;
   const cleanName = customer.full_name.replace(/[^a-zA-Z0-9]/g, '_');
   const receiptCode = transaction.id.slice(-6).toUpperCase();
-  link.download = `Recibo_Pago_${cleanName}_REC-${receiptCode}.pdf`;
+  const formatSuffix = format === 'TICKET_80MM' ? 'Ticket_80mm' : 'A4';
+  link.download = `Recibo_Pago_${cleanName}_REC-${receiptCode}_${formatSuffix}.pdf`;
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);

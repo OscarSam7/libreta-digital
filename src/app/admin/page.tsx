@@ -43,6 +43,8 @@ import { BrandLogo } from '@/components/BrandLogo';
 import confetti from 'canvas-confetti';
 import { checkRateLimit, recordFailedAttempt, recordSuccessfulAttempt, validateHoneypot } from '@/lib/rateLimit';
 import { safeCompare } from '@/lib/security';
+import { CustomSelect } from '@/components/ui/CustomSelectModal';
+import { CustomDateInput } from '@/components/ui/CustomDatePickerModal';
 import { sanitizeText } from '@/lib/validation';
 
 const SUPERADMIN_STORAGE_KEY = 'libretadigital_superadmin_session_v2';
@@ -993,20 +995,18 @@ export default function SuperAdminPage() {
                 />
               </div>
 
-              <select
+              <CustomSelect
                 value={statusFilter}
-                onChange={(e: any) => setStatusFilter(e.target.value)}
-                className={`text-xs font-bold py-2 px-3 rounded-xl focus:outline-none border ${
-                  isLight
-                    ? 'bg-slate-50 border-slate-300 text-slate-700'
-                    : 'bg-slate-950 border-slate-800 text-slate-300'
-                }`}
-              >
-                <option value="ALL">Todos los Estados</option>
-                <option value="ACTIVE">Activos</option>
-                <option value="TRIALING">En Prueba</option>
-                <option value="PAST_DUE">Vencidos</option>
-              </select>
+                onChange={(val) => setStatusFilter(val as any)}
+                title="Filtrar por Estado de Comercio"
+                options={[
+                  { value: 'ALL', label: 'Todos los Estados' },
+                  { value: 'ACTIVE', label: 'Comercios Activos', badge: 'Activo' },
+                  { value: 'TRIALING', label: 'En Periodo de Prueba', badge: 'Prueba' },
+                  { value: 'PAST_DUE', label: 'Vencidos / Mora', badge: 'Vencido' },
+                ]}
+                className="min-w-[170px]"
+              />
             </div>
           </div>
 
@@ -1370,17 +1370,16 @@ export default function SuperAdminPage() {
                   <label className={`text-xs font-bold mb-1 block ${isLight ? 'text-slate-700' : 'text-slate-300'}`}>
                     Plan a Asignar
                   </label>
-                  <select
+                  <CustomSelect
                     value={newPlan}
-                    onChange={(e) => setNewPlan(e.target.value)}
-                    className={`w-full px-3 py-2 rounded-xl text-xs font-bold focus:outline-none focus:border-indigo-500 border ${
-                      isLight ? 'bg-slate-50 border-slate-300 text-slate-800' : 'bg-slate-950 border-slate-800 text-white'
-                    }`}
-                  >
-                    <option value="pro_monthly">Plan Comercio PRO (Recomendado)</option>
-                    <option value="vecinal_monthly">Plan Vecinal</option>
-                    <option value="cadena_monthly">Plan Multi-Sucursal</option>
-                  </select>
+                    onChange={(val) => setNewPlan(String(val))}
+                    title="Seleccionar Plan de Suscripción"
+                    options={[
+                      { value: 'pro_monthly', label: 'Plan Comercio PRO', badge: 'Recomendado', sublabel: 'Acceso total y soporte prioritario' },
+                      { value: 'vecinal_monthly', label: 'Plan Vecinal', sublabel: 'Hasta 50 clientes activos' },
+                      { value: 'cadena_monthly', label: 'Plan Multi-Sucursal', sublabel: 'Múltiples cajas y sucursales' },
+                    ]}
+                  />
                 </div>
 
                 <div className="flex gap-2 pt-2">
@@ -1552,20 +1551,12 @@ export default function SuperAdminPage() {
                     <label className={`text-[11px] font-bold mb-1 block ${isLight ? 'text-slate-700' : 'text-slate-400'}`}>
                       Fecha Límite de Vencimiento:
                     </label>
-                    <div className="relative">
-                      <CalendarDays className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-                      <input
-                        type="date"
-                        required
-                        value={licenseEndDate}
-                        onChange={(e) => setLicenseEndDate(e.target.value)}
-                        className={`w-full pl-9 pr-3 py-2 rounded-xl text-xs font-mono font-bold focus:outline-none focus:border-indigo-500 border ${
-                          isLight
-                            ? 'bg-white border-slate-300 text-slate-900'
-                            : 'bg-slate-900 border-slate-700 text-white'
-                        }`}
-                      />
-                    </div>
+                    <CustomDateInput
+                      value={licenseEndDate}
+                      onChange={(val) => setLicenseEndDate(val)}
+                      label="Fecha de Vencimiento"
+                      className="w-full"
+                    />
                     <p className={`text-[10px] mt-1 ${isLight ? 'text-slate-500' : 'text-slate-500'}`}>
                       El comercio podrá registrar ventas y cobros sin bloqueo hasta el fin de este día.
                     </p>

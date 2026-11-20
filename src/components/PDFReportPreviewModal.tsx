@@ -1,8 +1,9 @@
 'use client';
 
-import React, { useRef } from 'react';
-import { Customer, Tenant, Transaction, PaymentMethod } from '@/types';
+import React, { useRef, useState, useEffect } from 'react';
+import { Customer, Tenant, Transaction, PaymentMethod, PrinterFormat } from '@/types';
 import { CustomerPortfolioSummary, generateWhatsAppReminderUrl } from '@/lib/reports';
+import { getStoredPrinterFormat, setStoredPrinterFormat } from '@/lib/storage';
 import { QRCodeSVG } from 'qrcode.react';
 import { BrandLogo } from '@/components/BrandLogo';
 import {
@@ -21,7 +22,8 @@ import {
   CreditCard,
   User,
   ShoppingBag,
-  ArrowDownLeft
+  ArrowDownLeft,
+  Receipt
 } from 'lucide-react';
 
 export type PDFReportMode =
@@ -63,6 +65,16 @@ export function PDFReportPreviewModal({
   onClose,
 }: Props) {
   const printRef = useRef<HTMLDivElement>(null);
+  const [printerFormat, setPrinterFormat] = useState<PrinterFormat>('TICKET_80MM');
+
+  useEffect(() => {
+    setPrinterFormat(getStoredPrinterFormat());
+  }, []);
+
+  const handleFormatChange = (newFormat: PrinterFormat) => {
+    setPrinterFormat(newFormat);
+    setStoredPrinterFormat(newFormat);
+  };
 
   const formatCurrency = (val: number) => {
     return `${tenant.currency_symbol} ${new Intl.NumberFormat(
@@ -105,20 +117,23 @@ export function PDFReportPreviewModal({
             position: absolute !important;
             left: 0 !important;
             top: 0 !important;
-            width: 100% !important;
+            width: ${printerFormat === 'TICKET_80MM' ? '76mm' : '100%'} !important;
+            max-width: ${printerFormat === 'TICKET_80MM' ? '76mm' : '100%'} !important;
             margin: 0 !important;
-            padding: 12mm !important;
+            padding: ${printerFormat === 'TICKET_80MM' ? '2mm' : '12mm'} !important;
             box-shadow: none !important;
             border: none !important;
             background: white !important;
             color: black !important;
+            font-size: ${printerFormat === 'TICKET_80MM' ? '9.5px' : '12px'} !important;
+            font-family: ${printerFormat === 'TICKET_80MM' ? 'monospace' : 'system-ui, sans-serif'} !important;
           }
           .no-print {
             display: none !important;
           }
           @page {
-            size: A4 portrait;
-            margin: 10mm;
+            size: ${printerFormat === 'TICKET_80MM' ? '80mm auto' : 'A4 portrait'};
+            margin: ${printerFormat === 'TICKET_80MM' ? '3mm' : '10mm'};
           }
         }
       `}</style>
@@ -146,7 +161,37 @@ export function PDFReportPreviewModal({
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center flex-wrap gap-2">
+            {/* CONMUTADOR DE FORMATO DE IMPRESIÓN: TICKET 80MM VS A4 */}
+            <div className="flex items-center bg-slate-900 p-0.5 rounded-xl border border-slate-700">
+              <button
+                type="button"
+                onClick={() => handleFormatChange('TICKET_80MM')}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-black transition cursor-pointer ${
+                  printerFormat === 'TICKET_80MM'
+                    ? 'bg-indigo-600 text-white shadow-xs'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+                title="Formato Ticket POS 80mm continuo"
+              >
+                <Receipt className="w-3.5 h-3.5" />
+                <span>Ticket 80mm</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => handleFormatChange('PAGE_A4')}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-black transition cursor-pointer ${
+                  printerFormat === 'PAGE_A4'
+                    ? 'bg-indigo-600 text-white shadow-xs'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+                title="Formato Hoja A4 estándar"
+              >
+                <FileText className="w-3.5 h-3.5" />
+                <span>Hoja A4</span>
+              </button>
+            </div>
+
             {customer && (
               <a
                 href={waUrl}
@@ -168,19 +213,23 @@ export function PDFReportPreviewModal({
 
             <button
               onClick={onClose}
-              className="p-2 rounded-full text-slate-400 hover:text-white hover:bg-slate-700 transition"
+              className="p-2 rounded-full text-slate-400 hover:text-white hover:bg-slate-700 transition cursor-pointer"
             >
               <X className="w-5 h-5" />
             </button>
           </div>
         </div>
 
-        {/* VISOR DE LA HOJA PDF (DOCUMENTO REAL A4) */}
+        {/* VISOR DE LA HOJA PDF (ADAPTABLE A TICKET 80MM O A4) */}
         <div className="p-3 sm:p-6 overflow-y-auto bg-slate-950/60 flex justify-center flex-1">
           <div
             id="printable-pdf-document"
             ref={printRef}
-            className="w-full max-w-[210mm] min-h-[297mm] bg-white text-slate-900 p-6 sm:p-10 rounded-xl shadow-2xl border border-slate-200 text-xs flex flex-col justify-between"
+            className={`bg-white text-slate-900 rounded-xl shadow-2xl border border-slate-200 flex flex-col justify-between transition-all ${
+              printerFormat === 'TICKET_80MM'
+                ? 'w-full max-w-[360px] p-4 text-[11px] font-mono space-y-3'
+                : 'w-full max-w-[210mm] min-h-[297mm] p-6 sm:p-10 text-xs font-sans'
+            }`}
           >
             {/* ENCABEZADO OFICIAL DEL COMERCIO */}
             <div>

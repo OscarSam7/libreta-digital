@@ -1,8 +1,8 @@
 'use client';
 
 import React, { useState, useEffect, Suspense, use } from 'react';
-import { Customer, Tenant, Transaction } from '@/types';
-import { getStoredData, INITIAL_CUSTOMERS, INITIAL_TENANT, INITIAL_TRANSACTIONS } from '@/lib/storage';
+import { Customer, Tenant, Transaction, PrinterFormat } from '@/types';
+import { getStoredData, INITIAL_CUSTOMERS, INITIAL_TENANT, INITIAL_TRANSACTIONS, getStoredPrinterFormat } from '@/lib/storage';
 import { downloadReceiptPDF } from '@/lib/pdfReceipt';
 import { BrandLogo } from '@/components/BrandLogo';
 import {
@@ -16,14 +16,20 @@ import {
   User,
   ExternalLink,
   ShieldCheck,
-  AlertCircle
+  AlertCircle,
+  FileText
 } from 'lucide-react';
 
 function ReceiptDetail({ id }: { id: string }) {
   const [transaction, setTransaction] = useState<Transaction | null>(null);
   const [customer, setCustomer] = useState<Customer | null>(null);
   const [tenant, setTenant] = useState<Tenant | null>(null);
+  const [format, setFormat] = useState<PrinterFormat>('TICKET_80MM');
   const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    setFormat(getStoredPrinterFormat());
+  }, []);
 
   useEffect(() => {
     async function loadReceipt() {
@@ -131,7 +137,7 @@ function ReceiptDetail({ id }: { id: string }) {
   };
 
   const handleDownload = () => {
-    downloadReceiptPDF(transaction, customer, tenant);
+    downloadReceiptPDF(transaction, customer, tenant, format);
   };
 
   return (
@@ -249,6 +255,39 @@ function ReceiptDetail({ id }: { id: string }) {
             </div>
           </div>
 
+          {/* SELECTOR DE FORMATO DE IMPRESIÓN Y PDF */}
+          <div className="bg-slate-50 p-2 rounded-2xl border border-slate-200">
+            <label className="text-[10px] font-black uppercase tracking-wider text-slate-500 block text-center mb-1.5">
+              Elige el Formato de Descarga / Impresión:
+            </label>
+            <div className="grid grid-cols-2 gap-1.5">
+              <button
+                type="button"
+                onClick={() => setFormat('TICKET_80MM')}
+                className={`flex items-center justify-center gap-1.5 py-2 px-2.5 rounded-xl text-xs font-black transition cursor-pointer ${
+                  format === 'TICKET_80MM'
+                    ? 'bg-indigo-600 text-white shadow-sm'
+                    : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-100'
+                }`}
+              >
+                <Receipt className="w-3.5 h-3.5" />
+                <span>Ticket POS (80mm)</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setFormat('PAGE_A4')}
+                className={`flex items-center justify-center gap-1.5 py-2 px-2.5 rounded-xl text-xs font-black transition cursor-pointer ${
+                  format === 'PAGE_A4'
+                    ? 'bg-indigo-600 text-white shadow-sm'
+                    : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-100'
+                }`}
+              >
+                <FileText className="w-3.5 h-3.5" />
+                <span>Hoja A4 Estándar</span>
+              </button>
+            </div>
+          </div>
+
           {/* BOTONES DE ACCIÓN: DESCARGAR PDF OFICIAL */}
           <div className="pt-2 space-y-2">
             <button
@@ -256,7 +295,7 @@ function ReceiptDetail({ id }: { id: string }) {
               className="w-full py-3.5 px-4 bg-emerald-600 hover:bg-emerald-500 text-white font-black text-sm rounded-2xl flex items-center justify-center gap-2 shadow-lg shadow-emerald-600/30 transition active:scale-98 cursor-pointer"
             >
               <Download className="w-4 h-4" />
-              <span>Descargar Comprobante en Formato PDF</span>
+              <span>Descargar PDF ({format === 'TICKET_80MM' ? 'Ticket 80mm' : 'Hoja A4'})</span>
             </button>
 
             <a

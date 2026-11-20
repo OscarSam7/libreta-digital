@@ -21,8 +21,11 @@ import { StaffManagementModal } from '@/components/StaffManagementModal';
 import { StaffSwitchModal } from '@/components/StaffSwitchModal';
 import { BrandLogo } from '@/components/BrandLogo';
 import { PaymentReceiptModal } from '@/components/PaymentReceiptModal';
+import { PrinterSettingsModal } from '@/components/PrinterSettingsModal';
 import { CustomDateInput } from '@/components/ui/CustomDatePickerModal';
 import { sanitizeText, validateAmount } from '@/lib/validation';
+import { PrinterFormat } from '@/types';
+import { getStoredPrinterFormat } from '@/lib/storage';
 import {
   TrendingUp,
   Users,
@@ -43,6 +46,7 @@ import {
   Copy,
   Check,
   X,
+  Printer,
   Lock,
   Globe2,
   CreditCard,
@@ -101,6 +105,8 @@ export function MerchantDashboard() {
   const [showSubscriptionModal, setShowSubscriptionModal] = useState(false);
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [showCurrencyModal, setShowCurrencyModal] = useState(false);
+  const [showPrinterModal, setShowPrinterModal] = useState(false);
+  const [printerFormat, setPrinterFormat] = useState<PrinterFormat>('TICKET_80MM');
   const [showWhatsAppModal, setShowWhatsAppModal] = useState(false);
   const [showSuperAdminModal, setShowSuperAdminModal] = useState(false);
   const [showReportsModal, setShowReportsModal] = useState(false);
@@ -268,12 +274,20 @@ export function MerchantDashboard() {
     };
     document.addEventListener('visibilitychange', handleVisibility);
 
+    // Sincronizar formato de impresora activo
+    setPrinterFormat(getStoredPrinterFormat());
+    const handlePrinterChange = () => {
+      setPrinterFormat(getStoredPrinterFormat());
+    };
+    window.addEventListener('libreta_printer_changed', handlePrinterChange);
+
     return () => {
       isMounted = false;
       clearInterval(interval);
       document.removeEventListener('visibilitychange', handleVisibility);
       window.removeEventListener('libreta_data_updated', handleUpdate);
       window.removeEventListener('storage', handleUpdate);
+      window.removeEventListener('libreta_printer_changed', handlePrinterChange);
       if (bc) bc.close();
     };
   }, [tenant?.id]);
@@ -685,6 +699,18 @@ export function MerchantDashboard() {
             >
               <Globe2 className="w-3.5 h-3.5 text-slate-400 shrink-0" />
               <span>{tenant.currency_code} ({tenant.currency_symbol})</span>
+              <ChevronDown className="w-3 h-3 text-slate-500 shrink-0" />
+            </button>
+
+            {/* Configuración Impresora POS / A4 */}
+            <button
+              type="button"
+              onClick={() => setShowPrinterModal(true)}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-200 rounded-xl text-xs font-bold transition whitespace-nowrap shrink-0 shadow-xs cursor-pointer"
+              title="Configuración de impresora de tickets POS (80mm) u Hoja A4"
+            >
+              <Printer className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
+              <span>{printerFormat === 'TICKET_80MM' ? 'POS 80mm' : 'A4'}</span>
               <ChevronDown className="w-3 h-3 text-slate-500 shrink-0" />
             </button>
 
@@ -1851,6 +1877,12 @@ export function MerchantDashboard() {
           onClose={() => setReceiptData(null)}
         />
       )}
+
+      {/* MODAL DE CONFIGURACIÓN DE IMPRESORA POS 80MM / A4 */}
+      <PrinterSettingsModal
+        isOpen={showPrinterModal}
+        onClose={() => setShowPrinterModal(false)}
+      />
     </div>
   );
 }

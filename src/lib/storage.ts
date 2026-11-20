@@ -1,6 +1,22 @@
-import { Tenant, Customer, Transaction, StaffMember } from '@/types';
+import { Tenant, Customer, Transaction, StaffMember, PrinterFormat } from '@/types';
 import { createClient } from '@/lib/supabase/client';
 import { setSecureCookie, removeSecureCookie } from './cookies';
+
+export const PRINTER_STORAGE_KEY = 'libreta_printer_format_v2';
+
+export function getStoredPrinterFormat(): PrinterFormat {
+  if (typeof window === 'undefined') return 'TICKET_80MM';
+  const val = localStorage.getItem(PRINTER_STORAGE_KEY);
+  if (val === 'TICKET_80MM' || val === 'PAGE_A4') return val;
+  return 'TICKET_80MM';
+}
+
+export function setStoredPrinterFormat(format: PrinterFormat): void {
+  if (typeof window !== 'undefined') {
+    localStorage.setItem(PRINTER_STORAGE_KEY, format);
+    window.dispatchEvent(new Event('libreta_printer_changed'));
+  }
+}
 
 const STORAGE_KEYS = {
   TENANT: 'libretadigital_tenant_v2',
