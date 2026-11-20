@@ -56,7 +56,8 @@ import {
   BookOpen,
   Calendar,
   History,
-  Share2
+  Share2,
+  Sparkles
 } from 'lucide-react';
 
 const REGIONAL_CURRENCIES = [
@@ -420,6 +421,15 @@ export function MerchantDashboard() {
               title="Registrar nuevo comercio o crear otra sucursal"
             >
               <Store className="w-3.5 h-3.5 text-indigo-400" /> + Almacén
+            </a>
+
+            {/* Showcase Comercial */}
+            <a
+              href="/showcase"
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-950/50 hover:bg-amber-900/60 border border-amber-800/50 text-amber-300 rounded-xl text-xs font-bold transition whitespace-nowrap shrink-0 shadow-xs"
+              title="Ver Showcase Comercial Interactivo"
+            >
+              <Sparkles className="w-3.5 h-3.5 text-amber-400" /> Showcase Comercial
             </a>
 
             {/* Informes */}

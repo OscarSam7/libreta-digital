@@ -1,548 +1,689 @@
 'use client';
 
 import React, { useState } from 'react';
+import Link from 'next/link';
 import {
   Sparkles,
   ShieldCheck,
-  CheckCircle2,
   Smartphone,
-  CreditCard,
-  Store,
-  Layers,
+  QrCode,
   ArrowRight,
+  CheckCircle2,
+  AlertTriangle,
+  TrendingUp,
+  ReceiptText,
+  FileSpreadsheet,
+  Users,
+  Store,
+  MessageCircle,
+  Banknote,
+  Building,
+  KeyRound,
+  Check,
+  ChevronRight,
+  Clock,
   ExternalLink,
-  Zap,
+  DollarSign,
+  Calculator,
   Lock,
-  ChevronRight
+  ThumbsUp,
+  Star
 } from 'lucide-react';
+import { BrandLogo } from '@/components/BrandLogo';
 
-export default function ShowcasePage() {
-  const [selectedOption, setSelectedOption] = useState<number>(1);
-  const [previewBg, setPreviewBg] = useState<'dark' | 'navy' | 'light'>('dark');
+export default function CommercialShowcasePage() {
+  const [activeSimTab, setActiveSimTab] = useState<'VENTA' | 'WHATSAPP' | 'LEGAL' | 'CAJA'>('VENTA');
 
-  const options = [
-    {
-      id: 1,
-      title: 'La Libreta Infinita',
-      subtitle: 'Flujo Continuo, Confianza & Digitalización',
-      tagline: '"El crédito de confianza del almacén, ahora sin límites de papel"',
-      concept:
-        'Fusión geométrica entre las hojas abiertas del cuaderno tradicional y el símbolo del infinito (∞), entrelazado con una tilde contable y terminales de chip digital. Transmite modernidad, continuidad de caja y el lazo inquebrantable entre el almacenero y sus vecinos.',
-      colors: [
-        { name: 'FinTech Blue', hex: '#2563EB', bg: 'bg-blue-600' },
-        { name: 'Electric Indigo', hex: '#4F46E5', bg: 'bg-indigo-600' },
-        { name: 'Growth Emerald', hex: '#10B981', bg: 'bg-emerald-500' },
-        { name: 'Cyber Navy', hex: '#0F172A', bg: 'bg-slate-900' },
-      ],
-      iconGradient: 'from-blue-600 via-indigo-600 to-emerald-500',
-      badgeColor: 'bg-blue-500/20 text-blue-400 border-blue-500/30',
-      borderColor: 'border-blue-500',
-      accentText: 'text-blue-400',
-      renderSvg: (
-        <svg className="w-24 h-24 sm:w-28 sm:h-28 drop-shadow-xl" viewBox="0 0 100 100" fill="none">
-          <defs>
-            <linearGradient id="inf-g1" x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" stopColor="#3B82F6" />
-              <stop offset="50%" stopColor="#6366F1" />
-              <stop offset="100%" stopColor="#10B981" />
-            </linearGradient>
-          </defs>
-          <rect x="12" y="16" width="76" height="68" rx="14" fill="#0F172A" stroke="url(#inf-g1)" strokeWidth="4.5" />
-          <circle cx="22" cy="30" r="2.5" fill="#60A5FA" />
-          <circle cx="22" cy="42" r="2.5" fill="#60A5FA" />
-          <circle cx="22" cy="54" r="2.5" fill="#60A5FA" />
-          <circle cx="22" cy="66" r="2.5" fill="#60A5FA" />
-          <path
-            d="M42 50 C42 42, 32 42, 32 50 C32 58, 42 58, 50 50 C58 42, 68 42, 68 50 C68 58, 58 58, 50 50 Z"
-            fill="none"
-            stroke="url(#inf-g1)"
-            strokeWidth="5"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-          <path
-            d="M48 51 L56 60 L75 38"
-            fill="none"
-            stroke="#34D399"
-            strokeWidth="5.5"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-          <circle cx="75" cy="38" r="3.5" fill="#34D399" />
-        </svg>
-      ),
-      iconSmall: (
-        <svg className="w-10 h-10" viewBox="0 0 100 100" fill="none">
-          <path
-            d="M42 50 C42 42, 32 42, 32 50 C32 58, 42 58, 50 50 C58 42, 68 42, 68 50 C68 58, 58 58, 50 50 Z"
-            fill="none"
-            stroke="#FFFFFF"
-            strokeWidth="7"
-            strokeLinecap="round"
-          />
-          <path
-            d="M46 52 L56 62 L78 38"
-            fill="none"
-            stroke="#34D399"
-            strokeWidth="7"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-        </svg>
-      ),
-    },
-    {
-      id: 2,
-      title: 'El Escudo del Almacén',
-      subtitle: 'Seguridad Jurídica, Pagarés & Informconf',
-      tagline: '"Seguridad jurídica y respaldo legal para cada guaraní fiado"',
-      concept:
-        'La silueta del toldo tradicional de almacén se eleva para conformar un escudo bancario impenetrable con un cerrojo de seguridad encriptado en el centro. Diseñado para proyectar máxima solidez jurídica, validez ante Informconf y protección del patrimonio.',
-      colors: [
-        { name: 'Legal Emerald', hex: '#059669', bg: 'bg-emerald-600' },
-        { name: 'Mint Shield', hex: '#34D399', bg: 'bg-emerald-400' },
-        { name: 'Gold Reserve', hex: '#F59E0B', bg: 'bg-amber-500' },
-        { name: 'Vault Slate', hex: '#020617', bg: 'bg-slate-950' },
-      ],
-      iconGradient: 'from-emerald-700 via-teal-800 to-slate-900',
-      badgeColor: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30',
-      borderColor: 'border-emerald-500',
-      accentText: 'text-emerald-400',
-      renderSvg: (
-        <svg className="w-24 h-24 sm:w-28 sm:h-28 drop-shadow-xl" viewBox="0 0 100 100" fill="none">
-          <defs>
-            <linearGradient id="shield-g1" x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" stopColor="#10B981" />
-              <stop offset="100%" stopColor="#047857" />
-            </linearGradient>
-          </defs>
-          <path
-            d="M50 14 L82 26 C82 56 68 76 50 86 C32 76 18 56 18 26 Z"
-            fill="#064E3B"
-            stroke="url(#shield-g1)"
-            strokeWidth="4.5"
-            strokeLinejoin="round"
-          />
-          <path
-            d="M26 34 Q38 42 50 34 Q62 42 74 34"
-            fill="none"
-            stroke="#34D399"
-            strokeWidth="3.5"
-            strokeLinecap="round"
-          />
-          <rect x="42" y="48" width="16" height="14" rx="3" fill="#34D399" />
-          <path
-            d="M45 48 V42 Q45 37 50 37 Q55 37 55 42 V48"
-            fill="none"
-            stroke="#34D399"
-            strokeWidth="3"
-            strokeLinecap="round"
-          />
-          <circle cx="50" cy="54" r="1.5" fill="#064E3B" />
-        </svg>
-      ),
-      iconSmall: (
-        <svg className="w-10 h-10" viewBox="0 0 100 100" fill="none">
-          <path
-            d="M50 14 L80 26 C80 54 66 74 50 84 C34 74 20 54 20 26 Z"
-            fill="#047857"
-            stroke="#34D399"
-            strokeWidth="6"
-          />
-          <rect x="42" y="48" width="16" height="14" rx="3" fill="#FFFFFF" />
-          <path d="M45 48 V42 Q45 37 50 37 Q55 37 55 42 V48" stroke="#FFFFFF" strokeWidth="4" />
-        </svg>
-      ),
-    },
-    {
-      id: 3,
-      title: 'El Pulso QR',
-      subtitle: 'Neo-FinTech Disruptiva & Agilidad Smartphone',
-      tagline: '"Cada compra fiada, un pulso instantáneo en el celular"',
-      concept:
-        'Las anotaciones manuales a lápiz se convierten en pistas de circuito digital que convergen en una matriz QR viva con un rayo de confirmación en tiempo real. Inspirado en marcas disruptivas como Nubank o MercadoPago: vibrante, dinámico y amigable para jóvenes y adultos.',
-      colors: [
-        { name: 'Neo Purple', hex: '#7C3AED', bg: 'bg-purple-600' },
-        { name: 'Electric Cyan', hex: '#06B6D4', bg: 'bg-cyan-400' },
-        { name: 'Flash Pink', hex: '#EC4899', bg: 'bg-pink-500' },
-        { name: 'Midnight Dark', hex: '#030712', bg: 'bg-slate-950' },
-      ],
-      iconGradient: 'from-purple-600 via-indigo-600 to-cyan-500',
-      badgeColor: 'bg-purple-500/20 text-purple-400 border-purple-500/30',
-      borderColor: 'border-purple-500',
-      accentText: 'text-purple-400',
-      renderSvg: (
-        <svg className="w-24 h-24 sm:w-28 sm:h-28 drop-shadow-xl" viewBox="0 0 100 100" fill="none">
-          <defs>
-            <linearGradient id="qr-g1" x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" stopColor="#A855F7" />
-              <stop offset="100%" stopColor="#06B6D4" />
-            </linearGradient>
-          </defs>
-          <rect x="18" y="16" width="64" height="68" rx="16" fill="#18181B" stroke="url(#qr-g1)" strokeWidth="4.5" />
-          <rect x="28" y="26" width="16" height="16" rx="4" fill="none" stroke="#A855F7" strokeWidth="3" />
-          <rect x="32" y="30" width="8" height="8" rx="2" fill="#06B6D4" />
-          <rect x="56" y="26" width="16" height="16" rx="4" fill="none" stroke="#A855F7" strokeWidth="3" />
-          <rect x="60" y="30" width="8" height="8" rx="2" fill="#06B6D4" />
-          <rect x="28" y="54" width="16" height="16" rx="4" fill="none" stroke="#A855F7" strokeWidth="3" />
-          <rect x="32" y="58" width="8" height="8" rx="2" fill="#06B6D4" />
-          <path d="M54 50 L64 50 L58 64 L72 64 L50 82 L54 68 L44 68 Z" fill="#38BDF8" />
-        </svg>
-      ),
-      iconSmall: (
-        <svg className="w-10 h-10" viewBox="0 0 100 100" fill="none">
-          <rect x="20" y="20" width="60" height="60" rx="14" fill="#2E1065" stroke="#A855F7" strokeWidth="5" />
-          <path d="M54 36 L64 36 L58 50 L72 50 L48 72 L54 56 L42 56 Z" fill="#22D3EE" />
-        </svg>
-      ),
-    },
-    {
-      id: 4,
-      title: 'Monograma L + D Oficial',
-      subtitle: 'Colores Corporativos & Diferenciación Nítida L/D',
-      tagline: '"La palabra de confianza de barrio convertida en firma digital"',
-      concept:
-        'El diseño definitivo elegido: mantiene al 100% la geometría y silueta tubular original de las letras entrelazadas, eliminando los resplandores de neón. La letra L se distingue en Azul Real Clásico (#1D4ED8) y la letra D en Verde Esmeralda Natural (#16A34A).',
-      colors: [
-        { name: 'Royal Blue (L)', hex: '#1D4ED8', bg: 'bg-blue-700' },
-        { name: 'Emerald Green (D)', hex: '#16A34A', bg: 'bg-emerald-600' },
-        { name: 'White Contrast', hex: '#FFFFFF', bg: 'bg-white' },
-        { name: 'Matte Slate', hex: '#0F172A', bg: 'bg-slate-900' },
-      ],
-      iconGradient: 'from-blue-700 to-emerald-700',
-      badgeColor: 'bg-blue-500/20 text-blue-400 border-blue-500/30',
-      borderColor: 'border-blue-500',
-      accentText: 'text-blue-500',
-      renderSvg: (
-        <svg className="w-24 h-24 sm:w-28 sm:h-28 drop-shadow-md" viewBox="0 0 100 100" fill="none">
-          {/* Letra L en Azul Real Clásico Sólido */}
-          <path
-            d="M 26 20 V 72 Q 26 78 32 78 H 58"
-            stroke="#1D4ED8"
-            strokeWidth="9"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-          {/* Letra D en Verde Esmeralda Natural Sólido */}
-          <path
-            d="M 44 24 H 56 Q 76 24 76 48 Q 76 72 56 72 H 44"
-            stroke="#16A34A"
-            strokeWidth="9"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-        </svg>
-      ),
-      iconSmall: (
-        <svg className="w-10 h-10" viewBox="0 0 100 100" fill="none">
-          <path d="M 26 20 V 72 Q 26 78 32 78 H 58" stroke="#1D4ED8" strokeWidth="9" strokeLinecap="round" />
-          <path d="M 44 24 H 56 Q 76 24 76 48 Q 76 72 56 72 H 44" stroke="#16A34A" strokeWidth="9" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-      ),
-    },
-  ];
+  // Estado del simulador de venta
+  const [simAmount, setSimAmount] = useState('45000');
+  const [simPin, setSimPin] = useState('');
+  const [simSuccess, setSimSuccess] = useState(false);
 
-  const current = options.find((o) => o.id === selectedOption) || options[0];
+  // Estado de la calculadora de ROI
+  const [fiadoMensual, setFiadoMensual] = useState<number>(5000000); // 5 millones de Gs
+
+  // Cálculos de ROI
+  // Un almacén tradicional pierde entre 15% y 25% por morosidad y descontrol. Con LibretaDigital recupera el 85% de esa pérdida.
+  const perdidaEstimadaPapel = Math.round(fiadoMensual * 0.18);
+  const ahorroLibreta = Math.round(perdidaEstimadaPapel * 0.85);
+
+  const handleSimulateSale = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (simPin === '1234' || simPin.length === 4) {
+      setSimSuccess(true);
+      setTimeout(() => {
+        setSimSuccess(false);
+        setSimPin('');
+      }, 4000);
+    } else {
+      alert('Ingresa el PIN de prueba: 1234');
+    }
+  };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 p-4 sm:p-8 font-sans selection:bg-blue-500 selection:text-white">
-      <div className="max-w-6xl mx-auto space-y-10">
-        {/* HEADER */}
-        <header className="text-center space-y-3 pt-4">
-          <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 text-xs font-bold uppercase tracking-widest shadow-inner">
-            <Sparkles className="w-3.5 h-3.5" /> Laboratorio de Identidad de Marca
-          </div>
-          <h1 className="text-3xl sm:text-5xl font-black tracking-tight text-white">
-            Showcase de Logotipos & Isotipos
-          </h1>
-          <p className="text-slate-400 text-xs sm:text-sm max-w-2xl mx-auto leading-relaxed">
-            Diseños creados a medida para <strong className="text-white">LibretaDigital Pro</strong>, equilibrando la cercanía del comercio barrial con la potencia y seguridad de una FinTech bancaria.
-          </p>
-        </header>
+    <div className="min-h-screen bg-slate-950 text-slate-100 selection:bg-blue-600 selection:text-white font-sans">
+      {/* NAVBAR */}
+      <header className="border-b border-slate-850 bg-slate-950/80 backdrop-blur-md sticky top-0 z-30 px-4 py-3">
+        <div className="max-w-6xl mx-auto flex items-center justify-between">
+          <Link href="/" className="hover:opacity-90 transition">
+            <BrandLogo size="md" theme="dark" showTagline={false} />
+          </Link>
 
-        {/* SELECTOR DE PROPUESTAS */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
-          {options.map((opt) => (
-            <button
-              key={opt.id}
-              onClick={() => setSelectedOption(opt.id)}
-              className={`p-4 rounded-2xl bg-slate-900/80 border-2 text-left transition transform hover:-translate-y-1 shadow-lg ${
-                selectedOption === opt.id
-                  ? `${opt.borderColor} shadow-blue-500/10 scale-[1.02]`
-                  : 'border-slate-800 opacity-70 hover:opacity-100'
-              }`}
-            >
-              <span className={`text-[10px] font-black uppercase tracking-wider block ${opt.accentText}`}>
-                Propuesta 0{opt.id}
-              </span>
-              <h3 className="font-bold text-sm text-white mt-1 leading-tight">{opt.title}</h3>
-              <p className="text-[11px] text-slate-400 mt-1 line-clamp-1">{opt.subtitle}</p>
-            </button>
-          ))}
-        </div>
-
-        {/* VISTA PRINCIPAL DEL LOGO SELECCIONADO */}
-        <div className="bg-slate-900/80 border border-slate-800 rounded-3xl p-6 sm:p-10 shadow-2xl relative overflow-hidden backdrop-blur-sm">
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
-            {/* ÁREA DE VISUALIZACIÓN */}
-            <div
-              className={`lg:col-span-7 flex flex-col items-center justify-center p-8 sm:p-12 rounded-3xl border shadow-inner min-h-[380px] transition-colors duration-500 ${
-                previewBg === 'light'
-                  ? 'bg-slate-100 border-slate-300 text-slate-900'
-                  : previewBg === 'navy'
-                  ? 'bg-blue-950/80 border-blue-800 text-white'
-                  : 'bg-slate-950 border-slate-800 text-white'
-              }`}
-            >
-              <div className="flex flex-col sm:flex-row items-center gap-5 transform hover:scale-105 transition duration-300">
-                {current.renderSvg}
-                <div className="text-center sm:text-left">
-                  <div className="flex items-center justify-center sm:justify-start gap-1.5">
-                    <span
-                      className={`text-3xl sm:text-4xl font-black tracking-tight ${
-                        previewBg === 'light' ? 'text-slate-950' : 'text-white'
-                      }`}
-                    >
-                      Libreta
-                      <span className={current.accentText}>Digital</span>
-                    </span>
-                    <span className="px-2 py-0.5 rounded-md bg-blue-600 text-white text-[11px] font-black uppercase tracking-wider shadow-sm">
-                      PRO
-                    </span>
-                  </div>
-                  <span
-                    className={`text-[11px] sm:text-xs font-bold tracking-wider uppercase block mt-1 ${
-                      previewBg === 'light' ? 'text-slate-600' : 'text-slate-400'
-                    }`}
-                  >
-                    FinTech POS & Fiado en Tiempo Real
-                  </span>
-                </div>
-              </div>
-
-              {/* CONTROLES DE FONDO */}
-              <div className="flex items-center gap-2.5 mt-8 pt-4 border-t border-slate-800/40">
-                <span className="text-[11px] text-slate-400 font-medium">Fondo de Prueba:</span>
-                <button
-                  onClick={() => setPreviewBg('dark')}
-                  className={`w-6 h-6 rounded-full bg-slate-950 border ${
-                    previewBg === 'dark' ? 'border-blue-400 scale-110' : 'border-slate-700'
-                  }`}
-                  title="Fondo Oscuro"
-                />
-                <button
-                  onClick={() => setPreviewBg('navy')}
-                  className={`w-6 h-6 rounded-full bg-blue-950 border ${
-                    previewBg === 'navy' ? 'border-blue-400 scale-110' : 'border-slate-700'
-                  }`}
-                  title="Fondo Azul Profundo"
-                />
-                <button
-                  onClick={() => setPreviewBg('light')}
-                  className={`w-6 h-6 rounded-full bg-slate-100 border ${
-                    previewBg === 'light' ? 'border-blue-500 scale-110' : 'border-slate-400'
-                  }`}
-                  title="Fondo Claro / Papel"
-                />
-              </div>
-            </div>
-
-            {/* EXPLICACIÓN CONCEPTUAL */}
-            <div className="lg:col-span-5 space-y-5">
-              <div>
-                <span className={`inline-block px-3 py-1 rounded-full text-xs font-black uppercase tracking-wider mb-2 ${current.badgeColor}`}>
-                  Propuesta 0{current.id}
-                </span>
-                <h2 className="text-2xl sm:text-3xl font-black text-white">{current.title}</h2>
-                <p className={`text-xs sm:text-sm font-semibold mt-1 ${current.accentText}`}>
-                  {current.tagline}
-                </p>
-              </div>
-
-              <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
-                {current.concept}
-              </p>
-
-              {/* PALETA DE COLOR */}
-              <div>
-                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-2">
-                  Paleta de Color Primaria
-                </span>
-                <div className="grid grid-cols-2 gap-2">
-                  {current.colors.map((c, i) => (
-                    <div
-                      key={i}
-                      className="flex items-center gap-2 bg-slate-950 border border-slate-800 rounded-xl p-2"
-                    >
-                      <span className={`w-4 h-4 rounded-full ${c.bg} shadow-sm border border-white/20`} />
-                      <div className="text-[10px]">
-                        <span className="font-bold text-white block leading-none">{c.name}</span>
-                        <span className="text-slate-500 font-mono text-[9px]">{c.hex}</span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* ISOTIPO COMO APP ICON */}
-              <div className="pt-3 border-t border-slate-800">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-2">
-                  Ícono para App Móvil (PWA / Pantalla de Inicio)
-                </span>
-                <div className="flex items-center gap-3.5">
-                  <div
-                    className={`w-14 h-14 rounded-2xl bg-gradient-to-tr ${current.iconGradient} flex items-center justify-center p-2 shadow-xl border border-white/20 transform hover:rotate-6 transition`}
-                  >
-                    {current.iconSmall}
-                  </div>
-                  <div className="text-xs text-slate-400">
-                    <span className="font-bold text-white block">App Icon PWA</span>
-                    <span className="text-[11px]">Alta visibilidad en iconos de Android y notificaciones.</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* SIMULADOR EN VIVO EN EL SISTEMA */}
-        <div className="space-y-4">
-          <div className="flex justify-between items-end">
-            <div>
-              <span className="text-xs font-bold uppercase tracking-wider text-emerald-400">
-                Simulador de Aplicación Real
-              </span>
-              <h2 className="text-xl sm:text-2xl font-black text-white">¿Cómo se verá en el Sistema?</h2>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-12 gap-5">
-            {/* 1. NAVBAR MOCKUP */}
-            <div className="md:col-span-7 bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-3">
-              <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
-                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                Navbar del Sistema en Producción (POS / Almacén)
-              </span>
-
-              <div className="bg-slate-950 border border-slate-800 rounded-2xl p-3.5 flex items-center justify-between shadow-lg">
-                <div className="flex items-center gap-2.5">
-                  <div
-                    className={`w-8 h-8 rounded-xl bg-gradient-to-tr ${current.iconGradient} flex items-center justify-center p-1.5 shadow-md border border-white/20`}
-                  >
-                    {current.iconSmall}
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-1">
-                      <span className="text-sm font-black text-white tracking-tight">
-                        Libreta<span className={current.accentText}>Digital</span>
-                      </span>
-                      <span className="px-1 py-0.2 rounded bg-blue-600 text-[9px] font-black text-white uppercase">
-                        PRO
-                      </span>
-                    </div>
-                    <span className="text-[9px] text-slate-400 font-bold block -mt-0.5">
-                      FinTech POS & Fiado
-                    </span>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <div className="text-right pr-2 border-r border-slate-800">
-                    <span className="text-[9px] uppercase font-bold text-slate-400 block">Comercio</span>
-                    <span className="text-xs font-bold text-slate-200">Almacén Don Mario</span>
-                  </div>
-                  <div className="w-8 h-8 rounded-xl bg-blue-600/20 text-blue-400 flex items-center justify-center font-bold text-xs border border-blue-500/30">
-                    POS
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* 2. CARD MOCKUP */}
-            <div className="md:col-span-5 bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-3">
-              <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
-                <span className="w-2 h-2 rounded-full bg-blue-400" />
-                Tarjeta Digital en el Celular del Cliente
-              </span>
-
-              <div className="bg-gradient-to-br from-slate-950 to-slate-900 border border-slate-800 rounded-2xl p-4 shadow-xl">
-                <div className="flex justify-between items-start mb-3">
-                  <div className="flex items-center gap-2">
-                    <div
-                      className={`w-6 h-6 rounded-lg bg-gradient-to-tr ${current.iconGradient} flex items-center justify-center p-1 border border-white/20`}
-                    >
-                      {current.iconSmall}
-                    </div>
-                    <span className="text-xs font-black text-white">
-                      Libreta<span className={current.accentText}>Digital</span>
-                    </span>
-                  </div>
-                  <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 text-[10px] font-bold border border-emerald-500/30">
-                    INFORMCONF OK
-                  </span>
-                </div>
-
-                <div className="mt-4 pt-3 border-t border-slate-800/80 flex justify-between items-end">
-                  <div>
-                    <span className="text-[9px] text-slate-400 uppercase font-bold block">Titular de Cuenta</span>
-                    <span className="text-xs font-bold text-white">Roberto Gómez (Don Roberto)</span>
-                  </div>
-                  <div className="text-right">
-                    <span className="text-[9px] text-slate-400 uppercase font-bold block">Saldo Fiado</span>
-                    <span className="text-sm font-black text-white">₲ 145.000</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* COMPARACIÓN Y RECOMENDACIÓN */}
-        <div className="bg-slate-900/60 border border-slate-800 rounded-3xl p-6 sm:p-8 space-y-4">
-          <h3 className="text-sm font-bold text-white flex items-center gap-2">
-            <CheckCircle2 className="w-4 h-4 text-emerald-400" /> Guía para tu Elección:
-          </h3>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 text-xs">
-            <div className="p-3.5 bg-slate-950 rounded-xl border border-slate-800 space-y-1">
-              <span className="font-bold text-blue-400 block">Opción 1: La Libreta Infinita</span>
-              <p className="text-slate-300 text-[11px]">
-                La más equilibrada: conserva la esencia del cuaderno de almacén y lo proyecta al futuro digital infinito.
-              </p>
-            </div>
-
-            <div className="p-3.5 bg-slate-950 rounded-xl border border-slate-800 space-y-1">
-              <span className="font-bold text-emerald-400 block">Opción 2: El Escudo Almacén</span>
-              <p className="text-slate-300 text-[11px]">
-                Máxima autoridad y confianza legal; ideal para enfatizar la seguridad de cobro y el respaldo de Informconf.
-              </p>
-            </div>
-
-            <div className="p-3.5 bg-slate-950 rounded-xl border border-slate-800 space-y-1">
-              <span className="font-bold text-purple-400 block">Opción 3: El Pulso QR</span>
-              <p className="text-slate-300 text-[11px]">
-                Estilo Neo-Fintech disruptivo (Nubank / MercadoPago); moderna, ágil y visualmente muy llamativa.
-              </p>
-            </div>
-
-            <div className="p-3.5 bg-slate-950 rounded-xl border border-slate-800 space-y-1">
-              <span className="font-bold text-cyan-400 block">Opción 4: Monograma L + D</span>
-              <p className="text-slate-300 text-[11px]">
-                Minimalismo puro: inmejorable para tickets térmicos pequeños de 58mm/80mm y sellos del negocio.
-              </p>
-            </div>
-          </div>
-
-          <div className="pt-4 border-t border-slate-800 text-center">
-            <a
+          <div className="flex items-center gap-2 sm:gap-3">
+            <Link
               href="/"
-              className="text-xs text-slate-400 hover:text-white font-medium inline-flex items-center gap-1 transition"
+              className="text-xs font-bold text-slate-300 hover:text-white px-3 py-1.5 rounded-xl border border-slate-800 hover:bg-slate-900 transition hidden sm:inline-block"
             >
-              ← Volver al Panel Principal (POS)
+              Terminal POS
+            </Link>
+            <Link
+              href="/registro-comercio"
+              className="text-xs font-black text-white bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 px-4 py-2 rounded-xl transition shadow-md shadow-blue-600/30 flex items-center gap-1.5 active:scale-95"
+            >
+              <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+              <span>Probar 14 Días Gratis</span>
+            </Link>
+          </div>
+        </div>
+      </header>
+
+      {/* HERO SECTION */}
+      <section className="relative overflow-hidden pt-12 pb-16 px-4 border-b border-slate-900 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-blue-900/30 via-slate-950 to-slate-950">
+        <div className="max-w-5xl mx-auto text-center space-y-6">
+          <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-blue-950/90 border border-blue-800/60 text-blue-300 text-xs font-black uppercase tracking-wider animate-fadeIn">
+            <Sparkles className="w-4 h-4 text-amber-400" />
+            <span>Showcase Oficial • FinTech POS & Fiado en Tiempo Real</span>
+          </div>
+
+          <h1 className="text-3xl sm:text-5xl lg:text-6xl font-black text-white tracking-tight leading-tight max-w-4xl mx-auto">
+            Dile adiós al cuaderno de papel. <br />
+            <span className="bg-gradient-to-r from-blue-400 via-indigo-300 to-emerald-400 bg-clip-text text-transparent">
+              Cobra tus fiados en tiempo real con respaldo legal.
+            </span>
+          </h1>
+
+          <p className="text-base sm:text-lg text-slate-300 max-w-2xl mx-auto leading-relaxed">
+            La plataforma que transforma despensas, autoservicios y distribuidoras en comercios inteligentes:
+            ventas con PIN del cliente, cobranzas automáticas por WhatsApp, escrutinio Informconf y pagos multicanal (QR, Pix, Efectivo).
+          </p>
+
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
+            <Link
+              href="/registro-comercio"
+              className="w-full sm:w-auto px-6 py-3.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white rounded-2xl text-sm font-black shadow-xl shadow-blue-600/30 transition flex items-center justify-center gap-2 active:scale-95"
+            >
+              <Store className="w-4 h-4" />
+              <span>Comenzar Mi Prueba Gratis (14 Días)</span>
+              <ArrowRight className="w-4 h-4" />
+            </Link>
+
+            <a
+              href="#simulador"
+              className="w-full sm:w-auto px-6 py-3.5 bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-200 rounded-2xl text-sm font-bold transition flex items-center justify-center gap-2"
+            >
+              <span>Ver Simulador Interactivo</span>
+              <ChevronRight className="w-4 h-4 text-slate-400" />
             </a>
           </div>
+
+          {/* MÉTRICAS DE CONFIANZA */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 pt-10 max-w-4xl mx-auto">
+            <div className="p-4 rounded-2xl bg-slate-900/60 border border-slate-800">
+              <span className="text-2xl sm:text-3xl font-black text-emerald-400 block">-85%</span>
+              <span className="text-xs text-slate-400 font-bold uppercase tracking-wider">Morosidad en la Calle</span>
+            </div>
+            <div className="p-4 rounded-2xl bg-slate-900/60 border border-slate-800">
+              <span className="text-2xl sm:text-3xl font-black text-blue-400 block">100%</span>
+              <span className="text-xs text-slate-400 font-bold uppercase tracking-wider">Cero Disputas (Con PIN)</span>
+            </div>
+            <div className="p-4 rounded-2xl bg-slate-900/60 border border-slate-800">
+              <span className="text-2xl sm:text-3xl font-black text-amber-400 block">+12x</span>
+              <span className="text-xs text-slate-400 font-bold uppercase tracking-wider">Retorno de Inversión</span>
+            </div>
+            <div className="p-4 rounded-2xl bg-slate-900/60 border border-slate-800">
+              <span className="text-2xl sm:text-3xl font-black text-indigo-400 block">3 Seg</span>
+              <span className="text-xs text-slate-400 font-bold uppercase tracking-wider">Cobranza por WhatsApp</span>
+            </div>
+          </div>
         </div>
-      </div>
+      </section>
+
+      {/* SECCIÓN: SIMULADOR INTERACTIVO EN VIVO */}
+      <section id="simulador" className="py-16 px-4 max-w-5xl mx-auto">
+        <div className="text-center space-y-3 mb-10">
+          <span className="text-xs font-black uppercase tracking-widest text-indigo-400 bg-indigo-950/80 px-3 py-1 rounded-full border border-indigo-800/60 inline-block">
+            Demostración en Tiempo Real
+          </span>
+          <h2 className="text-2xl sm:text-4xl font-black text-white">
+            Prueba cómo funciona en tu mostrador
+          </h2>
+          <p className="text-xs sm:text-sm text-slate-400 max-w-xl mx-auto">
+            Interactúa con los 4 pilares tecnológicos de LibretaDigital PRO antes de implementarlo en tu negocio.
+          </p>
+
+          {/* TABS DEL SIMULADOR */}
+          <div className="flex flex-wrap items-center justify-center gap-2 pt-4">
+            <button
+              onClick={() => setActiveSimTab('VENTA')}
+              className={`px-4 py-2 rounded-xl text-xs font-black transition flex items-center gap-1.5 ${
+                activeSimTab === 'VENTA'
+                  ? 'bg-blue-600 text-white shadow-md shadow-blue-600/30'
+                  : 'bg-slate-900 text-slate-400 hover:text-white border border-slate-800'
+              }`}
+            >
+              <KeyRound className="w-3.5 h-3.5" /> 1. Venta Fiada con PIN
+            </button>
+            <button
+              onClick={() => setActiveSimTab('WHATSAPP')}
+              className={`px-4 py-2 rounded-xl text-xs font-black transition flex items-center gap-1.5 ${
+                activeSimTab === 'WHATSAPP'
+                  ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/30'
+                  : 'bg-slate-900 text-slate-400 hover:text-white border border-slate-800'
+              }`}
+            >
+              <MessageCircle className="w-3.5 h-3.5" /> 2. Cobranza WhatsApp
+            </button>
+            <button
+              onClick={() => setActiveSimTab('LEGAL')}
+              className={`px-4 py-2 rounded-xl text-xs font-black transition flex items-center gap-1.5 ${
+                activeSimTab === 'LEGAL'
+                  ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30'
+                  : 'bg-slate-900 text-slate-400 hover:text-white border border-slate-800'
+              }`}
+            >
+              <ShieldCheck className="w-3.5 h-3.5" /> 3. Escudo Informconf
+            </button>
+            <button
+              onClick={() => setActiveSimTab('CAJA')}
+              className={`px-4 py-2 rounded-xl text-xs font-black transition flex items-center gap-1.5 ${
+                activeSimTab === 'CAJA'
+                  ? 'bg-purple-600 text-white shadow-md shadow-purple-600/30'
+                  : 'bg-slate-900 text-slate-400 hover:text-white border border-slate-800'
+              }`}
+            >
+              <Users className="w-3.5 h-3.5" /> 4. Roles y Cajeros
+            </button>
+          </div>
+        </div>
+
+        {/* PANELES DEL SIMULADOR */}
+        <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-8 shadow-2xl">
+          {activeSimTab === 'VENTA' && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-center">
+              <div className="space-y-4">
+                <span className="text-[11px] font-black uppercase text-blue-400 tracking-wider">
+                  Certificación Inmutable en Mostrador
+                </span>
+                <h3 className="text-xl sm:text-2xl font-black text-white">
+                  El cliente aprueba con su PIN de 4 dígitos
+                </h3>
+                <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
+                  Nunca más una disputa de <i>"yo no llevé eso"</i> ni tachones en hojas sueltas. Cuando el cliente compra fiado, ingresa su PIN personal en tu teléfono o tablet POS. El asiento contable queda bloqueado y certificado.
+                </p>
+                <div className="space-y-2 text-xs text-slate-400">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                    <span>Límite de crédito pactado con tope automático.</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                    <span>Detalle exacto de mercadería (kilos, unidades, marcas).</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* MOCKUP INTERACTIVO TERMINAL */}
+              <div className="bg-slate-950 border border-slate-800 rounded-2xl p-5 space-y-4 shadow-inner">
+                <div className="flex justify-between items-center border-b border-slate-800 pb-3">
+                  <div>
+                    <span className="text-[10px] text-slate-400 uppercase font-bold block">Cliente en Mostrador</span>
+                    <span className="text-sm font-black text-white">Don Roberto Gómez</span>
+                  </div>
+                  <span className="text-xs bg-emerald-500/20 text-emerald-300 font-bold px-2 py-0.5 rounded-full border border-emerald-500/30">
+                    Crédito Aprobado
+                  </span>
+                </div>
+
+                <form onSubmit={handleSimulateSale} className="space-y-3">
+                  <div>
+                    <label className="text-[11px] text-slate-400 font-bold block mb-1">Monto de la Compra (₲)</label>
+                    <input
+                      type="text"
+                      value={simAmount}
+                      onChange={(e) => setSimAmount(e.target.value)}
+                      className="w-full px-3 py-2 bg-slate-900 border border-slate-700 text-white font-mono font-bold text-base rounded-xl focus:outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-[11px] text-slate-400 font-bold block mb-1">
+                      PIN del Cliente (Digita <b className="text-emerald-400">1234</b> para probar)
+                    </label>
+                    <input
+                      type="password"
+                      maxLength={4}
+                      placeholder="••••"
+                      value={simPin}
+                      onChange={(e) => setSimPin(e.target.value)}
+                      className="w-full px-3 py-2 bg-slate-900 border border-slate-700 text-emerald-400 font-mono font-black text-center tracking-widest text-lg rounded-xl focus:outline-none"
+                    />
+                  </div>
+
+                  <button
+                    type="submit"
+                    className="w-full py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-black transition flex items-center justify-center gap-1.5"
+                  >
+                    <span>Confirmar Fiado con PIN</span>
+                    <ArrowRight className="w-3.5 h-3.5" />
+                  </button>
+                </form>
+
+                {simSuccess && (
+                  <div className="p-3 bg-emerald-500/20 border border-emerald-500/40 rounded-xl text-center space-y-1 animate-fadeIn">
+                    <span className="text-xs font-black text-emerald-300 block">✓ ¡Fiado Certificado con Éxito!</span>
+                    <p className="text-[10px] text-slate-300">Asiento inmutable registrado. Comprobante digital enviado al cliente.</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {activeSimTab === 'WHATSAPP' && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-center">
+              <div className="space-y-4">
+                <span className="text-[11px] font-black uppercase text-emerald-400 tracking-wider">
+                  Cobranza en 1 Clic
+                </span>
+                <h3 className="text-xl sm:text-2xl font-black text-white">
+                  Recordatorios automáticos con botón de pago
+                </h3>
+                <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
+                  Envía avisos de saldo por WhatsApp con un solo clic. El mensaje incluye el detalle exacto de las compras, el total adeudado y los datos bancarios (o QR) para que te abonen al instante.
+                </p>
+                <div className="space-y-2 text-xs text-slate-400">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                    <span>Redacción cortés y profesional que cuida la relación de vecindad.</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                    <span>Acepta Pix, QR bancario, Transferencia o Efectivo en caja.</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* MOCKUP WHATSAPP CHAT */}
+              <div className="bg-[#0b141a] border border-slate-800 rounded-2xl p-4 space-y-3 font-sans shadow-xl max-w-sm mx-auto w-full">
+                <div className="flex items-center gap-2 border-b border-slate-800 pb-2">
+                  <div className="w-8 h-8 rounded-full bg-emerald-700 flex items-center justify-center text-xs font-black text-white">
+                    DM
+                  </div>
+                  <div>
+                    <span className="text-xs font-bold text-white block">Almacén Don Mario</span>
+                    <span className="text-[10px] text-emerald-400">En línea</span>
+                  </div>
+                </div>
+
+                <div className="bg-[#202c33] rounded-2xl p-3 text-xs text-slate-200 space-y-2 border-l-4 border-emerald-500 shadow-md">
+                  <p className="font-bold text-emerald-400">Estimado Don Roberto Gómez,</p>
+                  <p className="text-[11px] text-slate-300">
+                    Le saludamos de <b>Almacén Don Mario</b>. Su saldo de compras fiadas al día de hoy es de:
+                  </p>
+                  <div className="bg-[#111b21] p-2.5 rounded-xl text-center">
+                    <span className="text-xs text-slate-400 block">TOTAL ADEUDADO:</span>
+                    <span className="text-lg font-black text-emerald-400 font-mono">₲ 145.000</span>
+                  </div>
+                  <p className="text-[11px] text-slate-400">
+                    Puede liquidar en caja o transferir a nuestra cuenta con su comprobante. ¡Muchas gracias por su preferencia!
+                  </p>
+                  <div className="text-right text-[9px] text-slate-500">10:45 AM ✓✓</div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {activeSimTab === 'LEGAL' && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-center">
+              <div className="space-y-4">
+                <span className="text-[11px] font-black uppercase text-indigo-400 tracking-wider">
+                  Blindaje Jurídico y Financiero
+                </span>
+                <h3 className="text-xl sm:text-2xl font-black text-white">
+                  Términos de Crédito y Cláusula Informconf
+                </h3>
+                <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
+                  Al registrarse, el cliente valida digitalmente su identidad y firma los términos que autorizan al comercio a reportar morosidades ante burós crediticios conforme a la Ley de Protección de Datos Personales.
+                </p>
+                <div className="space-y-2 text-xs text-slate-400">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                    <span>Contrato digital respaldado con IP, fecha y PIN de cliente.</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                    <span>Exportación de Estados de Cuenta con validez ejecutiva en PDF.</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* MOCKUP CONTRATO */}
+              <div className="bg-slate-950 border border-slate-800 rounded-2xl p-5 space-y-3 text-xs">
+                <div className="flex items-center gap-2 text-indigo-400 font-black">
+                  <ShieldCheck className="w-5 h-5 text-emerald-400" />
+                  <span>Certificado de Aceptación Digital</span>
+                </div>
+                <div className="bg-slate-900 p-3 rounded-xl space-y-2 border border-slate-800 font-mono text-[11px] text-slate-300">
+                  <p><b>Titular:</b> Roberto Gómez (CI: 3.456.789)</p>
+                  <p><b>Cláusula:</b> "Autorizo expresamente la verificación y reporte de obligaciones crediticias ante burós autorizados..."</p>
+                  <div className="pt-2 border-t border-slate-800 flex justify-between items-center text-[10px] text-emerald-400 font-bold">
+                    <span>ESTADO: FIRMADO DIGITALMENTE</span>
+                    <span>✓ AUTORIZACIÓN VIGENTE</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {activeSimTab === 'CAJA' && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-center">
+              <div className="space-y-4">
+                <span className="text-[11px] font-black uppercase text-purple-400 tracking-wider">
+                  Control Total de Empleados
+                </span>
+                <h3 className="text-xl sm:text-2xl font-black text-white">
+                  Roles para Cajeros y Cobradores con PIN
+                </h3>
+                <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
+                  Tus cajeros pueden cargar fiados y registrar cobros en la caja, pero no pueden alterar límites de crédito, anular ventas ni ver las ganancias globales de la tienda sin tu autorización.
+                </p>
+                <div className="space-y-2 text-xs text-slate-400">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                    <span>Trazabilidad absoluta: cada venta registra el cajero responsable.</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                    <span>Cambio de turno rápido en el mostrador mediante PIN de 4 dígitos.</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* MOCKUP ROLES */}
+              <div className="bg-slate-950 border border-slate-800 rounded-2xl p-4 space-y-2 text-xs">
+                <div className="p-2.5 rounded-xl bg-slate-900 border border-slate-800 flex justify-between items-center">
+                  <div className="flex items-center gap-2">
+                    <div className="w-7 h-7 rounded-lg bg-amber-500/20 text-amber-300 font-black flex items-center justify-center text-xs">D</div>
+                    <div>
+                      <span className="font-bold text-white block">Don Mario Gómez</span>
+                      <span className="text-[10px] text-amber-400">Dueño (Acceso Total)</span>
+                    </div>
+                  </div>
+                  <span className="text-[10px] bg-emerald-500/20 text-emerald-300 font-bold px-2 py-0.5 rounded-full">PIN: 1234</span>
+                </div>
+
+                <div className="p-2.5 rounded-xl bg-slate-900 border border-slate-800 flex justify-between items-center">
+                  <div className="flex items-center gap-2">
+                    <div className="w-7 h-7 rounded-lg bg-blue-500/20 text-blue-300 font-black flex items-center justify-center text-xs">J</div>
+                    <div>
+                      <span className="font-bold text-white block">Juan Pérez</span>
+                      <span className="text-[10px] text-blue-400">Cajero Mañana (Ventas & Cobros)</span>
+                    </div>
+                  </div>
+                  <span className="text-[10px] bg-slate-800 text-slate-300 font-bold px-2 py-0.5 rounded-full">PIN: 1111</span>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      </section>
+
+      {/* CALCULADORA INTERACTIVA DE RETORNO DE INVERSIÓN (ROI) */}
+      <section className="py-16 px-4 bg-slate-900/40 border-y border-slate-900">
+        <div className="max-w-4xl mx-auto space-y-8">
+          <div className="text-center space-y-2">
+            <span className="text-xs font-black uppercase tracking-widest text-emerald-400 bg-emerald-950/80 px-3 py-1 rounded-full border border-emerald-800/60 inline-block">
+              Calculadora de Ganancias Recuperadas
+            </span>
+            <h2 className="text-2xl sm:text-4xl font-black text-white">
+              ¿Cuánto dinero estás perdiendo hoy con el cuaderno?
+            </h2>
+            <p className="text-xs sm:text-sm text-slate-400">
+              Mueve la barra según el dinero que fías en la calle al mes y calcula tu ahorro neto.
+            </p>
+          </div>
+
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-8 space-y-6 shadow-xl">
+            <div>
+              <div className="flex justify-between items-baseline mb-2">
+                <span className="text-xs font-bold text-slate-300 uppercase">Total fiado estimado por mes:</span>
+                <span className="text-xl sm:text-2xl font-black text-blue-400 font-mono">
+                  ₲ {fiadoMensual.toLocaleString('es-PY')}
+                </span>
+              </div>
+              <input
+                type="range"
+                min={1000000}
+                max={30000000}
+                step={500000}
+                value={fiadoMensual}
+                onChange={(e) => setFiadoMensual(Number(e.target.value))}
+                className="w-full accent-blue-500 cursor-pointer h-2 bg-slate-800 rounded-lg"
+              />
+              <div className="flex justify-between text-[10px] text-slate-500 mt-1 font-mono">
+                <span>₲ 1.000.000</span>
+                <span>₲ 15.000.000</span>
+                <span>₲ 30.000.000</span>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-4 border-t border-slate-800">
+              <div className="p-4 rounded-2xl bg-rose-950/30 border border-rose-900/50">
+                <span className="text-[11px] font-bold text-rose-400 uppercase block mb-1">
+                  Pérdida típica en papel (Morosidad/Olvidos):
+                </span>
+                <span className="text-xl sm:text-2xl font-black text-rose-300 font-mono">
+                  - ₲ {perdidaEstimadaPapel.toLocaleString('es-PY')}
+                </span>
+                <p className="text-[10px] text-slate-400 mt-1">Estimado 18% de cuentas incobrables o disputadas en cuadernos comunes.</p>
+              </div>
+
+              <div className="p-4 rounded-2xl bg-emerald-950/40 border border-emerald-800/60">
+                <span className="text-[11px] font-bold text-emerald-400 uppercase block mb-1">
+                  Dinero que rescatas con LibretaDigital PRO:
+                </span>
+                <span className="text-xl sm:text-2xl font-black text-emerald-300 font-mono">
+                  + ₲ {ahorroLibreta.toLocaleString('es-PY')}
+                </span>
+                <p className="text-[10px] text-slate-300 mt-1">Recuperas hasta el 85% de la morosidad mediante avisos WhatsApp y PIN inmutable.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* COMPARATIVA: CUADERNO VS LIBRETADIGITAL PRO */}
+      <section className="py-16 px-4 max-w-5xl mx-auto">
+        <div className="text-center space-y-2 mb-10">
+          <h2 className="text-2xl sm:text-4xl font-black text-white">Cuaderno de Papel vs. LibretaDigital PRO</h2>
+          <p className="text-xs sm:text-sm text-slate-400">¿Por qué los mejores almacenes están modernizando su caja?</p>
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs text-left border border-slate-800 rounded-2xl overflow-hidden">
+            <thead className="bg-slate-900 text-slate-300 uppercase font-bold text-[11px]">
+              <tr>
+                <th className="py-3 px-4">Característica</th>
+                <th className="py-3 px-4 text-rose-400 bg-rose-950/20">Cuaderno Tradicional</th>
+                <th className="py-3 px-4 text-emerald-400 bg-emerald-950/30">LibretaDigital PRO</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-800 bg-slate-950/60">
+              <tr>
+                <td className="py-3 px-4 font-bold text-white">Firma y Certificación de Deuda</td>
+                <td className="py-3 px-4 text-slate-400">Garabatos o nada (fácil de negar)</td>
+                <td className="py-3 px-4 font-bold text-emerald-400">PIN de 4 dígitos en mostrador</td>
+              </tr>
+              <tr>
+                <td className="py-3 px-4 font-bold text-white">Recordatorios de Pago</td>
+                <td className="py-3 px-4 text-slate-400">Llamadas incómodas o visitas puerta a puerta</td>
+                <td className="py-3 px-4 font-bold text-emerald-400">1 Clic por WhatsApp con detalle y QR</td>
+              </tr>
+              <tr>
+                <td className="py-3 px-4 font-bold text-white">Seguridad de la Información</td>
+                <td className="py-3 px-4 text-slate-400">Pérdida por robo, agua o extravío de hojas</td>
+                <td className="py-3 px-4 font-bold text-emerald-400">Nube cifrada PostgreSQL / Supabase</td>
+              </tr>
+              <tr>
+                <td className="py-3 px-4 font-bold text-white">Límite de Crédito</td>
+                <td className="py-3 px-4 text-slate-400">De memoria (riesgo de fiar de más)</td>
+                <td className="py-3 px-4 font-bold text-emerald-400">Bloqueo automático al superar el tope</td>
+              </tr>
+              <tr>
+                <td className="py-3 px-4 font-bold text-white">Control de Empleados</td>
+                <td className="py-3 px-4 text-slate-400">Cualquiera anota y no se sabe quién cobró</td>
+                <td className="py-3 px-4 font-bold text-emerald-400">Trazabilidad por Cajero y Turno POS</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      {/* PLANES COMERCIALES */}
+      <section className="py-16 px-4 bg-slate-900/30 border-t border-slate-900">
+        <div className="max-w-5xl mx-auto space-y-10">
+          <div className="text-center space-y-2">
+            <span className="text-xs font-black uppercase tracking-widest text-blue-400 bg-blue-950/80 px-3 py-1 rounded-full border border-blue-800/60 inline-block">
+              Inversión Transparente
+            </span>
+            <h2 className="text-2xl sm:text-4xl font-black text-white">Planes Comerciales Simples</h2>
+            <p className="text-xs sm:text-sm text-slate-400">Elige el plan que mejor se adapte al tamaño de tu comercio.</p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {/* PLAN VECINAL */}
+            <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 space-y-5 flex flex-col justify-between">
+              <div className="space-y-3">
+                <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 bg-slate-800 px-2.5 py-1 rounded-full">
+                  Emprendedor
+                </span>
+                <h3 className="text-xl font-black text-white">Plan Vecinal</h3>
+                <p className="text-xs text-slate-400">Para pequeñas despensas que quieren ordenar sus cuentas.</p>
+                <div className="pt-2">
+                  <span className="text-2xl font-black text-white">₲ 89.000</span>
+                  <span className="text-xs text-slate-500"> / mes</span>
+                </div>
+                <ul className="space-y-2 text-xs text-slate-300 pt-3 border-t border-slate-800">
+                  <li className="flex items-center gap-2">✓ Hasta 60 clientes activos</li>
+                  <li className="flex items-center gap-2">✓ Validación con PIN en caja</li>
+                  <li className="flex items-center gap-2">✓ Avisos básicos de saldo</li>
+                </ul>
+              </div>
+              <Link
+                href="/registro-comercio"
+                className="w-full py-2.5 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-xs font-bold text-center block transition"
+              >
+                Comenzar Prueba
+              </Link>
+            </div>
+
+            {/* PLAN COMERCIO PRO (DESTACADO) */}
+            <div className="bg-gradient-to-b from-blue-900/40 via-slate-900 to-slate-900 border-2 border-blue-500 rounded-3xl p-6 space-y-5 flex flex-col justify-between relative shadow-2xl shadow-blue-900/30">
+              <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-blue-600 text-white text-[10px] font-black uppercase px-3 py-0.5 rounded-full shadow-md">
+                El Más Elegido
+              </div>
+              <div className="space-y-3">
+                <span className="text-[10px] font-black uppercase tracking-wider text-blue-300 bg-blue-950 px-2.5 py-1 rounded-full border border-blue-800/60">
+                  Negocio en Crecimiento
+                </span>
+                <h3 className="text-xl font-black text-white">Comercio PRO</h3>
+                <p className="text-xs text-slate-300">Para almacenes y minimercados con alto flujo de clientes.</p>
+                <div className="pt-2">
+                  <span className="text-3xl font-black text-white">₲ 189.000</span>
+                  <span className="text-xs text-slate-400"> / mes</span>
+                </div>
+                <ul className="space-y-2 text-xs text-slate-200 pt-3 border-t border-slate-800">
+                  <li className="flex items-center gap-2 font-bold text-white">✓ Clientes y Fiados Ilimitados</li>
+                  <li className="flex items-center gap-2">✓ Cobranzas por WhatsApp automáticas</li>
+                  <li className="flex items-center gap-2">✓ Módulo Legal Informconf Digital</li>
+                  <li className="flex items-center gap-2">✓ Multi-Cajeros y Control de Turnos</li>
+                  <li className="flex items-center gap-2">✓ Estados de Cuenta PDF al instante</li>
+                </ul>
+              </div>
+              <Link
+                href="/registro-comercio"
+                className="w-full py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-black text-center block transition shadow-lg shadow-blue-600/30"
+              >
+                Probar 14 Días Gratis
+              </Link>
+            </div>
+
+            {/* PLAN MULTI-SUCURSAL */}
+            <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 space-y-5 flex flex-col justify-between">
+              <div className="space-y-3">
+                <span className="text-[10px] font-black uppercase tracking-wider text-purple-400 bg-purple-950 px-2.5 py-1 rounded-full border border-purple-800/60">
+                  Cadenas y Distribución
+                </span>
+                <h3 className="text-xl font-black text-white">Multi-Sucursal</h3>
+                <p className="text-xs text-slate-400">Para empresas con varias sucursales y cobradores en calle.</p>
+                <div className="pt-2">
+                  <span className="text-2xl font-black text-white">₲ 349.000</span>
+                  <span className="text-xs text-slate-500"> / mes</span>
+                </div>
+                <ul className="space-y-2 text-xs text-slate-300 pt-3 border-t border-slate-800">
+                  <li className="flex items-center gap-2">✓ Todo lo del plan PRO</li>
+                  <li className="flex items-center gap-2">✓ Múltiples sucursales consolidadas</li>
+                  <li className="flex items-center gap-2">✓ App móvil para cobradores en moto</li>
+                  <li className="flex items-center gap-2">✓ Soporte VIP prioritario 24/7</li>
+                </ul>
+              </div>
+              <Link
+                href="/registro-comercio"
+                className="w-full py-2.5 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-xs font-bold text-center block transition"
+              >
+                Contactar Ventas
+              </Link>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* CTA FINAL DE ALTA CONVERSIÓN */}
+      <section className="py-20 px-4 text-center bg-gradient-to-b from-slate-950 via-blue-950/20 to-slate-950">
+        <div className="max-w-3xl mx-auto space-y-6">
+          <h2 className="text-3xl sm:text-5xl font-black text-white tracking-tight">
+            ¿Listo para blindar tu negocio y cobrar a tiempo?
+          </h2>
+          <p className="text-sm sm:text-base text-slate-300 max-w-xl mx-auto">
+            Configura tu almacén en 60 segundos. No necesitas tarjeta de crédito para comenzar tu prueba gratuita de 14 días.
+          </p>
+          <div className="pt-2">
+            <Link
+              href="/registro-comercio"
+              className="inline-flex items-center gap-2 px-8 py-4 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white rounded-2xl text-sm sm:text-base font-black shadow-xl shadow-blue-600/40 transition active:scale-95"
+            >
+              <Sparkles className="w-5 h-5 text-amber-300" />
+              <span>Crear Mi Almacén Ahora (Gratis)</span>
+              <ArrowRight className="w-5 h-5" />
+            </Link>
+          </div>
+          <p className="text-[11px] text-slate-500">
+            LibretaDigital PRO • FinTech POS & Fiado en Tiempo Real • Soporte en Español y Guaraní
+          </p>
+        </div>
+      </section>
+
+      {/* FOOTER */}
+      <footer className="border-t border-slate-900 bg-slate-950 py-6 px-4 text-center text-xs text-slate-500">
+        <div className="max-w-5xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3">
+          <BrandLogo size="sm" theme="dark" showTagline={false} />
+          <div className="flex items-center gap-4 text-[11px]">
+            <Link href="/" className="hover:text-white transition">Terminal POS</Link>
+            <Link href="/registro-comercio" className="hover:text-white transition">Registro Comercios</Link>
+            <Link href="/registro-cliente" className="hover:text-white transition">Registro Clientes</Link>
+          </div>
+          <p className="text-[11px] text-slate-600">© 2026 LibretaDigital Pro. Todos los derechos reservados.</p>
+        </div>
+      </footer>
     </div>
   );
 }

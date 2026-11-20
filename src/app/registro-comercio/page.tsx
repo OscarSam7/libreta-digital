@@ -26,7 +26,7 @@ import {
   ReceiptText
 } from 'lucide-react';
 import { Tenant, StaffMember } from '@/types';
-import { saveTenant, saveStaff, setCurrentOperator, getStoredData } from '@/lib/storage';
+import { saveTenant, saveStaff, setCurrentOperator, getStoredData, setMerchantLoggedIn } from '@/lib/storage';
 import { createClient } from '@/lib/supabase/client';
 import confetti from 'canvas-confetti';
 import { BrandLogo } from '@/components/BrandLogo';
@@ -180,10 +180,11 @@ function MerchantRegisterContent() {
         }
       }
 
-      // 2. Guardar en Almacenamiento Local reactivo
+      // 2. Guardar en Almacenamiento Local reactivo y activar sesión
       saveTenant(newTenant);
       saveStaff([ownerStaff]);
       setCurrentOperator(ownerStaff);
+      setMerchantLoggedIn(true);
 
       // Lanzar confeti celebratorio
       confetti({
@@ -245,6 +246,9 @@ function MerchantRegisterContent() {
           }
         }
       }
+
+      // Activar sesión autenticada
+      setMerchantLoggedIn(true);
 
       // Redirigir al panel de administración
       router.push('/');

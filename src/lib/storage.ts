@@ -7,7 +7,40 @@ const STORAGE_KEYS = {
   TRANSACTIONS: 'libretadigital_transactions_v2',
   STAFF: 'libretadigital_staff_v2',
   CURRENT_OPERATOR: 'libretadigital_current_operator_v2',
+  IS_LOGGED_IN: 'libretadigital_is_logged_in_v2',
 };
+
+export function isMerchantLoggedIn(): boolean {
+  if (typeof window === 'undefined') return false;
+  return localStorage.getItem(STORAGE_KEYS.IS_LOGGED_IN) === 'true';
+}
+
+export function setMerchantLoggedIn(value: boolean): void {
+  if (typeof window !== 'undefined') {
+    localStorage.setItem(STORAGE_KEYS.IS_LOGGED_IN, value ? 'true' : 'false');
+    window.dispatchEvent(new Event('libreta_auth_changed'));
+    window.dispatchEvent(new Event('libreta_data_updated'));
+  }
+}
+
+export function logoutMerchant(): void {
+  if (typeof window !== 'undefined') {
+    localStorage.removeItem(STORAGE_KEYS.IS_LOGGED_IN);
+    localStorage.removeItem(STORAGE_KEYS.TENANT);
+    localStorage.removeItem(STORAGE_KEYS.CURRENT_OPERATOR);
+    window.dispatchEvent(new Event('libreta_auth_changed'));
+    window.dispatchEvent(new Event('libreta_data_updated'));
+
+    try {
+      const supabase = createClient();
+      if (supabase) {
+        supabase.auth.signOut().catch(() => {});
+      }
+    } catch (e) {}
+
+    window.location.href = '/registro-comercio';
+  }
+}
 
 export const INITIAL_STAFF: StaffMember[] = [
   {
