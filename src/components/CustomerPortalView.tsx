@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Customer, Transaction, Tenant } from '@/types';
-import { getStoredData } from '@/lib/storage';
+import { getStoredData, syncFromSupabase } from '@/lib/storage';
 import { certifyTransactionWithPin } from '@/lib/ledger';
 import { acceptCustomerTerms } from '@/lib/customers';
 import { exportTransactionsToCSV } from '@/lib/reports';
@@ -55,6 +55,7 @@ export function CustomerPortalView({ token }: Props) {
 
   useEffect(() => {
     loadData();
+    syncFromSupabase();
 
     const handleUpdate = () => loadData();
     window.addEventListener('libreta_data_updated', handleUpdate);

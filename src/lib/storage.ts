@@ -1,4 +1,5 @@
 import { Tenant, Customer, Transaction } from '@/types';
+import { createClient } from '@/lib/supabase/client';
 
 const STORAGE_KEYS = {
   TENANT: 'libretadigital_tenant_v2',
@@ -157,6 +158,17 @@ export function saveTransactions(transactions: Transaction[]) {
   if (typeof window !== 'undefined') {
     localStorage.setItem(STORAGE_KEYS.TRANSACTIONS, JSON.stringify(transactions));
     window.dispatchEvent(new Event('libreta_data_updated'));
+
+    try {
+      const supabase = createClient();
+      if (supabase) {
+        supabase.from('transactions').upsert(transactions).then(({ error }: { error: any }) => {
+          if (error) console.warn('Supabase transactions sync notice:', error.message);
+        });
+      }
+    } catch (e) {
+      // Offline fallback
+    }
   }
 }
 
@@ -164,6 +176,17 @@ export function saveCustomers(customers: Customer[]) {
   if (typeof window !== 'undefined') {
     localStorage.setItem(STORAGE_KEYS.CUSTOMERS, JSON.stringify(customers));
     window.dispatchEvent(new Event('libreta_data_updated'));
+
+    try {
+      const supabase = createClient();
+      if (supabase) {
+        supabase.from('customers').upsert(customers).then(({ error }: { error: any }) => {
+          if (error) console.warn('Supabase customers sync notice:', error.message);
+        });
+      }
+    } catch (e) {
+      // Offline fallback
+    }
   }
 }
 
@@ -171,5 +194,53 @@ export function saveTenant(tenant: Tenant) {
   if (typeof window !== 'undefined') {
     localStorage.setItem(STORAGE_KEYS.TENANT, JSON.stringify(tenant));
     window.dispatchEvent(new Event('libreta_data_updated'));
+
+    try {
+      const supabase = createClient();
+      if (supabase) {
+        supabase.from('tenants').upsert(tenant).then(({ error }: { error: any }) => {
+          if (error) console.warn('Supabase tenant sync notice:', error.message);
+        });
+      }
+    } catch (e) {
+      // Offline fallback
+    }
+  }
+}
+
+export async function syncFromSupabase() {
+  if (typeof window === 'undefined') return;
+  try {
+    const supabase = createClient();
+    if (!supabase) return;
+
+    const [tenantsRes, custRes, txRes] = await Promise.all([
+      supabase.from('tenants').select('*').limit(1),
+      supabase.from('customers').select('*').order('created_at', { ascending: false }),
+      supabase.from('transactions').select('*').order('created_at', { ascending: false }),
+    ]);
+
+    let changed = false;
+
+    if (tenantsRes.data && tenantsRes.data.length > 0) {
+      localStorage.setItem(STORAGE_KEYS.TENANT, JSON.stringify(tenantsRes.data[0]));
+      changed = true;
+    }
+
+    if (custRes.data && custRes.data.length > 0) {
+      localStorage.setItem(STORAGE_KEYS.CUSTOMERS, JSON.stringify(custRes.data));
+      changed = true;
+    }
+
+    if (txRes.data && txRes.data.length > 0) {
+      localStorage.setItem(STORAGE_KEYS.TRANSACTIONS, JSON.stringify(txRes.data));
+      changed = true;
+    }
+
+    if (changed) {
+      window.dispatchEvent(new Event('libreta_data_updated'));
+    }
+  } catch (err) {
+    console.warn('Sync from Supabase fallback:', err);
   }
 }

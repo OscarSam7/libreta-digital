@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Customer, Transaction, Tenant, TransactionType, PaymentMethod } from '@/types';
-import { getStoredData, saveCustomers, saveTransactions, saveTenant } from '@/lib/storage';
+import { getStoredData, saveCustomers, saveTransactions, saveTenant, syncFromSupabase } from '@/lib/storage';
 import { executeLedgerTransaction, certifyTransactionWithPin } from '@/lib/ledger';
 import { exportTransactionsToCSV, generateWhatsAppReminderUrl } from '@/lib/reports';
 import { CustomerQRModal } from '@/components/CustomerQRModal';
@@ -132,6 +132,7 @@ export function MerchantDashboard() {
 
   useEffect(() => {
     loadData();
+    syncFromSupabase();
     const handleUpdate = () => loadData();
     window.addEventListener('libreta_data_updated', handleUpdate);
     window.addEventListener('storage', handleUpdate);

@@ -1,11 +1,11 @@
 import { Suspense } from 'react';
-import CustomerQRPortal from '@/components/CustomerQRPortal';
+import { CustomerPortalView } from '@/components/CustomerPortalView';
 
 export const dynamic = 'force-dynamic';
 
 async function PortalContent({ params }: { params: Promise<{ token: string }> }) {
   const resolvedParams = await params;
-  return <CustomerQRPortal qrToken={resolvedParams.token} />;
+  return <CustomerPortalView token={resolvedParams.token} />;
 }
 
 export default function Page({ params }: { params: Promise<{ token: string }> }) {
