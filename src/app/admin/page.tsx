@@ -32,7 +32,9 @@ import {
   Clock,
   CalendarDays,
   Sun,
-  Moon
+  Moon,
+  Eye,
+  EyeOff
 } from 'lucide-react';
 import { Tenant } from '@/types';
 import { getStoredData, saveTenant, loginDemoDonMario } from '@/lib/storage';
@@ -52,6 +54,7 @@ export default function SuperAdminPage() {
   // Login de Super Admin
   const [adminEmail, setAdminEmail] = useState('');
   const [adminPassword, setAdminPassword] = useState('');
+  const [showAdminPassword, setShowAdminPassword] = useState(false);
   const [authLoading, setAuthLoading] = useState(false);
   const [authError, setAuthError] = useState('');
 
@@ -59,6 +62,8 @@ export default function SuperAdminPage() {
   const [newAdminEmail, setNewAdminEmail] = useState('');
   const [newAdminPassword, setNewAdminPassword] = useState('');
   const [newAdminConfirm, setNewAdminConfirm] = useState('');
+  const [showNewAdminPassword, setShowNewAdminPassword] = useState(false);
+  const [showNewAdminConfirm, setShowNewAdminConfirm] = useState(false);
 
   // Usuario autenticado
   const [currentAdminUser, setCurrentAdminUser] = useState<{ email: string } | null>(null);
@@ -67,6 +72,8 @@ export default function SuperAdminPage() {
   const [showChangePasswordModal, setShowChangePasswordModal] = useState(false);
   const [newPasswordInput, setNewPasswordInput] = useState('');
   const [confirmNewPasswordInput, setConfirmNewPasswordInput] = useState('');
+  const [showModalNewPassword, setShowModalNewPassword] = useState(false);
+  const [showModalConfirmPassword, setShowModalConfirmPassword] = useState(false);
   const [changePassLoading, setChangePassLoading] = useState(false);
   const [changePassMsg, setChangePassMsg] = useState('');
   const [changePassError, setChangePassError] = useState('');
@@ -655,14 +662,24 @@ export default function SuperAdminPage() {
                 <label className="block text-[11px] font-bold uppercase text-slate-300 mb-1 flex items-center gap-1.5">
                   <Lock className="w-3.5 h-3.5 text-indigo-400" /> Tu Contraseña Privada
                 </label>
-                <input
-                  type="password"
-                  required
-                  placeholder="Tu contraseña personal"
-                  value={adminPassword}
-                  onChange={(e) => setAdminPassword(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-indigo-500 transition font-semibold"
-                />
+                <div className="relative">
+                  <input
+                    type={showAdminPassword ? "text" : "password"}
+                    required
+                    placeholder="Tu contraseña personal"
+                    value={adminPassword}
+                    onChange={(e) => setAdminPassword(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-3.5 pr-10 py-2.5 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-indigo-500 transition font-semibold"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowAdminPassword(!showAdminPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white transition p-1 cursor-pointer"
+                    title={showAdminPassword ? "Ocultar contraseña" : "Ver contraseña"}
+                  >
+                    {showAdminPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
                 <div className="flex justify-end pt-1.5">
                   <Link
                     href="/recuperar-password"
@@ -703,28 +720,48 @@ export default function SuperAdminPage() {
                 <label className="block text-[11px] font-bold uppercase text-slate-300 mb-1 flex items-center gap-1.5">
                   <Lock className="w-3.5 h-3.5 text-indigo-400" /> Crea tu Contraseña Privada
                 </label>
-                <input
-                  type="password"
-                  required
-                  placeholder="Mínimo 6 caracteres"
-                  value={newAdminPassword}
-                  onChange={(e) => setNewAdminPassword(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-indigo-500 transition font-semibold"
-                />
+                <div className="relative">
+                  <input
+                    type={showNewAdminPassword ? "text" : "password"}
+                    required
+                    placeholder="Mínimo 6 caracteres"
+                    value={newAdminPassword}
+                    onChange={(e) => setNewAdminPassword(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-3.5 pr-10 py-2.5 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-indigo-500 transition font-semibold"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowNewAdminPassword(!showNewAdminPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white transition p-1 cursor-pointer"
+                    title={showNewAdminPassword ? "Ocultar contraseña" : "Ver contraseña"}
+                  >
+                    {showNewAdminPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
               </div>
 
               <div>
                 <label className="block text-[11px] font-bold uppercase text-slate-300 mb-1 flex items-center gap-1.5">
                   <Lock className="w-3.5 h-3.5 text-indigo-400" /> Confirmar Contraseña
                 </label>
-                <input
-                  type="password"
-                  required
-                  placeholder="Repite tu contraseña"
-                  value={newAdminConfirm}
-                  onChange={(e) => setNewAdminConfirm(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-indigo-500 transition font-semibold"
-                />
+                <div className="relative">
+                  <input
+                    type={showNewAdminConfirm ? "text" : "password"}
+                    required
+                    placeholder="Repite tu contraseña"
+                    value={newAdminConfirm}
+                    onChange={(e) => setNewAdminConfirm(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-3.5 pr-10 py-2.5 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-indigo-500 transition font-semibold"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowNewAdminConfirm(!showNewAdminConfirm)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white transition p-1 cursor-pointer"
+                    title={showNewAdminConfirm ? "Ocultar contraseña" : "Ver contraseña"}
+                  >
+                    {showNewAdminConfirm ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
               </div>
 
               <button
@@ -1164,32 +1201,52 @@ export default function SuperAdminPage() {
                   <label className={`text-xs font-bold mb-1 block ${isLight ? 'text-slate-700' : 'text-slate-300'}`}>
                     Nueva Contraseña Privada
                   </label>
-                  <input
-                    type="password"
-                    required
-                    placeholder="Mínimo 6 caracteres"
-                    value={newPasswordInput}
-                    onChange={(e) => setNewPasswordInput(e.target.value)}
-                    className={`w-full px-3 py-2 rounded-xl text-xs focus:outline-none focus:border-indigo-500 border ${
-                      isLight ? 'bg-slate-50 border-slate-300 text-slate-900' : 'bg-slate-950 border-slate-800 text-white'
-                    }`}
-                  />
+                  <div className="relative">
+                    <input
+                      type={showModalNewPassword ? "text" : "password"}
+                      required
+                      placeholder="Mínimo 6 caracteres"
+                      value={newPasswordInput}
+                      onChange={(e) => setNewPasswordInput(e.target.value)}
+                      className={`w-full pl-3 pr-10 py-2 rounded-xl text-xs focus:outline-none focus:border-indigo-500 border ${
+                        isLight ? 'bg-slate-50 border-slate-300 text-slate-900' : 'bg-slate-950 border-slate-800 text-white'
+                      }`}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowModalNewPassword(!showModalNewPassword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white transition p-1 cursor-pointer"
+                      title={showModalNewPassword ? "Ocultar contraseña" : "Ver contraseña"}
+                    >
+                      {showModalNewPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
                 </div>
 
                 <div>
                   <label className={`text-xs font-bold mb-1 block ${isLight ? 'text-slate-700' : 'text-slate-300'}`}>
                     Confirmar Nueva Contraseña
                   </label>
-                  <input
-                    type="password"
-                    required
-                    placeholder="Repite tu nueva contraseña"
-                    value={confirmNewPasswordInput}
-                    onChange={(e) => setConfirmNewPasswordInput(e.target.value)}
-                    className={`w-full px-3 py-2 rounded-xl text-xs focus:outline-none focus:border-indigo-500 border ${
-                      isLight ? 'bg-slate-50 border-slate-300 text-slate-900' : 'bg-slate-950 border-slate-800 text-white'
-                    }`}
-                  />
+                  <div className="relative">
+                    <input
+                      type={showModalConfirmPassword ? "text" : "password"}
+                      required
+                      placeholder="Repite tu nueva contraseña"
+                      value={confirmNewPasswordInput}
+                      onChange={(e) => setConfirmNewPasswordInput(e.target.value)}
+                      className={`w-full pl-3 pr-10 py-2 rounded-xl text-xs focus:outline-none focus:border-indigo-500 border ${
+                        isLight ? 'bg-slate-50 border-slate-300 text-slate-900' : 'bg-slate-950 border-slate-800 text-white'
+                      }`}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowModalConfirmPassword(!showModalConfirmPassword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white transition p-1 cursor-pointer"
+                      title={showModalConfirmPassword ? "Ocultar contraseña" : "Ver contraseña"}
+                    >
+                      {showModalConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
                 </div>
 
                 <div className="flex gap-2 pt-2">

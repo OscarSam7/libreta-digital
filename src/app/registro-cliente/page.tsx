@@ -16,7 +16,9 @@ import {
   MapPin,
   Check,
   HelpCircle,
-  ExternalLink
+  ExternalLink,
+  Eye,
+  EyeOff
 } from 'lucide-react';
 import { Tenant } from '@/types';
 import { getStoredData, saveCustomers } from '@/lib/storage';
@@ -42,6 +44,8 @@ function ClientRegisterContent() {
   const [address, setAddress] = useState('');
   const [securityPin, setSecurityPin] = useState('');
   const [confirmPin, setConfirmPin] = useState('');
+  const [showPin, setShowPin] = useState(false);
+  const [showConfirmPin, setShowConfirmPin] = useState(false);
 
   // Términos y condiciones
   const [termsAccepted, setTermsAccepted] = useState(false);
@@ -358,11 +362,21 @@ function ClientRegisterContent() {
 
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-[10px] font-bold uppercase text-slate-400 mb-1">
-                      PIN (4 números)
-                    </label>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="text-[10px] font-bold uppercase text-slate-400">
+                        PIN (4 números)
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => setShowPin(!showPin)}
+                        className="text-slate-400 hover:text-white transition cursor-pointer"
+                        title={showPin ? "Ocultar PIN" : "Ver PIN"}
+                      >
+                        {showPin ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                      </button>
+                    </div>
                     <input
-                      type="password"
+                      type={showPin ? "text" : "password"}
                       maxLength={4}
                       inputMode="numeric"
                       required
@@ -374,11 +388,21 @@ function ClientRegisterContent() {
                   </div>
 
                   <div>
-                    <label className="block text-[10px] font-bold uppercase text-slate-400 mb-1">
-                      Confirmar PIN
-                    </label>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="text-[10px] font-bold uppercase text-slate-400">
+                        Confirmar PIN
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => setShowConfirmPin(!showConfirmPin)}
+                        className="text-slate-400 hover:text-white transition cursor-pointer"
+                        title={showConfirmPin ? "Ocultar PIN" : "Ver PIN"}
+                      >
+                        {showConfirmPin ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                      </button>
+                    </div>
                     <input
-                      type="password"
+                      type={showConfirmPin ? "text" : "password"}
                       maxLength={4}
                       inputMode="numeric"
                       required

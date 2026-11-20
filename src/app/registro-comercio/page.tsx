@@ -23,7 +23,9 @@ import {
   Send,
   HelpCircle,
   TrendingUp,
-  ReceiptText
+  ReceiptText,
+  Eye,
+  EyeOff
 } from 'lucide-react';
 import { Tenant, StaffMember } from '@/types';
 import { saveTenant, saveStaff, setCurrentOperator, getStoredData, setMerchantLoggedIn, loginDemoDonMario, isSuperAdminLoggedIn } from '@/lib/storage';
@@ -54,11 +56,14 @@ function MerchantRegisterContent() {
   const [currencyCode, setCurrencyCode] = useState('PYG');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [ownerPin, setOwnerPin] = useState('1234');
+  const [showOwnerPin, setShowOwnerPin] = useState(false);
 
   // Formulario de Login
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
+  const [showLoginPassword, setShowLoginPassword] = useState(false);
 
   // Estados de proceso
   const [submitting, setSubmitting] = useState(false);
@@ -554,13 +559,21 @@ function MerchantRegisterContent() {
                     <div className="relative">
                       <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
                       <input
-                        type="password"
+                        type={showPassword ? "text" : "password"}
                         required
                         placeholder="Mínimo 6 caracteres"
                         value={password}
                         onChange={(e) => setPassword(e.target.value)}
-                        className="w-full pl-10 pr-3 py-2.5 bg-slate-950/70 border border-slate-800 rounded-xl text-white text-xs font-semibold focus:outline-none focus:border-blue-500 transition"
+                        className="w-full pl-10 pr-10 py-2.5 bg-slate-950/70 border border-slate-800 rounded-xl text-white text-xs font-semibold focus:outline-none focus:border-blue-500 transition"
                       />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword(!showPassword)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white transition p-1 cursor-pointer"
+                        title={showPassword ? "Ocultar contraseña" : "Ver contraseña"}
+                      >
+                        {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
                     </div>
                   </div>
                 </div>
@@ -576,15 +589,25 @@ function MerchantRegisterContent() {
                   <p className="text-[11px] text-slate-400 mb-2">
                     Para que atiendas en el mostrador sin tener que teclear tu contraseña completa en cada venta.
                   </p>
-                  <input
-                    type="password"
-                    maxLength={4}
-                    required
-                    placeholder="1234"
-                    value={ownerPin}
-                    onChange={(e) => setOwnerPin(e.target.value.replace(/\D/g, '').slice(0, 4))}
-                    className="w-36 px-3 py-2 bg-slate-900 border border-slate-700 text-emerald-400 font-mono font-bold text-center tracking-widest text-base rounded-xl focus:outline-none focus:border-emerald-500"
-                  />
+                  <div className="relative inline-block">
+                    <input
+                      type={showOwnerPin ? "text" : "password"}
+                      maxLength={4}
+                      required
+                      placeholder="1234"
+                      value={ownerPin}
+                      onChange={(e) => setOwnerPin(e.target.value.replace(/\D/g, '').slice(0, 4))}
+                      className="w-36 pl-3 pr-9 py-2 bg-slate-900 border border-slate-700 text-emerald-400 font-mono font-bold text-center tracking-widest text-base rounded-xl focus:outline-none focus:border-emerald-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowOwnerPin(!showOwnerPin)}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white transition p-1 cursor-pointer"
+                      title={showOwnerPin ? "Ocultar PIN" : "Ver PIN"}
+                    >
+                      {showOwnerPin ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                    </button>
+                  </div>
                 </div>
 
                 {/* BOTÓN DE ENVÍO */}
@@ -658,13 +681,21 @@ function MerchantRegisterContent() {
                   <div className="relative">
                     <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
                     <input
-                      type="password"
+                      type={showLoginPassword ? "text" : "password"}
                       required
                       placeholder="Tu contraseña"
                       value={loginPassword}
                       onChange={(e) => setLoginPassword(e.target.value)}
-                      className="w-full pl-10 pr-3 py-2.5 bg-slate-950/70 border border-slate-800 rounded-xl text-white text-xs font-semibold focus:outline-none focus:border-blue-500 transition"
+                      className="w-full pl-10 pr-10 py-2.5 bg-slate-950/70 border border-slate-800 rounded-xl text-white text-xs font-semibold focus:outline-none focus:border-blue-500 transition"
                     />
+                    <button
+                      type="button"
+                      onClick={() => setShowLoginPassword(!showLoginPassword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white transition p-1 cursor-pointer"
+                      title={showLoginPassword ? "Ocultar contraseña" : "Ver contraseña"}
+                    >
+                      {showLoginPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
                   </div>
                   <div className="flex justify-end pt-1.5">
                     <Link
