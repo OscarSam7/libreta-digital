@@ -30,7 +30,9 @@ import {
   Check,
   Settings,
   Clock,
-  CalendarDays
+  CalendarDays,
+  Sun,
+  Moon
 } from 'lucide-react';
 import { Tenant } from '@/types';
 import { getStoredData, saveTenant } from '@/lib/storage';
@@ -90,6 +92,22 @@ export default function SuperAdminPage() {
   const [licenseAdminNote, setLicenseAdminNote] = useState<string>('');
   const [savingLicense, setSavingLicense] = useState(false);
   const [licenseSuccessMsg, setLicenseSuccessMsg] = useState('');
+
+  // Tema Blanco (Light) vs Tema Oscuro (Dark)
+  const [adminTheme, setAdminTheme] = useState<'light' | 'dark'>('light');
+
+  useEffect(() => {
+    const saved = localStorage.getItem('libreta_admin_theme') as 'light' | 'dark' | null;
+    if (saved) {
+      setAdminTheme(saved);
+    }
+  }, []);
+
+  const toggleAdminTheme = () => {
+    const next = adminTheme === 'light' ? 'dark' : 'light';
+    setAdminTheme(next);
+    localStorage.setItem('libreta_admin_theme', next);
+  };
 
   // Comprobar sesión de Super Admin existente
   useEffect(() => {
@@ -509,9 +527,43 @@ export default function SuperAdminPage() {
 
   // SI NO ESTÁ AUTENTICADO: LOGIN PRIVADO DE SUPER ADMIN (CORREO + CONTRASEÑA PROPIA)
   if (!isAuthenticated) {
+    const isLight = adminTheme === 'light';
+
     return (
-      <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col justify-center items-center p-4 selection:bg-indigo-600 selection:text-white">
-        <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-8 shadow-2xl space-y-6">
+      <div
+        className={`min-h-screen flex flex-col justify-center items-center p-4 selection:bg-indigo-600 selection:text-white transition-colors duration-200 ${
+          isLight ? 'bg-slate-100 text-slate-800' : 'bg-slate-950 text-slate-100'
+        }`}
+      >
+        <div
+          className={`w-full max-w-md rounded-3xl p-6 sm:p-8 shadow-2xl space-y-6 border transition-colors ${
+            isLight ? 'bg-white border-slate-200 shadow-slate-200/80' : 'bg-slate-900 border-slate-800 shadow-2xl'
+          }`}
+        >
+          {/* BOTÓN FLOTANTE CAMBIO DE TEMA Y VOLVER */}
+          <div className="flex justify-between items-center">
+            <Link
+              href="/"
+              className={`text-xs font-bold transition flex items-center gap-1 ${
+                isLight ? 'text-indigo-600 hover:text-indigo-800' : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              ← Ir a la Tienda (POS)
+            </Link>
+
+            <button
+              onClick={toggleAdminTheme}
+              className={`text-xs font-bold px-2.5 py-1 rounded-xl border flex items-center gap-1.5 transition cursor-pointer ${
+                isLight
+                  ? 'bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-300'
+                  : 'bg-slate-950 hover:bg-slate-800 text-slate-300 border-slate-700'
+              }`}
+            >
+              {isLight ? <Moon className="w-3.5 h-3.5 text-indigo-600" /> : <Sun className="w-3.5 h-3.5 text-amber-400" />}
+              <span>{isLight ? 'Tema Oscuro' : 'Tema Blanco'}</span>
+            </button>
+          </div>
+
           <div className="text-center space-y-2">
             <div className="w-16 h-16 bg-indigo-500/10 border border-indigo-500/30 text-indigo-400 rounded-3xl flex items-center justify-center mx-auto shadow-lg shadow-indigo-950">
               <ShieldCheck className="w-9 h-9" />
@@ -678,46 +730,94 @@ export default function SuperAdminPage() {
   }
 
   // DASHBOARD DE SUPER ADMIN AUTENTICADO
+  const isLight = adminTheme === 'light';
+
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 p-4 sm:p-8">
+    <div
+      className={`min-h-screen p-4 sm:p-8 transition-colors duration-200 ${
+        isLight ? 'bg-slate-100 text-slate-800' : 'bg-slate-950 text-slate-100'
+      }`}
+    >
       <div className="max-w-7xl mx-auto space-y-6">
         {/* HEADER SUPER ADMIN */}
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-slate-900 border border-slate-800 p-6 rounded-3xl shadow-xl">
+        <div
+          className={`flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 p-6 rounded-3xl border transition-colors ${
+            isLight ? 'bg-white border-slate-200 shadow-sm' : 'bg-slate-900 border-slate-800 shadow-xl'
+          }`}
+        >
           <div className="flex items-center gap-4">
-            <BrandLogo size="lg" theme="dark" />
-            <div className="h-8 w-px bg-slate-800 hidden sm:block" />
+            <BrandLogo size="lg" theme={adminTheme} />
+            <div className={`h-8 w-px hidden sm:block ${isLight ? 'bg-slate-200' : 'bg-slate-800'}`} />
             <div>
               <div className="flex items-center gap-2">
-                <h1 className="text-lg font-bold text-white">Super Admin — Plataforma</h1>
-                <span className="px-2.5 py-0.5 bg-indigo-500/20 text-indigo-400 border border-indigo-500/30 text-[10px] font-bold rounded-full uppercase">
+                <h1 className={`text-lg font-bold ${isLight ? 'text-slate-900' : 'text-white'}`}>
+                  Super Admin — Plataforma
+                </h1>
+                <span className="px-2.5 py-0.5 bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 border border-indigo-500/30 text-[10px] font-bold rounded-full uppercase">
                   Acceso Maestro
                 </span>
               </div>
-              <p className="text-xs text-slate-400 mt-0.5">
-                Sesión activa: <b className="text-indigo-300">{currentAdminUser?.email || 'admin@libretadigital.com'}</b>
+              <p className={`text-xs mt-0.5 ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
+                Sesión activa: <b className="text-indigo-600 dark:text-indigo-300">{currentAdminUser?.email || 'admin@libretadigital.com'}</b>
               </p>
             </div>
           </div>
 
           <div className="flex items-center gap-2 flex-wrap">
+            {/* TOGGLE TEMA BLANCO / OSCURO */}
+            <button
+              onClick={toggleAdminTheme}
+              className={`py-2 px-3 rounded-xl text-xs font-bold flex items-center gap-1.5 border transition cursor-pointer ${
+                isLight
+                  ? 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-300'
+                  : 'bg-slate-800 hover:bg-slate-700 text-slate-300 border-slate-700'
+              }`}
+              title="Cambiar entre Tema Blanco y Tema Oscuro"
+            >
+              {isLight ? <Moon className="w-3.5 h-3.5 text-indigo-600" /> : <Sun className="w-3.5 h-3.5 text-amber-400" />}
+              <span>{isLight ? 'Tema Oscuro' : 'Tema Blanco'}</span>
+            </button>
+
+            {/* ACCESO A ALMACÉN DON MARIO */}
+            <Link
+              href="/"
+              className={`py-2 px-3 border font-bold rounded-xl text-xs flex items-center gap-1.5 transition ${
+                isLight
+                  ? 'bg-blue-50 hover:bg-blue-100 text-blue-700 border-blue-200'
+                  : 'bg-blue-950/70 hover:bg-blue-900 text-blue-300 border-blue-800/60'
+              }`}
+              title="Abrir la Terminal POS de Almacén Don Mario"
+            >
+              <Store className="w-3.5 h-3.5 text-blue-500" />
+              <span>Ver POS Don Mario</span>
+            </Link>
+
             <button
               onClick={() => setShowCreateModal(true)}
-              className="py-2.5 px-3.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl text-xs flex items-center gap-1.5 shadow-lg shadow-indigo-950 transition"
+              className="py-2.5 px-3.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl text-xs flex items-center gap-1.5 shadow-md shadow-indigo-600/30 transition cursor-pointer"
             >
               <Plus className="w-4 h-4" /> Registrar Almacén
             </button>
 
             <button
               onClick={() => setShowChangePasswordModal(true)}
-              className="py-2.5 px-3.5 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white font-bold rounded-xl text-xs flex items-center gap-1.5 transition"
+              className={`py-2.5 px-3.5 rounded-xl text-xs font-bold flex items-center gap-1.5 border transition cursor-pointer ${
+                isLight
+                  ? 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-300'
+                  : 'bg-slate-800 hover:bg-slate-700 text-slate-300 border-slate-700'
+              }`}
               title="Cambiar mi contraseña de Super Admin"
             >
-              <KeyRound className="w-3.5 h-3.5 text-amber-400" /> Cambiar Contraseña
+              <KeyRound className="w-3.5 h-3.5 text-amber-500" /> Cambiar Contraseña
             </button>
 
             <button
               onClick={loadAdminData}
-              className="p-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl transition"
+              className={`p-2.5 rounded-xl transition border cursor-pointer ${
+                isLight
+                  ? 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-300'
+                  : 'bg-slate-800 hover:bg-slate-700 text-slate-300 border-slate-700'
+              }`}
               title="Recargar datos"
             >
               <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
@@ -725,7 +825,11 @@ export default function SuperAdminPage() {
 
             <button
               onClick={handleLogoutAdmin}
-              className="py-2.5 px-3 bg-rose-950/80 hover:bg-rose-900 border border-rose-800/60 text-rose-300 font-bold rounded-xl text-xs flex items-center gap-1 transition"
+              className={`py-2.5 px-3 border text-xs font-bold rounded-xl flex items-center gap-1 transition cursor-pointer ${
+                isLight
+                  ? 'bg-rose-50 hover:bg-rose-100 text-rose-700 border-rose-200'
+                  : 'bg-rose-950/80 hover:bg-rose-900 text-rose-300 border-rose-800/60'
+              }`}
               title="Cerrar sesión de Super Admin"
             >
               <LogOut className="w-3.5 h-3.5" /> Salir
@@ -735,81 +839,113 @@ export default function SuperAdminPage() {
 
         {/* MÉTRICAS GLOBALES */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-          <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl">
-            <span className="text-[10px] font-bold uppercase text-slate-400 block mb-1">
+          <div
+            className={`p-5 rounded-2xl border transition-colors ${
+              isLight ? 'bg-white border-slate-200 shadow-sm' : 'bg-slate-900 border-slate-800'
+            }`}
+          >
+            <span className={`text-[10px] font-bold uppercase block mb-1 ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
               Comercios Totales
             </span>
-            <div className="text-3xl font-black text-white">{tenants.length}</div>
-            <span className="text-[11px] text-emerald-400 font-medium flex items-center gap-1 mt-1">
+            <div className={`text-3xl font-black ${isLight ? 'text-slate-900' : 'text-white'}`}>{tenants.length}</div>
+            <span className="text-[11px] text-emerald-500 font-medium flex items-center gap-1 mt-1">
               <Store className="w-3 h-3" /> En plataforma
             </span>
           </div>
 
-          <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl">
-            <span className="text-[10px] font-bold uppercase text-slate-400 block mb-1">
+          <div
+            className={`p-5 rounded-2xl border transition-colors ${
+              isLight ? 'bg-white border-slate-200 shadow-sm' : 'bg-slate-900 border-slate-800'
+            }`}
+          >
+            <span className={`text-[10px] font-bold uppercase block mb-1 ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
               Suscripciones Activas
             </span>
-            <div className="text-3xl font-black text-emerald-400">
+            <div className="text-3xl font-black text-emerald-500">
               {tenants.filter((t) => t.sub_status === 'active').length}
             </div>
-            <span className="text-[11px] text-slate-400 font-medium flex items-center gap-1 mt-1">
-              <CheckCircle2 className="w-3 h-3 text-emerald-400" /> Al día con plan
+            <span className={`text-[11px] font-medium flex items-center gap-1 mt-1 ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
+              <CheckCircle2 className="w-3 h-3 text-emerald-500" /> Al día con plan
             </span>
           </div>
 
-          <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl">
-            <span className="text-[10px] font-bold uppercase text-slate-400 block mb-1">
+          <div
+            className={`p-5 rounded-2xl border transition-colors ${
+              isLight ? 'bg-white border-slate-200 shadow-sm' : 'bg-slate-900 border-slate-800'
+            }`}
+          >
+            <span className={`text-[10px] font-bold uppercase block mb-1 ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
               En Periodo de Prueba
             </span>
-            <div className="text-3xl font-black text-blue-400">
+            <div className="text-3xl font-black text-blue-500">
               {tenants.filter((t) => t.sub_status === 'trialing').length}
             </div>
-            <span className="text-[11px] text-slate-400 font-medium flex items-center gap-1 mt-1">
-              <Calendar className="w-3 h-3 text-blue-400" /> 14 días gratis
+            <span className={`text-[11px] font-medium flex items-center gap-1 mt-1 ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
+              <Calendar className="w-3 h-3 text-blue-500" /> 14 días gratis
             </span>
           </div>
 
-          <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl">
-            <span className="text-[10px] font-bold uppercase text-slate-400 block mb-1">
+          <div
+            className={`p-5 rounded-2xl border transition-colors ${
+              isLight ? 'bg-white border-slate-200 shadow-sm' : 'bg-slate-900 border-slate-800'
+            }`}
+          >
+            <span className={`text-[10px] font-bold uppercase block mb-1 ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
               Vencidos / Morosos
             </span>
-            <div className="text-3xl font-black text-rose-400">
+            <div className="text-3xl font-black text-rose-500">
               {tenants.filter((t) => t.sub_status === 'past_due' || t.sub_status === 'canceled').length}
             </div>
-            <span className="text-[11px] text-rose-400 font-medium flex items-center gap-1 mt-1">
+            <span className="text-[11px] text-rose-500 font-medium flex items-center gap-1 mt-1">
               <AlertTriangle className="w-3 h-3" /> Requieren cobro
             </span>
           </div>
         </div>
 
         {/* TABLA DE ALMACENES */}
-        <div className="bg-slate-900 border border-slate-800 rounded-3xl overflow-hidden shadow-xl">
-          <div className="p-6 border-b border-slate-800 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div
+          className={`rounded-3xl overflow-hidden border transition-colors ${
+            isLight ? 'bg-white border-slate-200 shadow-sm' : 'bg-slate-900 border-slate-800 shadow-xl'
+          }`}
+        >
+          <div
+            className={`p-6 border-b flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 ${
+              isLight ? 'border-slate-200' : 'border-slate-800'
+            }`}
+          >
             <div>
-              <h2 className="text-base font-bold text-white flex items-center gap-2">
-                <Store className="w-4 h-4 text-indigo-400" /> Gestión de Comercios y Licencias
+              <h2 className={`text-base font-bold flex items-center gap-2 ${isLight ? 'text-slate-900' : 'text-white'}`}>
+                <Store className="w-4 h-4 text-indigo-500" /> Gestión de Comercios y Licencias
               </h2>
-              <p className="text-xs text-slate-400">
+              <p className={`text-xs ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
                 Administra los almacenes registrados, activa sus licencias o bloquea por falta de pago
               </p>
             </div>
 
             <div className="flex items-center gap-3 w-full sm:w-auto">
               <div className="relative flex-1 sm:w-64">
-                <Search className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
+                <Search className={`w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 ${isLight ? 'text-slate-400' : 'text-slate-500'}`} />
                 <input
                   type="text"
                   placeholder="Buscar almacén, RUC, teléfono..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full pl-9 pr-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
+                  className={`w-full pl-9 pr-3 py-2 rounded-xl text-xs focus:outline-none focus:border-indigo-500 border ${
+                    isLight
+                      ? 'bg-slate-50 border-slate-300 text-slate-900 placeholder-slate-400'
+                      : 'bg-slate-950 border-slate-800 text-white placeholder-slate-500'
+                  }`}
                 />
               </div>
 
               <select
                 value={statusFilter}
                 onChange={(e: any) => setStatusFilter(e.target.value)}
-                className="bg-slate-950 border border-slate-800 text-xs text-slate-300 font-bold py-2 px-3 rounded-xl focus:outline-none"
+                className={`text-xs font-bold py-2 px-3 rounded-xl focus:outline-none border ${
+                  isLight
+                    ? 'bg-slate-50 border-slate-300 text-slate-700'
+                    : 'bg-slate-950 border-slate-800 text-slate-300'
+                }`}
               >
                 <option value="ALL">Todos los Estados</option>
                 <option value="ACTIVE">Activos</option>
@@ -820,8 +956,12 @@ export default function SuperAdminPage() {
           </div>
 
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs text-slate-300">
-              <thead className="bg-slate-950/60 text-slate-400 uppercase text-[10px] tracking-wider border-b border-slate-800">
+            <table className={`w-full text-left text-xs ${isLight ? 'text-slate-700' : 'text-slate-300'}`}>
+              <thead
+                className={`uppercase text-[10px] tracking-wider border-b ${
+                  isLight ? 'bg-slate-50 text-slate-500 border-slate-200' : 'bg-slate-950/60 text-slate-400 border-slate-800'
+                }`}
+              >
                 <tr>
                   <th className="py-3 px-4">Comercio</th>
                   <th className="py-3 px-4">Contacto / RUC</th>
@@ -832,60 +972,73 @@ export default function SuperAdminPage() {
                   <th className="py-3 px-4 text-right">Acciones</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-800/60">
+              <tbody className={`divide-y ${isLight ? 'divide-slate-200' : 'divide-slate-800/60'}`}>
                 {filteredTenants.map((t) => {
                   const isTrial = t.sub_status === 'trialing';
                   const isActive = t.sub_status === 'active';
                   const isPastDue = t.sub_status === 'past_due' || t.sub_status === 'canceled';
 
                   return (
-                    <tr key={t.id} className="hover:bg-slate-800/40 transition">
-                      <td className="py-3.5 px-4 font-bold text-white">
+                    <tr
+                      key={t.id}
+                      className={`transition ${isLight ? 'hover:bg-slate-50' : 'hover:bg-slate-800/40'}`}
+                    >
+                      <td className={`py-3.5 px-4 font-bold ${isLight ? 'text-slate-900' : 'text-white'}`}>
                         <div className="flex items-center gap-2">
-                          <div className="w-7 h-7 rounded-lg bg-indigo-500/20 text-indigo-400 flex items-center justify-center text-xs font-black">
+                          <div className="w-7 h-7 rounded-lg bg-indigo-500/20 text-indigo-500 dark:text-indigo-400 flex items-center justify-center text-xs font-black">
                             {t.business_name.charAt(0)}
                           </div>
                           <div>
                             <span className="block">{t.business_name}</span>
-                            <span className="text-[10px] text-slate-500">{t.address || 'Central'}</span>
+                            <span className={`text-[10px] ${isLight ? 'text-slate-500' : 'text-slate-500'}`}>
+                              {t.address || 'Central'}
+                            </span>
                           </div>
                         </div>
                       </td>
 
-                      <td className="py-3.5 px-4 font-mono text-[11px] text-slate-400">
+                      <td className={`py-3.5 px-4 font-mono text-[11px] ${isLight ? 'text-slate-600' : 'text-slate-400'}`}>
                         <div>{t.phone}</div>
-                        <div className="text-[10px] text-slate-500">RUC: {t.tax_id || 'Sin RUC'}</div>
+                        <div className={`text-[10px] ${isLight ? 'text-slate-400' : 'text-slate-500'}`}>
+                          RUC: {t.tax_id || 'Sin RUC'}
+                        </div>
                       </td>
 
-                      <td className="py-3.5 px-4 font-bold text-slate-300">
+                      <td className={`py-3.5 px-4 font-bold ${isLight ? 'text-slate-800' : 'text-slate-300'}`}>
                         {t.currency_code} ({t.currency_symbol})
                       </td>
 
                       <td className="py-3.5 px-4">
-                        <span className="px-2 py-0.5 bg-slate-800 text-slate-300 text-[10px] font-bold rounded-md uppercase border border-slate-700">
+                        <span
+                          className={`px-2 py-0.5 text-[10px] font-bold rounded-md uppercase border ${
+                            isLight
+                              ? 'bg-slate-100 text-slate-700 border-slate-200'
+                              : 'bg-slate-800 text-slate-300 border-slate-700'
+                          }`}
+                        >
                           {t.subscription_plan}
                         </span>
                       </td>
 
                       <td className="py-3.5 px-4">
                         {isActive && (
-                          <span className="px-2.5 py-1 bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 text-[10px] font-bold rounded-full">
+                          <span className="px-2.5 py-1 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 text-[10px] font-bold rounded-full">
                             Activo
                           </span>
                         )}
                         {isTrial && (
-                          <span className="px-2.5 py-1 bg-blue-500/10 text-blue-400 border border-blue-500/30 text-[10px] font-bold rounded-full">
+                          <span className="px-2.5 py-1 bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/30 text-[10px] font-bold rounded-full">
                             Prueba (Trial)
                           </span>
                         )}
                         {isPastDue && (
-                          <span className="px-2.5 py-1 bg-rose-500/10 text-rose-400 border border-rose-500/30 text-[10px] font-bold rounded-full">
+                          <span className="px-2.5 py-1 bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/30 text-[10px] font-bold rounded-full">
                             Vencido
                           </span>
                         )}
                       </td>
 
-                      <td className="py-3.5 px-4 font-mono text-[11px] text-slate-400">
+                      <td className={`py-3.5 px-4 font-mono text-[11px] ${isLight ? 'text-slate-600' : 'text-slate-400'}`}>
                         {t.subscription_ends_at
                           ? new Date(t.subscription_ends_at).toLocaleDateString('es-PY')
                           : new Date(t.trial_ends_at).toLocaleDateString('es-PY')}
@@ -895,10 +1048,14 @@ export default function SuperAdminPage() {
                         <div className="flex items-center justify-end gap-1.5">
                           <button
                             onClick={() => openEditLicenseModal(t)}
-                            className="px-2.5 py-1 bg-indigo-500/20 hover:bg-indigo-600 text-indigo-300 hover:text-white border border-indigo-500/40 text-[10px] font-bold rounded-lg transition flex items-center gap-1 cursor-pointer"
+                            className={`px-2.5 py-1 border text-[10px] font-bold rounded-lg transition flex items-center gap-1 cursor-pointer ${
+                              isLight
+                                ? 'bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border-indigo-200'
+                                : 'bg-indigo-500/20 hover:bg-indigo-600 text-indigo-300 hover:text-white border-indigo-500/40'
+                            }`}
                             title="Cambiar Plan o Conceder Prórroga Temporal"
                           >
-                            <Settings className="w-3 h-3 text-indigo-400" />
+                            <Settings className="w-3 h-3 text-indigo-500" />
                             <span>Plan / Prórroga</span>
                           </button>
 
@@ -931,22 +1088,28 @@ export default function SuperAdminPage() {
 
         {/* MODAL CAMBIAR CONTRASEÑA DE SUPER ADMIN */}
         {showChangePasswordModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-fadeIn">
-            <div className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-md p-6 space-y-4 shadow-2xl relative">
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fadeIn">
+            <div
+              className={`rounded-3xl w-full max-w-md p-6 space-y-4 shadow-2xl relative border ${
+                isLight ? 'bg-white border-slate-200 text-slate-900' : 'bg-slate-900 border-slate-800 text-white'
+              }`}
+            >
               <button
                 onClick={() => setShowChangePasswordModal(false)}
-                className="w-8 h-8 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white flex items-center justify-center absolute top-4 right-4"
+                className={`w-8 h-8 rounded-full flex items-center justify-center absolute top-4 right-4 transition cursor-pointer ${
+                  isLight ? 'bg-slate-100 hover:bg-slate-200 text-slate-500' : 'bg-slate-800 hover:bg-slate-700 text-slate-400'
+                }`}
               >
                 <X className="w-4 h-4" />
               </button>
 
-              <div className="flex items-center gap-3 border-b border-slate-800 pb-3">
-                <div className="w-10 h-10 rounded-2xl bg-amber-500/20 text-amber-400 flex items-center justify-center">
+              <div className={`flex items-center gap-3 border-b pb-3 ${isLight ? 'border-slate-200' : 'border-slate-800'}`}>
+                <div className="w-10 h-10 rounded-2xl bg-amber-500/20 text-amber-500 flex items-center justify-center">
                   <KeyRound className="w-5 h-5" />
                 </div>
                 <div>
-                  <h3 className="text-base font-black text-white">Cambiar Mi Contraseña</h3>
-                  <p className="text-xs text-slate-400">Super Admin: {currentAdminUser?.email}</p>
+                  <h3 className={`text-base font-black ${isLight ? 'text-slate-900' : 'text-white'}`}>Cambiar Mi Contraseña</h3>
+                  <p className={`text-xs ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>Super Admin: {currentAdminUser?.email}</p>
                 </div>
               </div>
 
@@ -966,26 +1129,34 @@ export default function SuperAdminPage() {
 
               <form onSubmit={handleChangePassword} className="space-y-3 pt-1">
                 <div>
-                  <label className="text-xs font-bold text-slate-300 mb-1 block">Nueva Contraseña Privada</label>
+                  <label className={`text-xs font-bold mb-1 block ${isLight ? 'text-slate-700' : 'text-slate-300'}`}>
+                    Nueva Contraseña Privada
+                  </label>
                   <input
                     type="password"
                     required
                     placeholder="Mínimo 6 caracteres"
                     value={newPasswordInput}
                     onChange={(e) => setNewPasswordInput(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white focus:outline-none focus:border-indigo-500"
+                    className={`w-full px-3 py-2 rounded-xl text-xs focus:outline-none focus:border-indigo-500 border ${
+                      isLight ? 'bg-slate-50 border-slate-300 text-slate-900' : 'bg-slate-950 border-slate-800 text-white'
+                    }`}
                   />
                 </div>
 
                 <div>
-                  <label className="text-xs font-bold text-slate-300 mb-1 block">Confirmar Nueva Contraseña</label>
+                  <label className={`text-xs font-bold mb-1 block ${isLight ? 'text-slate-700' : 'text-slate-300'}`}>
+                    Confirmar Nueva Contraseña
+                  </label>
                   <input
                     type="password"
                     required
                     placeholder="Repite tu nueva contraseña"
                     value={confirmNewPasswordInput}
                     onChange={(e) => setConfirmNewPasswordInput(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white focus:outline-none focus:border-indigo-500"
+                    className={`w-full px-3 py-2 rounded-xl text-xs focus:outline-none focus:border-indigo-500 border ${
+                      isLight ? 'bg-slate-50 border-slate-300 text-slate-900' : 'bg-slate-950 border-slate-800 text-white'
+                    }`}
                   />
                 </div>
 
@@ -993,14 +1164,16 @@ export default function SuperAdminPage() {
                   <button
                     type="button"
                     onClick={() => setShowChangePasswordModal(false)}
-                    className="w-1/2 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold rounded-xl text-xs"
+                    className={`w-1/2 py-2.5 font-bold rounded-xl text-xs transition cursor-pointer ${
+                      isLight ? 'bg-slate-100 hover:bg-slate-200 text-slate-700' : 'bg-slate-800 hover:bg-slate-700 text-slate-300'
+                    }`}
                   >
                     Cancelar
                   </button>
                   <button
                     type="submit"
                     disabled={changePassLoading}
-                    className="w-1/2 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-1.5"
+                    className="w-1/2 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-1.5 cursor-pointer shadow-md"
                   >
                     <span>{changePassLoading ? 'Guardando...' : 'Actualizar Clave'}</span>
                   </button>
@@ -1012,80 +1185,108 @@ export default function SuperAdminPage() {
 
         {/* MODAL CREAR ALMACÉN MANUAL */}
         {showCreateModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-fadeIn">
-            <div className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-lg p-6 space-y-4 shadow-2xl relative">
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fadeIn">
+            <div
+              className={`rounded-3xl w-full max-w-lg p-6 space-y-4 shadow-2xl relative border ${
+                isLight ? 'bg-white border-slate-200 text-slate-900' : 'bg-slate-900 border-slate-800 text-white'
+              }`}
+            >
               <button
                 onClick={() => setShowCreateModal(false)}
-                className="w-8 h-8 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white flex items-center justify-center absolute top-4 right-4"
+                className={`w-8 h-8 rounded-full flex items-center justify-center absolute top-4 right-4 transition cursor-pointer ${
+                  isLight ? 'bg-slate-100 hover:bg-slate-200 text-slate-500' : 'bg-slate-800 hover:bg-slate-700 text-slate-400'
+                }`}
               >
                 <X className="w-4 h-4" />
               </button>
 
-              <div className="flex items-center gap-3 border-b border-slate-800 pb-3">
-                <div className="w-10 h-10 rounded-2xl bg-indigo-500/20 text-indigo-400 flex items-center justify-center">
+              <div className={`flex items-center gap-3 border-b pb-3 ${isLight ? 'border-slate-200' : 'border-slate-800'}`}>
+                <div className="w-10 h-10 rounded-2xl bg-indigo-500/20 text-indigo-500 flex items-center justify-center">
                   <Store className="w-5 h-5" />
                 </div>
                 <div>
-                  <h3 className="text-base font-black text-white">Alta Manual de Almacén</h3>
-                  <p className="text-xs text-slate-400">Registra un nuevo comercio con licencia activa</p>
+                  <h3 className={`text-base font-black ${isLight ? 'text-slate-900' : 'text-white'}`}>Alta Manual de Almacén</h3>
+                  <p className={`text-xs ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
+                    Registra un nuevo comercio con licencia activa
+                  </p>
                 </div>
               </div>
 
               <form onSubmit={handleCreateTenant} className="space-y-3 pt-1">
                 <div>
-                  <label className="text-xs font-bold text-slate-300 mb-1 block">Nombre del Comercio *</label>
+                  <label className={`text-xs font-bold mb-1 block ${isLight ? 'text-slate-700' : 'text-slate-300'}`}>
+                    Nombre del Comercio *
+                  </label>
                   <input
                     type="text"
                     required
                     placeholder="Ej. Autoservicio Don Mario"
                     value={newBizName}
                     onChange={(e) => setNewBizName(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white focus:outline-none focus:border-indigo-500"
+                    className={`w-full px-3 py-2 rounded-xl text-xs focus:outline-none focus:border-indigo-500 border ${
+                      isLight ? 'bg-slate-50 border-slate-300 text-slate-900' : 'bg-slate-950 border-slate-800 text-white'
+                    }`}
                   />
                 </div>
 
                 <div className="grid grid-cols-2 gap-2">
                   <div>
-                    <label className="text-xs font-bold text-slate-300 mb-1 block">Teléfono / WhatsApp *</label>
+                    <label className={`text-xs font-bold mb-1 block ${isLight ? 'text-slate-700' : 'text-slate-300'}`}>
+                      Teléfono / WhatsApp *
+                    </label>
                     <input
                       type="text"
                       required
                       placeholder="Ej. 0981123456"
                       value={newPhone}
                       onChange={(e) => setNewPhone(e.target.value)}
-                      className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white focus:outline-none focus:border-indigo-500"
+                      className={`w-full px-3 py-2 rounded-xl text-xs focus:outline-none focus:border-indigo-500 border ${
+                        isLight ? 'bg-slate-50 border-slate-300 text-slate-900' : 'bg-slate-950 border-slate-800 text-white'
+                      }`}
                     />
                   </div>
 
                   <div>
-                    <label className="text-xs font-bold text-slate-300 mb-1 block">RUC / Cédula</label>
+                    <label className={`text-xs font-bold mb-1 block ${isLight ? 'text-slate-700' : 'text-slate-300'}`}>
+                      RUC / Cédula
+                    </label>
                     <input
                       type="text"
                       placeholder="Ej. 80012345-6"
                       value={newTaxId}
                       onChange={(e) => setNewTaxId(e.target.value)}
-                      className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white focus:outline-none focus:border-indigo-500"
+                      className={`w-full px-3 py-2 rounded-xl text-xs focus:outline-none focus:border-indigo-500 border ${
+                        isLight ? 'bg-slate-50 border-slate-300 text-slate-900' : 'bg-slate-950 border-slate-800 text-white'
+                      }`}
                     />
                   </div>
                 </div>
 
                 <div>
-                  <label className="text-xs font-bold text-slate-300 mb-1 block">Dirección / Ubicación</label>
+                  <label className={`text-xs font-bold mb-1 block ${isLight ? 'text-slate-700' : 'text-slate-300'}`}>
+                    Dirección / Ubicación
+                  </label>
                   <input
                     type="text"
                     placeholder="Ej. Avda. Principal 1420"
                     value={newAddress}
                     onChange={(e) => setNewAddress(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white focus:outline-none focus:border-indigo-500"
+                    className={`w-full px-3 py-2 rounded-xl text-xs focus:outline-none focus:border-indigo-500 border ${
+                      isLight ? 'bg-slate-50 border-slate-300 text-slate-900' : 'bg-slate-950 border-slate-800 text-white'
+                    }`}
                   />
                 </div>
 
                 <div>
-                  <label className="text-xs font-bold text-slate-300 mb-1 block">Plan a Asignar</label>
+                  <label className={`text-xs font-bold mb-1 block ${isLight ? 'text-slate-700' : 'text-slate-300'}`}>
+                    Plan a Asignar
+                  </label>
                   <select
                     value={newPlan}
                     onChange={(e) => setNewPlan(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white font-bold focus:outline-none focus:border-indigo-500"
+                    className={`w-full px-3 py-2 rounded-xl text-xs font-bold focus:outline-none focus:border-indigo-500 border ${
+                      isLight ? 'bg-slate-50 border-slate-300 text-slate-800' : 'bg-slate-950 border-slate-800 text-white'
+                    }`}
                   >
                     <option value="pro_monthly">Plan Comercio PRO (Recomendado)</option>
                     <option value="vecinal_monthly">Plan Vecinal</option>
@@ -1097,14 +1298,16 @@ export default function SuperAdminPage() {
                   <button
                     type="button"
                     onClick={() => setShowCreateModal(false)}
-                    className="w-1/2 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold rounded-xl text-xs"
+                    className={`w-1/2 py-2.5 font-bold rounded-xl text-xs transition cursor-pointer ${
+                      isLight ? 'bg-slate-100 hover:bg-slate-200 text-slate-700' : 'bg-slate-800 hover:bg-slate-700 text-slate-300'
+                    }`}
                   >
                     Cancelar
                   </button>
                   <button
                     type="submit"
                     disabled={createLoading}
-                    className="w-1/2 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-1.5"
+                    className="w-1/2 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-1.5 cursor-pointer shadow-md"
                   >
                     <span>{createLoading ? 'Creando...' : 'Crear y Activar Licencia'}</span>
                   </button>
@@ -1113,32 +1316,41 @@ export default function SuperAdminPage() {
             </div>
           </div>
         )}
+
         {/* MODAL GESTIONAR LICENCIA Y PRÓRROGA TEMPORAL */}
         {editingLicenseTenant && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-sm animate-fadeIn">
-            <div className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-lg p-6 space-y-4 shadow-2xl relative">
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fadeIn">
+            <div
+              className={`rounded-3xl w-full max-w-lg p-6 space-y-4 shadow-2xl relative border ${
+                isLight ? 'bg-white border-slate-200 text-slate-900' : 'bg-slate-900 border-slate-800 text-white'
+              }`}
+            >
               <button
                 onClick={() => setEditingLicenseTenant(null)}
-                className="w-8 h-8 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white flex items-center justify-center absolute top-4 right-4"
+                className={`w-8 h-8 rounded-full flex items-center justify-center absolute top-4 right-4 transition cursor-pointer ${
+                  isLight ? 'bg-slate-100 hover:bg-slate-200 text-slate-500' : 'bg-slate-800 hover:bg-slate-700 text-slate-400'
+                }`}
               >
                 <X className="w-4 h-4" />
               </button>
 
-              <div className="flex items-center gap-3 border-b border-slate-800 pb-3">
-                <div className="w-10 h-10 rounded-2xl bg-amber-500/20 text-amber-400 flex items-center justify-center">
+              <div className={`flex items-center gap-3 border-b pb-3 ${isLight ? 'border-slate-200' : 'border-slate-800'}`}>
+                <div className="w-10 h-10 rounded-2xl bg-amber-500/20 text-amber-500 flex items-center justify-center">
                   <Settings className="w-5 h-5" />
                 </div>
                 <div>
-                  <h3 className="text-base font-black text-white">Gestionar Licencia y Prórroga</h3>
-                  <p className="text-xs text-slate-400">
-                    Almacén: <b className="text-white">{editingLicenseTenant.business_name}</b> (RUC: {editingLicenseTenant.tax_id || 'Sin RUC'})
+                  <h3 className={`text-base font-black ${isLight ? 'text-slate-900' : 'text-white'}`}>
+                    Gestionar Licencia y Prórroga
+                  </h3>
+                  <p className={`text-xs ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
+                    Almacén: <b className={isLight ? 'text-slate-900' : 'text-white'}>{editingLicenseTenant.business_name}</b> (RUC: {editingLicenseTenant.tax_id || 'Sin RUC'})
                   </p>
                 </div>
               </div>
 
               {licenseSuccessMsg && (
-                <div className="p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-xl text-emerald-300 text-xs flex items-center gap-2">
-                  <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-400" />
+                <div className="p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-xl text-emerald-600 text-xs flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-500" />
                   <span>{licenseSuccessMsg}</span>
                 </div>
               )}
@@ -1146,7 +1358,7 @@ export default function SuperAdminPage() {
               <form onSubmit={handleSaveLicense} className="space-y-4 pt-1">
                 {/* SELECCIÓN DE PLAN */}
                 <div>
-                  <label className="text-xs font-bold text-slate-300 mb-1.5 block">
+                  <label className={`text-xs font-bold mb-1.5 block ${isLight ? 'text-slate-700' : 'text-slate-300'}`}>
                     Plan de Suscripción Manual
                   </label>
                   <div className="grid grid-cols-3 gap-2">
@@ -1161,12 +1373,16 @@ export default function SuperAdminPage() {
                         onClick={() => setLicensePlan(p.id as any)}
                         className={`p-2.5 rounded-xl border text-left transition cursor-pointer ${
                           licensePlan === p.id
-                            ? 'bg-indigo-600/20 border-indigo-500 text-white shadow-sm ring-1 ring-indigo-500'
+                            ? isLight
+                              ? 'bg-indigo-50 border-indigo-500 text-indigo-900 shadow-sm ring-1 ring-indigo-500'
+                              : 'bg-indigo-600/20 border-indigo-500 text-white shadow-sm ring-1 ring-indigo-500'
+                            : isLight
+                            ? 'bg-slate-50 border-slate-200 text-slate-600 hover:text-slate-900'
                             : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-white'
                         }`}
                       >
                         <div className="text-xs font-black">{p.label}</div>
-                        <div className="text-[10px] text-slate-400">{p.desc}</div>
+                        <div className={`text-[10px] ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>{p.desc}</div>
                       </button>
                     ))}
                   </div>
@@ -1174,7 +1390,7 @@ export default function SuperAdminPage() {
 
                 {/* ESTADO DE LA LICENCIA */}
                 <div>
-                  <label className="text-xs font-bold text-slate-300 mb-1.5 block">
+                  <label className={`text-xs font-bold mb-1.5 block ${isLight ? 'text-slate-700' : 'text-slate-300'}`}>
                     Estado de la Cuenta
                   </label>
                   <div className="grid grid-cols-3 gap-2">
@@ -1190,10 +1406,12 @@ export default function SuperAdminPage() {
                         className={`p-2 rounded-xl border text-center transition cursor-pointer ${
                           licenseStatus === st.id
                             ? st.color === 'emerald'
-                              ? 'bg-emerald-500/20 border-emerald-500 text-emerald-300 ring-1 ring-emerald-500'
+                              ? 'bg-emerald-500/20 border-emerald-500 text-emerald-600 dark:text-emerald-300 ring-1 ring-emerald-500'
                               : st.color === 'blue'
-                              ? 'bg-blue-500/20 border-blue-500 text-blue-300 ring-1 ring-blue-500'
-                              : 'bg-rose-500/20 border-rose-500 text-rose-300 ring-1 ring-rose-500'
+                              ? 'bg-blue-500/20 border-blue-500 text-blue-600 dark:text-blue-300 ring-1 ring-blue-500'
+                              : 'bg-rose-500/20 border-rose-500 text-rose-600 dark:text-rose-300 ring-1 ring-rose-500'
+                            : isLight
+                            ? 'bg-slate-50 border-slate-200 text-slate-500 hover:text-slate-800'
                             : 'bg-slate-950 border-slate-800 text-slate-500 hover:text-slate-300'
                         }`}
                       >
@@ -1204,12 +1422,18 @@ export default function SuperAdminPage() {
                 </div>
 
                 {/* EXTENSIÓN TEMPORAL / DÍAS DE GRACIA */}
-                <div className="p-4 bg-slate-950/70 border border-slate-800/80 rounded-2xl space-y-3">
+                <div
+                  className={`p-4 rounded-2xl space-y-3 border ${
+                    isLight ? 'bg-amber-50/60 border-amber-200' : 'bg-slate-950/70 border-slate-800/80'
+                  }`}
+                >
                   <div className="flex items-center justify-between">
-                    <span className="text-xs font-black text-amber-400 flex items-center gap-1.5">
+                    <span className="text-xs font-black text-amber-600 dark:text-amber-400 flex items-center gap-1.5">
                       <Clock className="w-3.5 h-3.5" /> Conceder Prórroga Rápida
                     </span>
-                    <span className="text-[10px] text-slate-400">Extiende días y desbloquea</span>
+                    <span className={`text-[10px] ${isLight ? 'text-amber-800' : 'text-slate-400'}`}>
+                      Extiende días y desbloquea
+                    </span>
                   </div>
 
                   <div className="grid grid-cols-5 gap-1.5">
@@ -1224,7 +1448,11 @@ export default function SuperAdminPage() {
                         key={b.days}
                         type="button"
                         onClick={() => handleAddGraceDays(b.days)}
-                        className="py-1.5 px-1 bg-amber-500/10 hover:bg-amber-500 text-amber-300 hover:text-slate-950 border border-amber-500/30 rounded-lg text-xs font-black transition active:scale-95 cursor-pointer"
+                        className={`py-1.5 px-1 border rounded-lg text-xs font-black transition active:scale-95 cursor-pointer ${
+                          isLight
+                            ? 'bg-white hover:bg-amber-500 text-amber-900 hover:text-white border-amber-300 shadow-xs'
+                            : 'bg-amber-500/10 hover:bg-amber-500 text-amber-300 hover:text-slate-950 border-amber-500/30'
+                        }`}
                       >
                         {b.label}
                       </button>
@@ -1232,7 +1460,7 @@ export default function SuperAdminPage() {
                   </div>
 
                   <div>
-                    <label className="text-[11px] font-bold text-slate-400 mb-1 block">
+                    <label className={`text-[11px] font-bold mb-1 block ${isLight ? 'text-slate-700' : 'text-slate-400'}`}>
                       Fecha Límite de Vencimiento:
                     </label>
                     <div className="relative">
@@ -1242,10 +1470,14 @@ export default function SuperAdminPage() {
                         required
                         value={licenseEndDate}
                         onChange={(e) => setLicenseEndDate(e.target.value)}
-                        className="w-full pl-9 pr-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-xs text-white font-mono font-bold focus:outline-none focus:border-indigo-500"
+                        className={`w-full pl-9 pr-3 py-2 rounded-xl text-xs font-mono font-bold focus:outline-none focus:border-indigo-500 border ${
+                          isLight
+                            ? 'bg-white border-slate-300 text-slate-900'
+                            : 'bg-slate-900 border-slate-700 text-white'
+                        }`}
                       />
                     </div>
-                    <p className="text-[10px] text-slate-500 mt-1">
+                    <p className={`text-[10px] mt-1 ${isLight ? 'text-slate-500' : 'text-slate-500'}`}>
                       El comercio podrá registrar ventas y cobros sin bloqueo hasta el fin de este día.
                     </p>
                   </div>
@@ -1253,7 +1485,7 @@ export default function SuperAdminPage() {
 
                 {/* NOTA ADMINISTRATIVA */}
                 <div>
-                  <label className="text-xs font-bold text-slate-300 mb-1 block">
+                  <label className={`text-xs font-bold mb-1 block ${isLight ? 'text-slate-700' : 'text-slate-300'}`}>
                     Nota Administrativa Interna (Opcional)
                   </label>
                   <input
@@ -1261,23 +1493,29 @@ export default function SuperAdminPage() {
                     placeholder="Ej. Prometió pagar en efectivo este viernes / Acuerdo de pago"
                     value={licenseAdminNote}
                     onChange={(e) => setLicenseAdminNote(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white placeholder-slate-600 focus:outline-none focus:border-indigo-500"
+                    className={`w-full px-3 py-2 rounded-xl text-xs focus:outline-none focus:border-indigo-500 border ${
+                      isLight
+                        ? 'bg-slate-50 border-slate-300 text-slate-900 placeholder-slate-400'
+                        : 'bg-slate-950 border-slate-800 text-white placeholder-slate-600'
+                    }`}
                   />
                 </div>
 
                 {/* BOTONES ACCIÓN */}
-                <div className="flex gap-2 pt-2 border-t border-slate-800">
+                <div className={`flex gap-2 pt-2 border-t ${isLight ? 'border-slate-200' : 'border-slate-800'}`}>
                   <button
                     type="button"
                     onClick={() => setEditingLicenseTenant(null)}
-                    className="w-1/3 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold rounded-xl text-xs transition cursor-pointer"
+                    className={`w-1/3 py-2.5 font-bold rounded-xl text-xs transition cursor-pointer ${
+                      isLight ? 'bg-slate-100 hover:bg-slate-200 text-slate-700' : 'bg-slate-800 hover:bg-slate-700 text-slate-300'
+                    }`}
                   >
                     Cancelar
                   </button>
                   <button
                     type="submit"
                     disabled={savingLicense}
-                    className="w-2/3 py-2.5 bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-500 hover:to-blue-500 text-white font-black rounded-xl text-xs flex items-center justify-center gap-1.5 shadow-lg shadow-indigo-950 transition active:scale-98 disabled:opacity-50 cursor-pointer"
+                    className="w-2/3 py-2.5 bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-500 hover:to-blue-500 text-white font-black rounded-xl text-xs flex items-center justify-center gap-1.5 shadow-md shadow-indigo-600/30 transition active:scale-98 disabled:opacity-50 cursor-pointer"
                   >
                     <Check className="w-4 h-4" />
                     <span>{savingLicense ? 'Guardando Prórroga...' : 'Guardar y Aplicar Prórroga'}</span>

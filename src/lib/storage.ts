@@ -42,6 +42,19 @@ export function logoutMerchant(): void {
   }
 }
 
+export function loginDemoDonMario(): void {
+  if (typeof window !== 'undefined') {
+    localStorage.setItem(STORAGE_KEYS.IS_LOGGED_IN, 'true');
+    localStorage.setItem(STORAGE_KEYS.TENANT, JSON.stringify(INITIAL_TENANT));
+    localStorage.setItem(STORAGE_KEYS.STAFF, JSON.stringify(INITIAL_STAFF));
+    localStorage.setItem(STORAGE_KEYS.CUSTOMERS, JSON.stringify(INITIAL_CUSTOMERS));
+    localStorage.setItem(STORAGE_KEYS.TRANSACTIONS, JSON.stringify(INITIAL_TRANSACTIONS));
+    localStorage.setItem(STORAGE_KEYS.CURRENT_OPERATOR, JSON.stringify(INITIAL_STAFF[0]));
+    window.dispatchEvent(new Event('libreta_auth_changed'));
+    window.dispatchEvent(new Event('libreta_data_updated'));
+  }
+}
+
 export const INITIAL_STAFF: StaffMember[] = [
   {
     id: 'staff-001',
