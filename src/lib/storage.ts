@@ -1,5 +1,6 @@
 import { Tenant, Customer, Transaction, StaffMember } from '@/types';
 import { createClient } from '@/lib/supabase/client';
+import { setSecureCookie, removeSecureCookie } from './cookies';
 
 const STORAGE_KEYS = {
   TENANT: 'libretadigital_tenant_v2',
@@ -18,6 +19,11 @@ export function isMerchantLoggedIn(): boolean {
 export function setMerchantLoggedIn(value: boolean): void {
   if (typeof window !== 'undefined') {
     localStorage.setItem(STORAGE_KEYS.IS_LOGGED_IN, value ? 'true' : 'false');
+    if (value) {
+      setSecureCookie('libreta_auth_session', 'authenticated', { days: 7, sameSite: 'Strict' });
+    } else {
+      removeSecureCookie('libreta_auth_session');
+    }
     window.dispatchEvent(new Event('libreta_auth_changed'));
     window.dispatchEvent(new Event('libreta_data_updated'));
   }
@@ -28,6 +34,8 @@ export function logoutMerchant(): void {
     localStorage.removeItem(STORAGE_KEYS.IS_LOGGED_IN);
     localStorage.removeItem(STORAGE_KEYS.TENANT);
     localStorage.removeItem(STORAGE_KEYS.CURRENT_OPERATOR);
+    removeSecureCookie('libreta_auth_session');
+    removeSecureCookie('libreta_superadmin_session');
     window.dispatchEvent(new Event('libreta_auth_changed'));
     window.dispatchEvent(new Event('libreta_data_updated'));
 

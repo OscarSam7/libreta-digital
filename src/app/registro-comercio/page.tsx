@@ -31,6 +31,8 @@ import { createClient } from '@/lib/supabase/client';
 import confetti from 'canvas-confetti';
 import { BrandLogo } from '@/components/BrandLogo';
 import { CustomSelect } from '@/components/ui/CustomSelectModal';
+import { checkRateLimit, recordFailedAttempt, recordSuccessfulAttempt } from '@/lib/rateLimit';
+import { sanitizeText } from '@/lib/validation';
 
 const REGIONAL_CURRENCIES = [
   { code: 'PYG', symbol: '₲', label: 'Paraguay (Guaraní - ₲)', default: true },
@@ -209,14 +211,23 @@ function MerchantRegisterContent() {
     e.preventDefault();
     setErrorMsg('');
 
-    const cleanEmail = loginEmail.trim().toLowerCase();
+    const cleanEmail = sanitizeText(loginEmail, 100).toLowerCase();
+
+    // Verificación de Rate Limiting para comercios
+    const rateCheck = checkRateLimit(`merchant_login_${cleanEmail}`, 5, 5);
+    if (!rateCheck.allowed) {
+      setErrorMsg(`Demasiados intentos fallidos. Por seguridad, intente en ${rateCheck.retryAfterSeconds} segundos.`);
+      return;
+    }
+
     if (cleanEmail === 'demo@donmario.com' || cleanEmail === 'donmario@libreta.com' || cleanEmail === 'donmario') {
+      recordSuccessfulAttempt(`merchant_login_${cleanEmail}`);
       loginDemoDonMario();
       router.push('/');
       return;
     }
 
-    if (!loginEmail.trim() || !loginPassword) {
+    if (!cleanEmail || !loginPassword) {
       setErrorMsg('Ingresa tu correo y contraseña.');
       return;
     }
@@ -227,15 +238,18 @@ function MerchantRegisterContent() {
       const supabase = createClient();
       if (supabase) {
         const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
-          email: loginEmail.trim().toLowerCase(),
+          email: cleanEmail,
           password: loginPassword,
         });
 
         if (authError) {
+          recordFailedAttempt(`merchant_login_${cleanEmail}`, 5, 5);
           setErrorMsg(`Error de acceso: ${authError.message}`);
           setSubmitting(false);
           return;
         }
+
+        recordSuccessfulAttempt(`merchant_login_${cleanEmail}`);
 
         // Si se autenticó en Supabase, buscar el comercio del usuario
         if (authData.user) {

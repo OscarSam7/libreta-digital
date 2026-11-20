@@ -21,6 +21,7 @@ import { StaffManagementModal } from '@/components/StaffManagementModal';
 import { StaffSwitchModal } from '@/components/StaffSwitchModal';
 import { BrandLogo } from '@/components/BrandLogo';
 import { CustomDateInput } from '@/components/ui/CustomDatePickerModal';
+import { sanitizeText, validateAmount } from '@/lib/validation';
 import {
   TrendingUp,
   Users,
@@ -242,11 +243,11 @@ export function MerchantDashboard() {
     const newCustomer: Customer = {
       id: `cust-${Date.now()}`,
       tenant_id: tenant.id,
-      full_name: newCustName.trim(),
-      nickname: newCustNickname.trim() || undefined,
-      document_id: newCustDoc.trim() || undefined,
-      phone: newCustPhone.trim(),
-      credit_limit: parseFloat(newCustLimit) || 0,
+      full_name: sanitizeText(newCustName, 100),
+      nickname: newCustNickname.trim() ? sanitizeText(newCustNickname, 50) : undefined,
+      document_id: newCustDoc.trim() ? sanitizeText(newCustDoc, 30) : undefined,
+      phone: sanitizeText(newCustPhone, 30),
+      credit_limit: validateAmount(newCustLimit, 0).value,
       current_balance: 0,
       qr_token: token,
       security_pin: pin,

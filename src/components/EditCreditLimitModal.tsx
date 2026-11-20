@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import { Customer, Tenant } from '@/types';
 import { getStoredData, saveCustomers } from '@/lib/storage';
+import { validateAmount } from '@/lib/validation';
 import { CreditCard, ShieldAlert, Check, X, AlertTriangle } from 'lucide-react';
 
 interface Props {
@@ -26,11 +27,12 @@ export function EditCreditLimitModal({ customer, tenant, onClose, onSuccess }: P
     e.preventDefault();
     setErrorMsg('');
 
-    const parsedLimit = parseFloat(creditLimit);
-    if (isNaN(parsedLimit) || parsedLimit < 0) {
-      setErrorMsg('El límite de crédito debe ser 0 (sin límite) o un número positivo.');
+    const validation = validateAmount(creditLimit, 0, 10_000_000_000);
+    if (!validation.valid) {
+      setErrorMsg(validation.error || 'El límite de crédito debe ser 0 o un monto válido.');
       return;
     }
+    const parsedLimit = validation.value;
 
     setLoading(true);
 

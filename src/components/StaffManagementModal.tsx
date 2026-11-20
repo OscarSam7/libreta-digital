@@ -23,6 +23,7 @@ import {
 import { StaffMember, StaffRole, StaffPermissions, Tenant } from '@/types';
 import { saveStaff } from '@/lib/storage';
 import { CustomSelect } from '@/components/ui/CustomSelectModal';
+import { sanitizeText } from '@/lib/validation';
 
 interface Props {
   tenant: Tenant;
@@ -158,10 +159,10 @@ export function StaffManagementModal({
       const newMember: StaffMember = {
         id: crypto.randomUUID(),
         tenant_id: tenant.id,
-        full_name: fullName.trim(),
+        full_name: sanitizeText(fullName, 100),
         role,
-        phone: phone.trim(),
-        pin,
+        phone: sanitizeText(phone, 30),
+        pin: pin.trim(),
         is_active: true,
         permissions,
         created_at: new Date().toISOString(),

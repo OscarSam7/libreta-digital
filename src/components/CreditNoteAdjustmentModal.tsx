@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import { Transaction, Customer, Tenant } from '@/types';
 import { issueLedgerAdjustment } from '@/lib/ledger';
+import { validateAmount, sanitizeText } from '@/lib/validation';
 import {
   FileText,
   AlertOctagon,
@@ -52,9 +53,9 @@ export function CreditNoteAdjustmentModal({
     setErrorMsg('');
     setSuccessMsg('');
 
-    const parsedAmount = parseFloat(amount);
-    if (isNaN(parsedAmount) || parsedAmount <= 0) {
-      setErrorMsg('El monto debe ser un valor positivo mayor a 0');
+    const validation = validateAmount(amount, 0.01);
+    if (!validation.valid) {
+      setErrorMsg(validation.error || 'El monto debe ser un valor positivo mayor a 0');
       return;
     }
 
@@ -63,13 +64,16 @@ export function CreditNoteAdjustmentModal({
       return;
     }
 
+    const parsedAmount = validation.value;
+    const cleanReason = sanitizeText(reason, 300);
+
     setLoading(true);
 
     const res = issueLedgerAdjustment({
       targetTransactionId: transaction.id,
       adjustmentType,
       amount: parsedAmount,
-      reason: reason.trim(),
+      reason: cleanReason,
     });
 
     setLoading(false);

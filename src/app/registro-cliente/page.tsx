@@ -24,6 +24,8 @@ import { createClient } from '@/lib/supabase/client';
 import confetti from 'canvas-confetti';
 import { BrandLogo } from '@/components/BrandLogo';
 import { CustomSelect } from '@/components/ui/CustomSelectModal';
+import { sanitizeText } from '@/lib/validation';
+import { checkRateLimit, recordFailedAttempt, recordSuccessfulAttempt } from '@/lib/rateLimit';
 
 function ClientRegisterContent() {
   const searchParams = useSearchParams();
@@ -121,6 +123,13 @@ function ClientRegisterContent() {
       return;
     }
 
+    const cleanPhone = phone.trim().replace(/\D/g, '');
+    const rateCheck = checkRateLimit(`client_reg_${cleanPhone}`, 4, 15);
+    if (!rateCheck.allowed) {
+      setErrorMsg(`Demasiadas solicitudes registradas recientemente. Espere ${rateCheck.retryAfterSeconds} segundos.`);
+      return;
+    }
+
     setSubmitting(true);
 
     try {
@@ -132,10 +141,10 @@ function ClientRegisterContent() {
       const newCustomer = {
         id: newCustomerId,
         tenant_id: selectedTenantId,
-        full_name: fullName.trim(),
-        nickname: address.trim() ? `Dir: ${address.trim()}` : '',
-        document_id: documentId.trim(),
-        phone: phone.trim().replace(/\D/g, ''),
+        full_name: sanitizeText(fullName, 100),
+        nickname: address.trim() ? `Dir: ${sanitizeText(address, 150)}` : '',
+        document_id: sanitizeText(documentId, 30),
+        phone: cleanPhone,
         qr_token: generatedToken,
         security_pin: securityPin,
         credit_limit: 0, // Inicia con 0 hasta que el almacenero evalúe el límite

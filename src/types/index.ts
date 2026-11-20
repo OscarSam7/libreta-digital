@@ -92,6 +92,7 @@ export interface Transaction {
   validation_method?: string;
   validation_metadata?: Record<string, any>;
   validation_pin?: string;
+  blockchain_hash?: string;
   created_at: string;
 }
 

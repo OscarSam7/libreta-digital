@@ -1,4 +1,5 @@
 import { Transaction, Customer, Tenant } from '@/types';
+import { sanitizeCSVCell } from '@/lib/validation';
 
 export function exportTransactionsToCSV(
   transactions: Transaction[],
@@ -22,18 +23,18 @@ export function exportTransactionsToCSV(
   ];
 
   const rows = transactions.map((t) => [
-    t.id,
-    new Date(t.created_at).toLocaleString('es-PY'),
-    `"${(customersMap?.get(t.customer_id) || t.customer_id).replace(/"/g, '""')}"`,
-    t.type,
-    `"${(t.description || '').replace(/"/g, '""')}"`,
-    t.payment_method || (t.type === 'CREDIT_PAYMENT' ? 'EFECTIVO' : 'N/A'),
-    `"${(t.payment_reference || '').replace(/"/g, '""')}"`,
+    sanitizeCSVCell(t.id),
+    sanitizeCSVCell(new Date(t.created_at).toLocaleString('es-PY')),
+    sanitizeCSVCell(customersMap?.get(t.customer_id) || t.customer_id),
+    sanitizeCSVCell(t.type),
+    sanitizeCSVCell(t.description || ''),
+    sanitizeCSVCell(t.payment_method || (t.type === 'CREDIT_PAYMENT' ? 'EFECTIVO' : 'N/A')),
+    sanitizeCSVCell(t.payment_reference || ''),
     t.amount.toFixed(2),
     t.previous_balance.toFixed(2),
     t.new_balance.toFixed(2),
-    t.status,
-    t.validation_method || 'SIN_FIRMA',
+    sanitizeCSVCell(t.status),
+    sanitizeCSVCell(t.validation_method || 'SIN_FIRMA'),
   ]);
 
   const csvContent = '\uFEFF' + [headers.join(';'), ...rows.map((e) => e.join(';'))].join('\n');
@@ -100,19 +101,19 @@ export function exportCustomersPortfolioToCSV(
         : 'AL DIA (Sin Deuda)';
 
     return [
-      `"${c.full_name.replace(/"/g, '""')}"`,
-      `"${(c.nickname || '').replace(/"/g, '""')}"`,
-      `"${(c.document_id || '').replace(/"/g, '""')}"`,
-      `"${(c.phone || '').replace(/"/g, '""')}"`,
-      statusLabel,
+      sanitizeCSVCell(c.full_name),
+      sanitizeCSVCell(c.nickname || ''),
+      sanitizeCSVCell(c.document_id || ''),
+      sanitizeCSVCell(c.phone || ''),
+      sanitizeCSVCell(statusLabel),
       item.currentBalance.toFixed(2),
       item.creditLimit.toFixed(2),
       item.limitUsagePercent.toFixed(1) + '%',
       item.purchasesInPeriod.toFixed(2),
       item.paymentsInPeriod.toFixed(2),
-      item.lastPaymentDate ? item.lastPaymentDate.slice(0, 10) : 'SIN PAGOS',
+      sanitizeCSVCell(item.lastPaymentDate ? item.lastPaymentDate.slice(0, 10) : 'SIN PAGOS'),
       item.daysWithoutPayment !== null ? item.daysWithoutPayment.toString() : 'N/A',
-      item.lastPurchaseDate ? item.lastPurchaseDate.slice(0, 10) : 'SIN COMPRAS',
+      sanitizeCSVCell(item.lastPurchaseDate ? item.lastPurchaseDate.slice(0, 10) : 'SIN COMPRAS'),
     ];
   });
 

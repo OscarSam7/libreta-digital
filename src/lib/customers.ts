@@ -1,5 +1,7 @@
 import { Customer, CreditCycle } from '@/types';
 import { getStoredData, saveCustomers } from '@/lib/storage';
+import { sanitizeText, validateAmount } from '@/lib/validation';
+import { safeCompare } from '@/lib/security';
 
 export interface CreateCustomerInput {
   full_name: string;
@@ -20,11 +22,11 @@ export function createNewCustomer(input: CreateCustomerInput): Customer {
   const newCust: Customer = {
     id: `cust-${Date.now()}`,
     tenant_id: tenant.id,
-    full_name: input.full_name.trim(),
-    nickname: input.nickname?.trim(),
-    document_id: input.document_id?.trim(),
-    phone: input.phone?.trim(),
-    credit_limit: input.credit_limit || 0,
+    full_name: sanitizeText(input.full_name, 100),
+    nickname: input.nickname ? sanitizeText(input.nickname, 50) : undefined,
+    document_id: input.document_id ? sanitizeText(input.document_id, 30) : undefined,
+    phone: input.phone ? sanitizeText(input.phone, 30) : undefined,
+    credit_limit: validateAmount(input.credit_limit, 0).value,
     current_balance: 0,
     credit_cycle: input.credit_cycle || 'MENSUAL',
     terms_accepted: Boolean(input.terms_accepted),
@@ -58,8 +60,8 @@ export function acceptCustomerTerms(
 
   const cust = customers[customerIndex];
 
-  // Verificar PIN de seguridad del cliente
-  if (cust.security_pin && enteredPin.trim() !== cust.security_pin.trim()) {
+  // Verificar PIN de seguridad del cliente con comparación de tiempo constante
+  if (cust.security_pin && !safeCompare(enteredPin.trim(), cust.security_pin.trim())) {
     return { success: false, error: 'El PIN de 4 dígitos ingresado es incorrecto' };
   }
 

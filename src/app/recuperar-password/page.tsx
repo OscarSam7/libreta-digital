@@ -16,6 +16,8 @@ import {
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { BrandLogo } from '@/components/BrandLogo';
+import { checkRateLimit, recordFailedAttempt, recordSuccessfulAttempt } from '@/lib/rateLimit';
+import { sanitizeText } from '@/lib/validation';
 
 function ForgotPasswordContent() {
   const [email, setEmail] = useState('');
@@ -28,8 +30,16 @@ function ForgotPasswordContent() {
     setErrorMsg('');
     setSuccessMsg('');
 
-    if (!email.trim() || !email.includes('@')) {
+    const cleanEmail = sanitizeText(email, 100).toLowerCase();
+
+    if (!cleanEmail || !cleanEmail.includes('@')) {
       setErrorMsg('Por favor ingresa un correo electrónico válido.');
+      return;
+    }
+
+    const rateCheck = checkRateLimit(`pwd_reset_${cleanEmail}`, 3, 15);
+    if (!rateCheck.allowed) {
+      setErrorMsg(`Demasiadas solicitudes de recuperación. Intente nuevamente en ${rateCheck.retryAfterSeconds} segundos.`);
       return;
     }
 
@@ -41,19 +51,21 @@ function ForgotPasswordContent() {
       const redirectUrl = `${origin}/restablecer-password`;
 
       if (supabase) {
-        const { error } = await supabase.auth.resetPasswordForEmail(email.trim().toLowerCase(), {
+        const { error } = await supabase.auth.resetPasswordForEmail(cleanEmail, {
           redirectTo: redirectUrl,
         });
 
         if (error) {
+          recordFailedAttempt(`pwd_reset_${cleanEmail}`, 3, 15);
           setErrorMsg(`Aviso: ${error.message}`);
           setLoading(false);
           return;
         }
       }
 
+      recordSuccessfulAttempt(`pwd_reset_${cleanEmail}`);
       setSuccessMsg(
-        `¡Enlace de recuperación enviado! Hemos enviado las instrucciones de restablecimiento a ${email}. Revisa tu bandeja de entrada o correo no deseado (Spam).`
+        `¡Enlace de recuperación enviado! Hemos enviado las instrucciones de restablecimiento a ${cleanEmail}. Revisa tu bandeja de entrada o correo no deseado (Spam).`
       );
     } catch (err: any) {
       setErrorMsg(err.message || 'Error al procesar la solicitud de recuperación.');

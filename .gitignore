@@ -23,6 +23,19 @@
 # misc
 .DS_Store
 *.pem
+*.key
+*.cert
+*.crt
+*.pfx
+*.p12
+*.id_rsa
+*.id_dsa
+*.keystore
+secrets.json
+credentials.json
+*.bak
+*.dump
+*.sql.gz
 
 # debug
 npm-debug.log*
@@ -30,8 +43,9 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# env files (can opt-in for committing if needed)
+# env files & secrets (strictly ignore all real envs, allow only example)
 .env*
+!.env.example
 
 # vercel
 .vercel

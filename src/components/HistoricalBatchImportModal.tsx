@@ -6,6 +6,7 @@ import { createNewCustomer } from '@/lib/customers';
 import { processHistoricalBatchTransactions, HistoricalBatchEntry } from '@/lib/ledger';
 import { CustomDateInput } from '@/components/ui/CustomDatePickerModal';
 import { CustomSelect } from '@/components/ui/CustomSelectModal';
+import { validateAmount, sanitizeText } from '@/lib/validation';
 import {
   BookOpen,
   Calendar,
@@ -186,23 +187,24 @@ export function HistoricalBatchImportModal({
     e.preventDefault();
     setErrorMessage('');
 
-    const parsedAmount = parseFloat(entryAmount);
-    if (isNaN(parsedAmount) || parsedAmount <= 0) {
-      setErrorMessage('Ingrese un monto válido mayor a 0.');
+    const amountValidation = validateAmount(entryAmount, 0.01);
+    if (!amountValidation.valid) {
+      setErrorMessage(amountValidation.error || 'Ingrese un monto válido mayor a 0.');
       return;
     }
+    const parsedAmount = amountValidation.value;
 
     if (!entryDate) {
       setErrorMessage('Seleccione una fecha para el movimiento.');
       return;
     }
 
-    // Filtrar items válidos
+    // Filtrar items válidos y sanitizar
     const validItems = productRows
       .filter((i) => i.name.trim() && i.qty > 0 && i.price > 0)
-      .map((i) => ({ ...i, name: i.name.trim() }));
+      .map((i) => ({ ...i, name: sanitizeText(i.name, 100), price: validateAmount(i.price, 0).value }));
 
-    let finalDesc = entryDesc.trim();
+    let finalDesc = sanitizeText(entryDesc, 300);
     if (!finalDesc && validItems.length > 0) {
       finalDesc = validItems.map((i) => `${i.qty}x ${i.name}`).join(', ');
     } else if (!finalDesc) {
@@ -217,7 +219,7 @@ export function HistoricalBatchImportModal({
       description: finalDesc,
       items: validItems,
       paymentMethod: entryType === 'CREDIT_PAYMENT' ? entryPaymentMethod : undefined,
-      paymentReference: entryPaymentRef.trim() || undefined,
+      paymentReference: entryPaymentRef.trim() ? sanitizeText(entryPaymentRef, 100) : undefined,
     };
 
     setStagedEntries([...stagedEntries, newEntry]);

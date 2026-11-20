@@ -1,5 +1,7 @@
 import { Customer, Transaction, TransactionType, PaymentMethod, ValidationStatus, TransactionItem } from '@/types';
 import { getStoredData, saveCustomers, saveTransactions } from './storage';
+import { safeCompare } from './security';
+import { validateAmount, sanitizeText } from './validation';
 
 export interface CreateTxInput {
   customerId: string;
@@ -28,6 +30,14 @@ export function executeLedgerTransaction(input: CreateTxInput): {
   if (customerIndex === -1) {
     return { success: false, error: 'Cliente no encontrado en este comercio.' };
   }
+
+  // 0. Validar y sanitizar monto y descripción de entrada
+  const amountValidation = validateAmount(input.amount, 0.01);
+  if (!amountValidation.valid) {
+    return { success: false, error: amountValidation.error };
+  }
+  const cleanAmount = amountValidation.value;
+  const cleanDescription = sanitizeText(input.description || 'Movimiento de cuenta', 500);
 
   // 1. Validar suscripción activa o trial vigente
   const now = new Date();
@@ -65,7 +75,7 @@ export function executeLedgerTransaction(input: CreateTxInput): {
   let newBalance = previousBalance;
 
   if (input.type === 'DEBIT_PURCHASE' || input.type === 'ADJUSTMENT_DEBIT') {
-    newBalance = previousBalance + input.amount;
+    newBalance = previousBalance + cleanAmount;
 
     // Validar límite de crédito configurado (solo para operaciones en tiempo real normales)
     if (
@@ -81,7 +91,7 @@ export function executeLedgerTransaction(input: CreateTxInput): {
     }
   } else {
     // CREDIT_PAYMENT o ADJUSTMENT_CREDIT restan deuda
-    newBalance = previousBalance - input.amount;
+    newBalance = previousBalance - cleanAmount;
   }
 
   const dynamicPin = Math.floor(1000 + Math.random() * 9000).toString();
@@ -102,12 +112,12 @@ export function executeLedgerTransaction(input: CreateTxInput): {
     operator_id: input.operatorId || currentOperator?.id,
     operator_name: input.operatorName || currentOperator?.full_name,
     type: input.type,
-    amount: input.amount,
+    amount: cleanAmount,
     previous_balance: previousBalance,
     new_balance: newBalance,
-    description: input.description,
+    description: cleanDescription,
     payment_method: input.paymentMethod || (input.type === 'CREDIT_PAYMENT' ? 'EFECTIVO' : undefined),
-    payment_reference: input.paymentReference?.trim() || undefined,
+    payment_reference: input.paymentReference ? sanitizeText(input.paymentReference, 100) : undefined,
     items: input.items || [],
     status: isInstantCertified ? 'CERTIFIED_BOTH' : 'PENDING_CUSTOMER',
     validation_pin: dynamicPin,
@@ -118,6 +128,7 @@ export function executeLedgerTransaction(input: CreateTxInput): {
         : undefined
     ),
     validation_metadata: input.validationMetadata,
+    blockchain_hash: `0x${Date.now().toString(16)}${Math.abs(cleanAmount * 100).toString(16)}`,
     created_at: txDate,
   };
 
@@ -165,8 +176,8 @@ export function certifyTransactionWithPin(
   }
 
   const isValid =
-    enteredPin.trim() === tx.validation_pin ||
-    enteredPin.trim() === customer.security_pin;
+    safeCompare(enteredPin.trim(), (tx.validation_pin || '').trim()) ||
+    safeCompare(enteredPin.trim(), (customer.security_pin || '').trim());
 
   if (!isValid) {
     return { success: false, message: 'PIN de seguridad incorrecto' };

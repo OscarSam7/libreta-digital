@@ -39,6 +39,9 @@ import { getStoredData, saveTenant, loginDemoDonMario } from '@/lib/storage';
 import { createClient } from '@/lib/supabase/client';
 import { BrandLogo } from '@/components/BrandLogo';
 import confetti from 'canvas-confetti';
+import { checkRateLimit, recordFailedAttempt, recordSuccessfulAttempt, validateHoneypot } from '@/lib/rateLimit';
+import { safeCompare } from '@/lib/security';
+import { sanitizeText } from '@/lib/validation';
 
 const SUPERADMIN_STORAGE_KEY = 'libretadigital_superadmin_session_v2';
 
@@ -142,13 +145,23 @@ export default function SuperAdminPage() {
     checkAdminSession();
   }, []);
 
-  // Inicio de sesión con correo y contraseña propia
+  // Inicio de sesión con correo y contraseña propia + Rate Limiting Enterprise
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setAuthError('');
+
+    const cleanEmail = sanitizeText(adminEmail, 100).toLowerCase();
+
+    // Verificación de Rate Limiting (máximo 5 intentos, 5 minutos de bloqueo)
+    const rateCheck = checkRateLimit(`superadmin_login_${cleanEmail}`, 5, 5);
+    if (!rateCheck.allowed) {
+      setAuthError(`Demasiados intentos fallidos. Por seguridad, el acceso está bloqueado por ${rateCheck.retryAfterSeconds} segundos.`);
+      return;
+    }
+
     setAuthLoading(true);
 
-    if (!adminEmail.trim() || !adminPassword) {
+    if (!cleanEmail || !adminPassword) {
       setAuthError('Ingresa tu correo y contraseña de Super Admin.');
       setAuthLoading(false);
       return;
@@ -160,22 +173,25 @@ export default function SuperAdminPage() {
 
       if (supabase) {
         const { data, error } = await supabase.auth.signInWithPassword({
-          email: adminEmail.trim().toLowerCase(),
+          email: cleanEmail,
           password: adminPassword,
         });
 
         if (!error && data.user) {
           loggedIn = true;
-          setCurrentAdminUser({ email: data.user.email || adminEmail.trim() });
-          localStorage.setItem(SUPERADMIN_STORAGE_KEY, data.user.email || adminEmail.trim());
+          recordSuccessfulAttempt(`superadmin_login_${cleanEmail}`);
+          setCurrentAdminUser({ email: data.user.email || cleanEmail });
+          localStorage.setItem(SUPERADMIN_STORAGE_KEY, data.user.email || cleanEmail);
         } else if (error) {
           // Si falló Supabase, verificar si coincide con credenciales guardadas localmente
-          const localAdminPass = localStorage.getItem(`libretadigital_superadmin_pwd_${adminEmail.trim().toLowerCase()}`);
-          if (localAdminPass && localAdminPass === adminPassword) {
+          const localAdminPass = localStorage.getItem(`libretadigital_superadmin_pwd_${cleanEmail}`);
+          if (localAdminPass && safeCompare(localAdminPass, adminPassword)) {
             loggedIn = true;
-            setCurrentAdminUser({ email: adminEmail.trim() });
-            localStorage.setItem(SUPERADMIN_STORAGE_KEY, adminEmail.trim());
+            recordSuccessfulAttempt(`superadmin_login_${cleanEmail}`);
+            setCurrentAdminUser({ email: cleanEmail });
+            localStorage.setItem(SUPERADMIN_STORAGE_KEY, cleanEmail);
           } else {
+            recordFailedAttempt(`superadmin_login_${cleanEmail}`, 5, 5);
             setAuthError(`Credenciales incorrectas: ${error.message}`);
             setAuthLoading(false);
             return;
@@ -183,15 +199,17 @@ export default function SuperAdminPage() {
         }
       } else {
         // Modo offline / local
-        const localAdminPass = localStorage.getItem(`libretadigital_superadmin_pwd_${adminEmail.trim().toLowerCase()}`);
-        if (!localAdminPass || localAdminPass === adminPassword) {
+        const localAdminPass = localStorage.getItem(`libretadigital_superadmin_pwd_${cleanEmail}`);
+        if (!localAdminPass || safeCompare(localAdminPass, adminPassword)) {
           loggedIn = true;
-          setCurrentAdminUser({ email: adminEmail.trim() });
-          localStorage.setItem(SUPERADMIN_STORAGE_KEY, adminEmail.trim());
+          recordSuccessfulAttempt(`superadmin_login_${cleanEmail}`);
+          setCurrentAdminUser({ email: cleanEmail });
+          localStorage.setItem(SUPERADMIN_STORAGE_KEY, cleanEmail);
           if (!localAdminPass) {
-            localStorage.setItem(`libretadigital_superadmin_pwd_${adminEmail.trim().toLowerCase()}`, adminPassword);
+            localStorage.setItem(`libretadigital_superadmin_pwd_${cleanEmail}`, adminPassword);
           }
         } else {
+          recordFailedAttempt(`superadmin_login_${cleanEmail}`, 5, 5);
           setAuthError('Contraseña de Super Admin incorrecta.');
           setAuthLoading(false);
           return;
@@ -203,6 +221,7 @@ export default function SuperAdminPage() {
         loadAdminData();
       }
     } catch (err: any) {
+      recordFailedAttempt(`superadmin_login_${cleanEmail}`, 5, 5);
       setAuthError(err.message || 'Error al autenticar Super Administrador.');
     } finally {
       setAuthLoading(false);

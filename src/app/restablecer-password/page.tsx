@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { BrandLogo } from '@/components/BrandLogo';
+import { safeCompare } from '@/lib/security';
 
 function ResetPasswordContent() {
   const router = useRouter();
@@ -31,7 +32,7 @@ function ResetPasswordContent() {
       return;
     }
 
-    if (newPassword !== confirmPassword) {
+    if (!safeCompare(newPassword, confirmPassword)) {
       setErrorMsg('Las contraseñas no coinciden. Verifícalas.');
       return;
     }

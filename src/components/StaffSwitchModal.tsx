@@ -17,6 +17,8 @@ import {
 import { StaffMember, Tenant } from '@/types';
 import { setCurrentOperator } from '@/lib/storage';
 import { createClient } from '@/lib/supabase/client';
+import { safeCompare } from '@/lib/security';
+import { checkRateLimit, recordFailedAttempt, recordSuccessfulAttempt } from '@/lib/rateLimit';
 
 interface Props {
   tenant: Tenant;
@@ -76,9 +78,17 @@ export function StaffSwitchModal({
   };
 
   const verifyPin = (pinToTest: string) => {
+    const rateCheck = checkRateLimit(`staff_pin_${selectedStaff.id}`, 5, 3);
+    if (!rateCheck.allowed) {
+      setErrorMsg(`Demasiados intentos de PIN. Bloqueado temporalmente por ${rateCheck.retryAfterSeconds}s.`);
+      setPinInput('');
+      return;
+    }
+
     setIsVerifying(true);
     setTimeout(() => {
-      if (selectedStaff.pin === pinToTest) {
+      if (safeCompare(selectedStaff.pin.trim(), pinToTest.trim())) {
+        recordSuccessfulAttempt(`staff_pin_${selectedStaff.id}`);
         // Verificar si cumple con el permiso requerido en caso de elevación de privilegios
         if (requiredPermission && !selectedStaff.permissions[requiredPermission]) {
           setErrorMsg(
@@ -96,6 +106,7 @@ export function StaffSwitchModal({
         onSuccess(selectedStaff);
         setIsVerifying(false);
       } else {
+        recordFailedAttempt(`staff_pin_${selectedStaff.id}`, 5, 3);
         setErrorMsg('PIN de seguridad incorrecto. Intente nuevamente.');
         setPinInput('');
         setIsVerifying(false);
