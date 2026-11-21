@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import Link from 'next/link';
 import { Customer, Transaction, Tenant } from '@/types';
 import { getStoredData, syncFromSupabase, saveCustomers } from '@/lib/storage';
 import { certifyTransactionWithPin } from '@/lib/ledger';
@@ -594,6 +595,19 @@ export function CustomerPortalView({ token }: Props) {
           onClose={() => setViewingReceiptTx(null)}
         />
       )}
+      {/* FOOTER LEGAL DEL PORTAL */}
+      <footer className="mt-8 pt-4 border-t border-slate-200 text-center text-[11px] text-slate-400 space-y-1">
+        <p>LibretaDigital Pro • FinTech POS & Fiado en Tiempo Real</p>
+        <div className="flex items-center justify-center gap-2 text-[10px]">
+          <Link href="/terminos" target="_blank" className="hover:text-slate-600 underline transition">
+            Términos de Servicio
+          </Link>
+          <span>•</span>
+          <Link href="/privacidad" target="_blank" className="hover:text-slate-600 underline transition">
+            Política de Privacidad (Ley 6534/20)
+          </Link>
+        </div>
+      </footer>
     </main>
   );
 }

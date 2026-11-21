@@ -1334,12 +1334,20 @@ export function MerchantDashboard() {
         </section>
 
         {/* PIE DE SEGURIDAD & ACCESO SUPER ADMIN */}
-        <footer className="pt-6 pb-8 border-t border-slate-200/80 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-500">
-          <div className="flex items-center gap-2">
-            <ShieldCheck className="w-4 h-4 text-emerald-600" />
-            <span className="font-semibold text-slate-700">
-              LibretaDigital PRO • Plataforma Certificada & Libro Mayor Inmutable
-            </span>
+        <footer className="pt-6 pb-8 border-t border-slate-200/80 flex flex-col md:flex-row items-center justify-between gap-3 text-xs text-slate-500">
+          <div className="flex flex-wrap items-center justify-center md:justify-start gap-x-2 gap-y-1">
+            <div className="flex items-center gap-1.5 font-semibold text-slate-700">
+              <ShieldCheck className="w-4 h-4 text-emerald-600" />
+              <span>LibretaDigital PRO • SaaS Certificado</span>
+            </div>
+            <span className="hidden sm:inline text-slate-300">•</span>
+            <Link href="/terminos" target="_blank" className="text-slate-500 hover:text-blue-600 underline transition">
+              Términos de Servicio
+            </Link>
+            <span className="text-slate-300">•</span>
+            <Link href="/privacidad" target="_blank" className="text-slate-500 hover:text-emerald-600 underline transition">
+              Política de Privacidad
+            </Link>
           </div>
           <div className="flex items-center gap-3">
             <Link

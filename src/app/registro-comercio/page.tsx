@@ -737,8 +737,18 @@ function MerchantRegisterContent() {
       </main>
 
       {/* FOOTER */}
-      <footer className="border-t border-slate-900 bg-slate-950/80 py-4 px-4 text-center text-[11px] text-slate-500 max-w-5xl mx-auto w-full flex flex-col sm:flex-row items-center justify-between gap-2">
-        <p>LibretaDigital Pro • FinTech POS & Fiado en Tiempo Real • Multi-País (PY, BR, PE)</p>
+      <footer className="border-t border-slate-900 bg-slate-950/80 py-4 px-4 text-center text-[11px] text-slate-500 max-w-5xl mx-auto w-full flex flex-col sm:flex-row items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center justify-center sm:justify-start gap-x-3 gap-y-1">
+          <p>LibretaDigital Pro • FinTech POS & Fiado en Tiempo Real</p>
+          <span className="hidden sm:inline">•</span>
+          <Link href="/terminos" className="text-slate-400 hover:text-slate-200 underline transition">
+            Términos y Condiciones
+          </Link>
+          <span>•</span>
+          <Link href="/privacidad" className="text-slate-400 hover:text-slate-200 underline transition">
+            Política de Privacidad
+          </Link>
+        </div>
         <Link
           href="/admin"
           className="text-indigo-400 hover:text-indigo-300 font-bold flex items-center gap-1 transition"

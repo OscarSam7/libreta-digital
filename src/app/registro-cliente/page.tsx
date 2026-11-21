@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, Suspense } from 'react';
+import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import {
   Store,
@@ -520,13 +521,22 @@ function ClientRegisterContent() {
           </div>
         )}
 
-        <div className="text-center mt-6">
-          <a
+        <div className="text-center mt-6 space-y-1.5">
+          <div className="flex items-center justify-center gap-2 text-[11px] text-slate-500">
+            <Link href="/terminos" target="_blank" className="hover:text-slate-300 underline transition">
+              Términos del Servicio
+            </Link>
+            <span>•</span>
+            <Link href="/privacidad" target="_blank" className="hover:text-slate-300 underline transition">
+              Política de Privacidad
+            </Link>
+          </div>
+          <Link
             href="/"
             className="text-xs text-slate-400 hover:text-white transition inline-flex items-center gap-1 font-medium"
           >
             ← Volver al Portal Principal
-          </a>
+          </Link>
         </div>
       </div>
 

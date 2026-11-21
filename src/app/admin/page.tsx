@@ -626,8 +626,17 @@ export default function SuperAdminPage() {
             </button>
           </form>
 
-          <div className="text-center pt-2 border-t border-slate-800/80">
-            <Link href="/" className="text-xs text-slate-500 hover:text-slate-300 transition">
+          <div className="text-center pt-2 border-t border-slate-800/80 space-y-1.5 text-xs text-slate-500">
+            <div className="flex items-center justify-center gap-2">
+              <Link href="/terminos" target="_blank" className="hover:text-slate-300 underline transition">
+                Términos de Servicio
+              </Link>
+              <span>•</span>
+              <Link href="/privacidad" target="_blank" className="hover:text-slate-300 underline transition">
+                Privacidad
+              </Link>
+            </div>
+            <Link href="/" className="inline-block text-slate-500 hover:text-slate-300 transition">
               ← Volver a la Pantalla Principal
             </Link>
           </div>
