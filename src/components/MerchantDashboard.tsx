@@ -14,6 +14,7 @@ import { SuperAdminDashboard } from '@/components/SuperAdminDashboard';
 import { CreditNoteAdjustmentModal } from '@/components/CreditNoteAdjustmentModal';
 import { DetailedReportsModal } from '@/components/DetailedReportsModal';
 import { EditCreditLimitModal } from '@/components/EditCreditLimitModal';
+import { EditCustomerModal } from '@/components/EditCustomerModal';
 import { HistoricalBatchImportModal } from '@/components/HistoricalBatchImportModal';
 import { PDFReportPreviewModal } from '@/components/PDFReportPreviewModal';
 import { CustomerHistoryModal } from '@/components/CustomerHistoryModal';
@@ -66,7 +67,9 @@ import {
   Calendar,
   History,
   Share2,
-  Sparkles
+  Sparkles,
+  UserCog,
+  Pencil
 } from 'lucide-react';
 
 const REGIONAL_CURRENCIES = [
@@ -104,6 +107,7 @@ export function MerchantDashboard() {
   const [activeTxCustomer, setActiveTxCustomer] = useState<Customer | null>(null);
   const [activeQRCustomer, setActiveQRCustomer] = useState<Customer | null>(null);
   const [activeLimitCustomer, setActiveLimitCustomer] = useState<Customer | null>(null);
+  const [activeEditCustomer, setActiveEditCustomer] = useState<Customer | null>(null);
   const [showSubscriptionModal, setShowSubscriptionModal] = useState(false);
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [showCurrencyModal, setShowCurrencyModal] = useState(false);
@@ -964,7 +968,15 @@ export function MerchantDashboard() {
                     <div className="flex justify-between items-start">
                       <div>
                         <div className="flex items-center gap-1.5 flex-wrap">
-                          <h3 className="font-black text-base text-slate-900">{cust.full_name}</h3>
+                          <button
+                            type="button"
+                            onClick={() => checkPermissionAndExecute('can_edit_credit_limits', 'Editar Datos del Cliente', () => setActiveEditCustomer(cust))}
+                            className="font-black text-base text-slate-900 hover:text-blue-600 text-left transition flex items-center gap-1.5 group cursor-pointer"
+                            title="Clic para editar ficha completa de este cliente"
+                          >
+                            <span>{cust.full_name}</span>
+                            <Pencil className="w-3.5 h-3.5 text-slate-400 group-hover:text-blue-600 opacity-60 group-hover:opacity-100 transition shrink-0" />
+                          </button>
                           {cust.is_blocked && (
                             <span className="text-[9px] bg-rose-100 text-rose-700 font-extrabold px-1.5 py-0.5 rounded">
                               BLOQUEADO
@@ -1017,6 +1029,14 @@ export function MerchantDashboard() {
                       </div>
 
                       <div className="flex items-center gap-1">
+                        <button
+                          onClick={() => checkPermissionAndExecute('can_edit_credit_limits', 'Editar Datos del Cliente', () => setActiveEditCustomer(cust))}
+                          className="p-2 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-700 transition"
+                          title="Editar Datos del Cliente (Nombre, Cédula, Teléfono, PIN, Límite)"
+                        >
+                          <UserCog className="w-4 h-4 text-blue-600" />
+                        </button>
+
                         <button
                           onClick={() => setTermsModalCustomer(cust)}
                           className={`p-2 rounded-xl transition ${
@@ -1701,6 +1721,16 @@ export function MerchantDashboard() {
           customer={activeLimitCustomer}
           tenant={tenant}
           onClose={() => setActiveLimitCustomer(null)}
+          onSuccess={() => loadData()}
+        />
+      )}
+
+      {/* MODAL EDITAR FICHA COMPLETA DEL CLIENTE (PANEL DEL DUEÑO) */}
+      {activeEditCustomer && (
+        <EditCustomerModal
+          customer={activeEditCustomer}
+          tenant={tenant}
+          onClose={() => setActiveEditCustomer(null)}
           onSuccess={() => loadData()}
         />
       )}
