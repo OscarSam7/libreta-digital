@@ -194,7 +194,7 @@ export const INITIAL_TENANT: Tenant = {
   currency_symbol: '₲',
   subscription_plan: 'pro_monthly',
   sub_status: 'active',
-  trial_ends_at: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString(),
+  trial_ends_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
   subscription_ends_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
   created_at: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(),
   updated_at: new Date().toISOString(),

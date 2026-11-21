@@ -781,13 +781,13 @@ export default function SuperAdminPage() {
             }`}
           >
             <span className={`text-[10px] font-bold uppercase block mb-1 ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
-              En Periodo de Prueba
+              1er Mes Bonificado
             </span>
             <div className="text-3xl font-black text-blue-500">
               {tenants.filter((t) => t.sub_status === 'trialing').length}
             </div>
             <span className={`text-[11px] font-medium flex items-center gap-1 mt-1 ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
-              <Calendar className="w-3 h-3 text-blue-500" /> 14 días gratis
+              <Calendar className="w-3 h-3 text-blue-500" /> 1er mes suscripción sin costo
             </span>
           </div>
 

@@ -219,9 +219,9 @@ export function SuperAdminDashboard({ onClose }: { onClose?: () => void }) {
           </div>
 
           <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200">
-            <span className="text-[10px] uppercase font-bold text-slate-400 block">En Trial (14 días)</span>
+            <span className="text-[10px] uppercase font-bold text-slate-400 block">1er Mes Bonificado</span>
             <div className="text-2xl font-black text-blue-600 mt-1">{trialTenants}</div>
-            <p className="text-[10px] text-slate-500 mt-0.5">En período de prueba</p>
+            <p className="text-[10px] text-slate-500 mt-0.5">Suscripción mes 1 sin costo</p>
           </div>
 
           <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200">

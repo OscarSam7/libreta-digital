@@ -81,7 +81,7 @@ export default function CommercialShowcasePage() {
               className="text-xs font-black text-white bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 px-4 py-2 rounded-xl transition shadow-md shadow-blue-600/30 flex items-center gap-1.5 active:scale-95"
             >
               <Sparkles className="w-3.5 h-3.5 text-amber-300" />
-              <span>Probar 14 Días Gratis</span>
+              <span>1er Mes Bonificado</span>
             </Link>
           </div>
         </div>
@@ -113,7 +113,7 @@ export default function CommercialShowcasePage() {
               className="w-full sm:w-auto px-6 py-3.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white rounded-2xl text-sm font-black shadow-xl shadow-blue-600/30 transition flex items-center justify-center gap-2 active:scale-95"
             >
               <Store className="w-4 h-4" />
-              <span>Comenzar Mi Prueba Gratis (14 Días)</span>
+              <span>Activar Almacén con 1er Mes Bonificado</span>
               <ArrowRight className="w-4 h-4" />
             </Link>
 
@@ -124,6 +124,16 @@ export default function CommercialShowcasePage() {
               <span>Ver Simulador Interactivo</span>
               <ChevronRight className="w-4 h-4 text-slate-400" />
             </a>
+          </div>
+
+          {/* CONDICIONES CLARAS DE INSTALACIÓN Y BONIFICACIÓN */}
+          <div className="max-w-2xl mx-auto p-3.5 bg-blue-950/40 border border-blue-900/60 rounded-2xl text-center space-y-1">
+            <p className="text-xs font-bold text-blue-300">
+              💡 Transparencia Total en Costos:
+            </p>
+            <p className="text-[11px] sm:text-xs text-slate-300 leading-relaxed">
+              Solo tienen costo la <b>instalación técnica, la carga de datos de clientes y créditos otorgados hasta la fecha</b>, y las <b>actualizaciones retroactivas de las deudas vigentes</b> (digitalización de tu cuaderno). <b>No se cobra el primer mes de suscripción</b>.
+            </p>
           </div>
 
           {/* MÉTRICAS DE CONFIANZA */}
@@ -582,7 +592,7 @@ export default function CommercialShowcasePage() {
                 href="/registro-comercio"
                 className="w-full py-2.5 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-xs font-bold text-center block transition"
               >
-                Comenzar Prueba
+                Activar Plan
               </Link>
             </div>
 
@@ -599,7 +609,7 @@ export default function CommercialShowcasePage() {
                 <p className="text-xs text-slate-300">Para almacenes y minimercados con alto flujo de clientes.</p>
                 <div className="pt-2">
                   <span className="text-3xl font-black text-white">₲ 189.000</span>
-                  <span className="text-xs text-slate-400"> / mes</span>
+                  <span className="text-xs text-slate-400"> / mes (A partir del 2do mes)</span>
                 </div>
                 <ul className="space-y-2 text-xs text-slate-200 pt-3 border-t border-slate-800">
                   <li className="flex items-center gap-2 font-bold text-white">✓ Clientes y Fiados Ilimitados</li>
@@ -613,7 +623,7 @@ export default function CommercialShowcasePage() {
                 href="/registro-comercio"
                 className="w-full py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-black text-center block transition shadow-lg shadow-blue-600/30"
               >
-                Probar 14 Días Gratis
+                Activar con 1er Mes Bonificado
               </Link>
             </div>
 
@@ -644,6 +654,17 @@ export default function CommercialShowcasePage() {
               </Link>
             </div>
           </div>
+
+          {/* RECUADRO INFORMATIVO DE COSTOS TRANSPARENTES */}
+          <div className="p-5 bg-blue-950/30 border border-blue-900/50 rounded-3xl max-w-3xl mx-auto text-left space-y-2">
+            <div className="flex items-center gap-2 text-blue-300 text-xs font-black uppercase">
+              <Sparkles className="w-4 h-4 text-amber-400" />
+              <span>Condiciones Claras de Implementación:</span>
+            </div>
+            <p className="text-xs text-slate-300 leading-relaxed">
+              Solo tienen costo la <b>instalación técnica, la carga de datos de clientes y créditos otorgados hasta la fecha</b>, y las <b>actualizaciones retroactivas de las deudas vigentes</b> (digitalización completa de tu cuaderno anterior). <b>No se cobra el primer mes de suscripción</b> a la plataforma.
+            </p>
+          </div>
         </div>
       </section>
 
@@ -654,7 +675,7 @@ export default function CommercialShowcasePage() {
             ¿Listo para blindar tu negocio y cobrar a tiempo?
           </h2>
           <p className="text-sm sm:text-base text-slate-300 max-w-xl mx-auto">
-            Configura tu almacén en 60 segundos. No necesitas tarjeta de crédito para comenzar tu prueba gratuita de 14 días.
+            Configura tu almacén en minutos. Solo abonas la instalación técnica y la carga de datos de clientes y deudas vigentes. ¡El primer mes de suscripción no se cobra!
           </p>
           <div className="pt-2">
             <Link
@@ -662,7 +683,7 @@ export default function CommercialShowcasePage() {
               className="inline-flex items-center gap-2 px-8 py-4 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white rounded-2xl text-sm sm:text-base font-black shadow-xl shadow-blue-600/40 transition active:scale-95"
             >
               <Sparkles className="w-5 h-5 text-amber-300" />
-              <span>Crear Mi Almacén Ahora (Gratis)</span>
+              <span>Activar Mi Almacén (1er Mes Bonificado)</span>
               <ArrowRight className="w-5 h-5" />
             </Link>
           </div>

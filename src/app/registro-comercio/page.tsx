@@ -122,7 +122,7 @@ function MerchantRegisterContent() {
         currency_symbol: selectedCurrency.symbol,
         subscription_plan: 'pro_monthly',
         sub_status: 'trialing',
-        trial_ends_at: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString(),
+        trial_ends_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
         subscription_ends_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
         created_at: now,
         updated_at: now,
@@ -350,9 +350,19 @@ function MerchantRegisterContent() {
                 <span className="font-mono font-bold text-emerald-400 text-sm">{successData.owner.pin}</span>
               </div>
               <div className="flex justify-between items-center text-slate-400">
-                <span>Periodo de Prueba Pro:</span>
-                <span className="font-bold text-blue-400">14 días activos (Gratis)</span>
+                <span>Beneficio de Inicio:</span>
+                <span className="font-bold text-emerald-400">1er Mes Bonificado (Sin costo de suscripción)</span>
               </div>
+            </div>
+
+            {/* CONDICIONES CLARAS DE SERVICIO */}
+            <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-3.5 text-left text-xs space-y-1.5">
+              <span className="font-bold text-slate-200 block text-[11px] uppercase tracking-wide">
+                📋 Condiciones del Servicio:
+              </span>
+              <p className="text-[11px] text-slate-300 leading-relaxed">
+                Solo tienen costo la <b>instalación técnica, la carga de datos de clientes y créditos otorgados hasta la fecha</b>, y las <b>actualizaciones retroactivas de las deudas vigentes</b> (digitalización de tu cuaderno anterior). <b>No se cobra el primer mes de suscripción</b>.
+              </p>
             </div>
 
             {/* LINK DE AUTO-REGISTRO PARA CLIENTES */}
@@ -617,12 +627,17 @@ function MerchantRegisterContent() {
                   className="w-full py-3.5 px-4 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white rounded-2xl text-xs sm:text-sm font-black shadow-lg shadow-blue-600/30 transition flex items-center justify-center gap-2 active:scale-98 disabled:opacity-50 mt-4 cursor-pointer"
                 >
                   <Sparkles className="w-4 h-4 text-amber-300" />
-                  <span>{submitting ? 'Creando Almacén...' : 'Comenzar 14 Días Gratis'}</span>
+                  <span>{submitting ? 'Creando Almacén...' : 'Activar Almacén con 1er Mes Bonificado'}</span>
                 </button>
 
-                <p className="text-[11px] text-slate-500 text-center">
-                  Sin tarjeta de crédito requerida • Listo para operar al instante
-                </p>
+                <div className="p-3 bg-blue-950/40 border border-blue-900/50 rounded-2xl text-left space-y-1">
+                  <span className="text-[11px] font-black uppercase text-blue-300 block">
+                    Transparencia y Condiciones:
+                  </span>
+                  <p className="text-[11px] text-slate-300 leading-relaxed">
+                    Solo tienen costo la <b>instalación técnica, la carga de datos de clientes y créditos otorgados hasta la fecha</b>, y las <b>actualizaciones retroactivas de las deudas vigentes</b> (digitalización de tu cuaderno). <b>No se cobra el primer mes de suscripción</b>.
+                  </p>
+                </div>
               </form>
             ) : (
               /* FORMULARIO DE LOGIN DE COMERCIO */
