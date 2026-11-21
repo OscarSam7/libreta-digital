@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { Customer } from '@/types';
 import { sanitizeText, validateAmount } from '@/lib/validation';
-import { INITIAL_CUSTOMERS, INITIAL_TENANT } from '@/lib/storage';
+import { INITIAL_CUSTOMERS, INITIAL_TENANT, cleanCustomerForSupabase, restoreCustomerFromSupabase, cleanTenantForSupabase } from '@/lib/storage';
 import { createClient as createSupabaseClient } from '@supabase/supabase-js';
 
 // Repositorio en memoria compartido a nivel de servidor (Node / Edge runtime en Vercel)
@@ -105,7 +105,7 @@ export async function GET(req: NextRequest) {
     if (supabase) {
       try {
         if (tenantId === INITIAL_TENANT.id) {
-          await supabase.from('tenants').upsert(INITIAL_TENANT);
+          await supabase.from('tenants').upsert(cleanTenantForSupabase(INITIAL_TENANT));
         }
 
         const { data, error } = await supabase
@@ -115,14 +115,15 @@ export async function GET(req: NextRequest) {
           .order('created_at', { ascending: false });
 
         if (!error && data) {
-          // Combinar registros sin duplicar IDs
+          // Combinar registros sin duplicar IDs y restaurar campos
+          const restoredData = (data as any[]).map(restoreCustomerFromSupabase);
           const map = new Map<string, Customer>();
           if (tenantId === INITIAL_TENANT.id) {
             for (const c of INITIAL_CUSTOMERS) {
               map.set(c.id, c);
             }
           }
-          for (const c of data as Customer[]) {
+          for (const c of restoredData) {
             map.set(c.id, c);
           }
           for (const c of memoryList) {
@@ -218,9 +219,10 @@ export async function POST(req: NextRequest) {
     if (supabase) {
       try {
         if (tenantId === INITIAL_TENANT.id) {
-          await supabase.from('tenants').upsert(INITIAL_TENANT);
+          await supabase.from('tenants').upsert(cleanTenantForSupabase(INITIAL_TENANT));
         }
-        const { error: sbError } = await supabase.from('customers').upsert(customer);
+        const cleanedCustomer = cleanCustomerForSupabase(customer);
+        const { error: sbError } = await supabase.from('customers').upsert(cleanedCustomer);
         if (sbError) {
           console.warn('Supabase upsert warning:', sbError.message);
         }

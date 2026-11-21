@@ -61,6 +61,9 @@ export interface Customer {
     userAgent?: string;
     pinUsed?: string;
     acceptedVersion?: string;
+    informconf_status?: string;
+    registeredVia?: string;
+    [key: string]: any;
   };
   credit_cycle?: CreditCycle;
   registered_via?: 'SELF_MOBILE_LINK' | 'IN_STORE_COUNTER' | 'EXCEPTION_NO_PHONE';

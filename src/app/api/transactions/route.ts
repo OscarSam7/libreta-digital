@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { Transaction } from '@/types';
-import { INITIAL_TENANT, INITIAL_TRANSACTIONS } from '@/lib/storage';
+import { INITIAL_TENANT, INITIAL_TRANSACTIONS, cleanTransactionForSupabase, cleanTenantForSupabase } from '@/lib/storage';
 import { createClient as createSupabaseClient } from '@supabase/supabase-js';
 
 declare global {
@@ -101,9 +101,9 @@ export async function POST(req: NextRequest) {
     if (supabase) {
       try {
         if (tenantId === INITIAL_TENANT.id) {
-          await supabase.from('tenants').upsert(INITIAL_TENANT);
+          await supabase.from('tenants').upsert(cleanTenantForSupabase(INITIAL_TENANT));
         }
-        await supabase.from('transactions').upsert(tx);
+        await supabase.from('transactions').upsert(cleanTransactionForSupabase(tx));
         await supabase.from('customers').update({ current_balance: tx.new_balance }).eq('id', tx.customer_id);
       } catch (e) {}
     }

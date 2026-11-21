@@ -246,6 +246,29 @@ export const INITIAL_CUSTOMERS: Customer[] = [
     created_at: new Date(Date.now() - 40 * 24 * 60 * 60 * 1000).toISOString(),
     updated_at: new Date().toISOString(),
   },
+  {
+    id: '019339bb-7824-7662-8e39-165f123d9204',
+    tenant_id: '019339aa-7824-7662-8e39-165f123d9101',
+    full_name: 'Patricia Meza',
+    nickname: 'Dir: Barrio San Pedro',
+    document_id: '5531942',
+    phone: '0975872063',
+    qr_token: 'pmeza-sanpedro-77a1',
+    security_pin: '1234',
+    credit_limit: 500000,
+    current_balance: 105000,
+    is_blocked: false,
+    terms_accepted: true,
+    terms_accepted_at: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
+    terms_acceptance_method: 'PORTAL_PIN',
+    terms_acceptance_metadata: {
+      informconf_status: 'INFORMCONF OK',
+      registeredVia: 'SELF_MOBILE_LINK',
+    },
+    registered_via: 'SELF_MOBILE_LINK',
+    created_at: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
+    updated_at: new Date().toISOString(),
+  },
 ];
 
 export const INITIAL_TRANSACTIONS: Transaction[] = [
@@ -304,6 +327,26 @@ export const INITIAL_TRANSACTIONS: Transaction[] = [
     status: 'PENDING_CUSTOMER',
     validation_pin: '8310',
     created_at: new Date().toISOString(),
+  },
+  {
+    id: '019339cc-7824-7662-8e39-165f123d9304',
+    tenant_id: '019339aa-7824-7662-8e39-165f123d9101',
+    customer_id: '019339bb-7824-7662-8e39-165f123d9204',
+    created_by: 'user-owner-001',
+    type: 'DEBIT_PURCHASE',
+    amount: 105000,
+    previous_balance: 0,
+    new_balance: 105000,
+    description: '1 Pañalera Pampers G, 1 Leche en polvo Nido 800g',
+    items: [
+      { name: 'Pañalera Pampers G', qty: 1, price: 65000 },
+      { name: 'Leche Nido 800g', qty: 1, price: 40000 },
+    ],
+    status: 'CERTIFIED_BOTH',
+    validated_at: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
+    validation_method: 'IN_STORE_PIN',
+    validation_metadata: { ip: '190.128.45.10', ua: 'Merchant POS' },
+    created_at: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
   },
 ];
 
@@ -364,6 +407,90 @@ export function setCurrentOperator(operator: StaffMember) {
   }
 }
 
+export function cleanCustomerForSupabase(c: Customer): any {
+  const meta = {
+    ...(c.terms_acceptance_metadata || {}),
+    registered_via: c.registered_via,
+    pin_hash: c.pin_hash,
+  };
+  return {
+    id: c.id,
+    tenant_id: c.tenant_id,
+    full_name: c.full_name,
+    nickname: c.nickname || null,
+    document_id: c.document_id || null,
+    phone: c.phone || null,
+    qr_token: c.qr_token,
+    security_pin: c.security_pin || '1234',
+    credit_limit: Number(c.credit_limit) || 0,
+    current_balance: Number(c.current_balance) || 0,
+    is_blocked: Boolean(c.is_blocked),
+    credit_cycle: c.credit_cycle || 'MENSUAL',
+    terms_accepted: Boolean(c.terms_accepted),
+    terms_accepted_at: c.terms_accepted_at || null,
+    terms_acceptance_method: c.terms_acceptance_method || null,
+    terms_acceptance_metadata: meta,
+    created_at: c.created_at || new Date().toISOString(),
+    updated_at: c.updated_at || new Date().toISOString(),
+  };
+}
+
+export function restoreCustomerFromSupabase(row: any): Customer {
+  const meta = row.terms_acceptance_metadata || {};
+  return {
+    ...row,
+    credit_limit: Number(row.credit_limit) || 0,
+    current_balance: Number(row.current_balance) || 0,
+    registered_via: row.registered_via || meta.registered_via || meta.registeredVia || 'IN_STORE_COUNTER',
+    pin_hash: row.pin_hash || meta.pin_hash || `$2a$06$hash_${row.security_pin || '1234'}`,
+  };
+}
+
+export function cleanTransactionForSupabase(tx: Transaction): any {
+  return {
+    id: tx.id,
+    tenant_id: tx.tenant_id,
+    customer_id: tx.customer_id,
+    created_by: tx.created_by || 'user-owner-001',
+    operator_id: tx.operator_id || null,
+    operator_name: tx.operator_name || null,
+    type: tx.type,
+    amount: Number(tx.amount) || 0,
+    previous_balance: Number(tx.previous_balance) || 0,
+    new_balance: Number(tx.new_balance) || 0,
+    description: tx.description || null,
+    items: tx.items || [],
+    payment_method: tx.payment_method || 'EFECTIVO',
+    payment_reference: tx.payment_reference || null,
+    status: tx.status || 'CERTIFIED_BOTH',
+    validation_pin: tx.validation_pin || null,
+    validated_at: tx.validated_at || null,
+    validation_method: tx.validation_method || 'IN_STORE_PIN',
+    validation_metadata: tx.validation_metadata || {},
+    blockchain_hash: tx.blockchain_hash || null,
+    created_at: tx.created_at || new Date().toISOString(),
+  };
+}
+
+export function cleanTenantForSupabase(tenant: Tenant): any {
+  return {
+    id: tenant.id,
+    business_name: tenant.business_name,
+    tax_id: tenant.tax_id || null,
+    phone: tenant.phone || null,
+    address: tenant.address || null,
+    currency_code: tenant.currency_code || 'PYG',
+    currency_symbol: tenant.currency_symbol || '₲',
+    logo_url: tenant.logo_url || null,
+    subscription_plan: tenant.subscription_plan || 'pro_monthly',
+    sub_status: tenant.sub_status || 'active',
+    trial_ends_at: tenant.trial_ends_at || new Date(Date.now() + 14 * 86400000).toISOString(),
+    subscription_ends_at: tenant.subscription_ends_at || new Date(Date.now() + 30 * 86400000).toISOString(),
+    created_at: tenant.created_at || new Date().toISOString(),
+    updated_at: tenant.updated_at || new Date().toISOString(),
+  };
+}
+
 export function saveTransactions(transactions: Transaction[]) {
   if (typeof window !== 'undefined') {
     localStorage.setItem(STORAGE_KEYS.TRANSACTIONS, JSON.stringify(transactions));
@@ -372,12 +499,22 @@ export function saveTransactions(transactions: Transaction[]) {
     try {
       const supabase = createClient();
       if (supabase) {
-        supabase.from('transactions').upsert(transactions).then(({ error }: { error: any }) => {
+        const cleaned = transactions.map(cleanTransactionForSupabase);
+        supabase.from('transactions').upsert(cleaned).then(({ error }: { error: any }) => {
           if (error) console.warn('Supabase transactions sync notice:', error.message);
         });
       }
     } catch (e) {
       // Offline fallback
+    }
+
+    // Sincronizar también con la API central /api/transactions
+    for (const tx of transactions.slice(0, 10)) {
+      fetch('/api/transactions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(tx),
+      }).catch(() => {});
     }
   }
 }
@@ -390,12 +527,22 @@ export function saveCustomers(customers: Customer[]) {
     try {
       const supabase = createClient();
       if (supabase) {
-        supabase.from('customers').upsert(customers).then(({ error }: { error: any }) => {
+        const cleaned = customers.map(cleanCustomerForSupabase);
+        supabase.from('customers').upsert(cleaned).then(({ error }: { error: any }) => {
           if (error) console.warn('Supabase customers sync notice:', error.message);
         });
       }
     } catch (e) {
       // Offline fallback
+    }
+
+    // Sincronizar también con la API central /api/customers
+    for (const c of customers) {
+      fetch('/api/customers', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(c),
+      }).catch(() => {});
     }
   }
 }
@@ -408,7 +555,7 @@ export function saveTenant(tenant: Tenant) {
     try {
       const supabase = createClient();
       if (supabase) {
-        supabase.from('tenants').upsert(tenant).then(({ error }: { error: any }) => {
+        supabase.from('tenants').upsert(cleanTenantForSupabase(tenant)).then(({ error }: { error: any }) => {
           if (error) console.warn('Supabase tenant sync notice:', error.message);
         });
       }
@@ -422,40 +569,88 @@ export async function syncFromSupabase() {
   if (typeof window === 'undefined') return;
   try {
     const supabase = createClient();
-    if (!supabase) return;
+    if (supabase) {
+      const [tenantsRes, custRes, txRes, staffRes] = await Promise.all([
+        supabase.from('tenants').select('*').limit(1),
+        supabase.from('customers').select('*').order('created_at', { ascending: false }),
+        supabase.from('transactions').select('*').order('created_at', { ascending: false }),
+        supabase.from('staff_members').select('*').order('created_at', { ascending: false }),
+      ]);
 
-    const [tenantsRes, custRes, txRes, staffRes] = await Promise.all([
-      supabase.from('tenants').select('*').limit(1),
-      supabase.from('customers').select('*').order('created_at', { ascending: false }),
-      supabase.from('transactions').select('*').order('created_at', { ascending: false }),
-      supabase.from('staff_members').select('*').order('created_at', { ascending: false }),
+      if (tenantsRes.data && tenantsRes.data.length > 0) {
+        localStorage.setItem(STORAGE_KEYS.TENANT, JSON.stringify(tenantsRes.data[0]));
+      }
+
+      if (custRes.data && custRes.data.length > 0) {
+        const restored = custRes.data.map(restoreCustomerFromSupabase);
+        const localRaw = localStorage.getItem(STORAGE_KEYS.CUSTOMERS);
+        let merged = restored;
+        if (localRaw) {
+          try {
+            const localCusts: Customer[] = JSON.parse(localRaw);
+            const cloudIds = new Set(restored.map((c: any) => c.id));
+            const onlyLocal = localCusts.filter((c) => !cloudIds.has(c.id));
+            merged = [...restored, ...onlyLocal];
+          } catch (e) {}
+        }
+        localStorage.setItem(STORAGE_KEYS.CUSTOMERS, JSON.stringify(merged));
+      }
+
+      if (txRes.data && txRes.data.length > 0) {
+        const localTxRaw = localStorage.getItem(STORAGE_KEYS.TRANSACTIONS);
+        let mergedTx = txRes.data;
+        if (localTxRaw) {
+          try {
+            const localTxs: Transaction[] = JSON.parse(localTxRaw);
+            const cloudTxIds = new Set(txRes.data.map((t: any) => t.id));
+            const onlyLocalTx = localTxs.filter((t) => !cloudTxIds.has(t.id));
+            mergedTx = [...txRes.data, ...onlyLocalTx].sort(
+              (a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+            );
+          } catch (e) {}
+        }
+        localStorage.setItem(STORAGE_KEYS.TRANSACTIONS, JSON.stringify(mergedTx));
+      }
+
+      if (staffRes.data && staffRes.data.length > 0) {
+        localStorage.setItem(STORAGE_KEYS.STAFF, JSON.stringify(staffRes.data));
+      }
+    }
+
+    // SIEMPRE consultar también la API central compartida /api/customers y /api/transactions
+    const tenantRaw = localStorage.getItem(STORAGE_KEYS.TENANT);
+    const tenantId = tenantRaw ? JSON.parse(tenantRaw).id : INITIAL_TENANT.id;
+    const [apiCustRes, apiTxRes] = await Promise.all([
+      fetch(`/api/customers?tenantId=${tenantId}`).then((r) => r.json()).catch(() => null),
+      fetch(`/api/transactions?tenantId=${tenantId}`).then((r) => r.json()).catch(() => null),
     ]);
 
-    let changed = false;
-
-    if (tenantsRes.data && tenantsRes.data.length > 0) {
-      localStorage.setItem(STORAGE_KEYS.TENANT, JSON.stringify(tenantsRes.data[0]));
-      changed = true;
+    if (apiCustRes && apiCustRes.success && Array.isArray(apiCustRes.customers)) {
+      const currentRaw = localStorage.getItem(STORAGE_KEYS.CUSTOMERS);
+      const currentCusts: Customer[] = currentRaw ? JSON.parse(currentRaw) : [];
+      const map = new Map<string, Customer>();
+      for (const c of currentCusts) map.set(c.id, c);
+      for (const c of apiCustRes.customers) {
+        const existing = map.get(c.id);
+        map.set(c.id, existing ? { ...existing, ...c } : c);
+      }
+      const finalCusts = Array.from(map.values());
+      localStorage.setItem(STORAGE_KEYS.CUSTOMERS, JSON.stringify(finalCusts));
     }
 
-    if (custRes.data && custRes.data.length > 0) {
-      localStorage.setItem(STORAGE_KEYS.CUSTOMERS, JSON.stringify(custRes.data));
-      changed = true;
+    if (apiTxRes && apiTxRes.success && Array.isArray(apiTxRes.transactions)) {
+      const currentTxRaw = localStorage.getItem(STORAGE_KEYS.TRANSACTIONS);
+      const currentTxs: Transaction[] = currentTxRaw ? JSON.parse(currentTxRaw) : [];
+      const txMap = new Map<string, Transaction>();
+      for (const t of currentTxs) txMap.set(t.id, t);
+      for (const t of apiTxRes.transactions) txMap.set(t.id, t);
+      const finalTxs = Array.from(txMap.values()).sort(
+        (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      );
+      localStorage.setItem(STORAGE_KEYS.TRANSACTIONS, JSON.stringify(finalTxs));
     }
 
-    if (txRes.data && txRes.data.length > 0) {
-      localStorage.setItem(STORAGE_KEYS.TRANSACTIONS, JSON.stringify(txRes.data));
-      changed = true;
-    }
-
-    if (staffRes.data && staffRes.data.length > 0) {
-      localStorage.setItem(STORAGE_KEYS.STAFF, JSON.stringify(staffRes.data));
-      changed = true;
-    }
-
-    if (changed) {
-      window.dispatchEvent(new Event('libreta_data_updated'));
-    }
+    window.dispatchEvent(new Event('libreta_data_updated'));
   } catch (err) {
     console.warn('Sync from Supabase fallback:', err);
   }

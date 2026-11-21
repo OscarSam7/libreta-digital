@@ -191,59 +191,93 @@ export function MerchantDashboard() {
     window.addEventListener('libreta_data_updated', handleUpdate);
     window.addEventListener('storage', handleUpdate);
 
-    // Auto-sincronización en vivo con el servidor central para clientes auto-registrados
+    // Auto-sincronización en vivo con el servidor central para clientes y transacciones
     let isMounted = true;
-    const syncCloudCustomers = async () => {
+    const syncCloudData = async () => {
       const currentTenantId = tenant?.id;
       if (!currentTenantId) return;
 
       try {
+        // 1. Sincronizar clientes (nuevos registros y actualización de saldos)
         const res = await fetch(`/api/customers?tenantId=${currentTenantId}`);
-        if (!res.ok) return;
-        const json = await res.json();
-        if (json.success && Array.isArray(json.customers) && isMounted) {
-          setCustomers((prevCustomers) => {
-            const prevIds = new Set(prevCustomers.map((c) => c.id));
-            const newOnes = json.customers.filter((c: Customer) => !prevIds.has(c.id));
+        if (res.ok) {
+          const json = await res.json();
+          if (json.success && Array.isArray(json.customers) && isMounted) {
+            setCustomers((prevCustomers) => {
+              const prevIds = new Set(prevCustomers.map((c) => c.id));
+              const newOnes = json.customers.filter((c: Customer) => !prevIds.has(c.id));
+              const cloudMap = new Map<string, Customer>();
+              for (const c of json.customers) cloudMap.set(c.id, c);
 
-            if (newOnes.length > 0) {
-              const merged = [...newOnes, ...prevCustomers];
-              saveCustomers(merged);
-
-              // Disparar notificación del cliente auto-registrado
-              const latest = newOnes[0];
-              setNewCustomerAlert({
-                id: latest.id,
-                name: latest.full_name,
-                phone: latest.phone,
+              let hasDiff = newOnes.length > 0;
+              const merged = prevCustomers.map((p) => {
+                const cloud = cloudMap.get(p.id);
+                if (cloud && (cloud.current_balance !== p.current_balance || cloud.credit_limit !== p.credit_limit)) {
+                  hasDiff = true;
+                  return { ...p, ...cloud };
+                }
+                return p;
               });
 
-              // Reproducir alerta sonora de bienvenida (Web Audio API)
-              try {
-                const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
-                const osc = ctx.createOscillator();
-                const gain = ctx.createGain();
-                osc.type = 'sine';
-                osc.frequency.setValueAtTime(587.33, ctx.currentTime);
-                osc.frequency.exponentialRampToValueAtTime(880, ctx.currentTime + 0.15);
-                gain.gain.setValueAtTime(0.25, ctx.currentTime);
-                gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.35);
-                osc.connect(gain);
-                gain.connect(ctx.destination);
-                osc.start();
-                osc.stop(ctx.currentTime + 0.35);
-              } catch (e) {}
+              if (newOnes.length > 0) {
+                merged.unshift(...newOnes);
+                const latest = newOnes[0];
+                setNewCustomerAlert({
+                  id: latest.id,
+                  name: latest.full_name,
+                  phone: latest.phone,
+                });
 
-              return merged;
-            }
-            return prevCustomers;
-          });
+                // Reproducir alerta sonora de bienvenida (Web Audio API)
+                try {
+                  const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+                  const osc = ctx.createOscillator();
+                  const gain = ctx.createGain();
+                  osc.type = 'sine';
+                  osc.frequency.setValueAtTime(587.33, ctx.currentTime);
+                  osc.frequency.exponentialRampToValueAtTime(880, ctx.currentTime + 0.15);
+                  gain.gain.setValueAtTime(0.25, ctx.currentTime);
+                  gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.35);
+                  osc.connect(gain);
+                  gain.connect(ctx.destination);
+                  osc.start();
+                  osc.stop(ctx.currentTime + 0.35);
+                } catch (e) {}
+              }
+
+              if (hasDiff) {
+                saveCustomers(merged);
+                return merged;
+              }
+              return prevCustomers;
+            });
+          }
+        }
+
+        // 2. Sincronizar transacciones en tiempo real
+        const txRes = await fetch(`/api/transactions?tenantId=${currentTenantId}`);
+        if (txRes.ok) {
+          const txJson = await txRes.json();
+          if (txJson.success && Array.isArray(txJson.transactions) && isMounted) {
+            setTransactions((prevTx) => {
+              const localIds = new Set(prevTx.map((t) => t.id));
+              const newTxs = txJson.transactions.filter((t: Transaction) => !localIds.has(t.id));
+              if (newTxs.length > 0) {
+                const mergedTx = [...newTxs, ...prevTx].sort(
+                  (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+                );
+                saveTransactions(mergedTx);
+                return mergedTx;
+              }
+              return prevTx;
+            });
+          }
         }
       } catch (err) {}
     };
 
-    syncCloudCustomers();
-    const interval = setInterval(syncCloudCustomers, 4000);
+    syncCloudData();
+    const interval = setInterval(syncCloudData, 4000);
 
     // BroadcastChannel para sincronización instantánea entre pestañas
     let bc: BroadcastChannel | null = null;
@@ -271,7 +305,7 @@ export function MerchantDashboard() {
 
     const handleVisibility = () => {
       if (document.visibilityState === 'visible') {
-        syncCloudCustomers();
+        syncCloudData();
       }
     };
     document.addEventListener('visibilitychange', handleVisibility);

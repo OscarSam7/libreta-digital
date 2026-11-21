@@ -21,7 +21,7 @@ import {
   EyeOff
 } from 'lucide-react';
 import { Tenant } from '@/types';
-import { getStoredData, saveCustomers } from '@/lib/storage';
+import { getStoredData, saveCustomers, cleanCustomerForSupabase } from '@/lib/storage';
 import { createClient } from '@/lib/supabase/client';
 import confetti from 'canvas-confetti';
 import { BrandLogo } from '@/components/BrandLogo';
@@ -215,7 +215,7 @@ function ClientRegisterContent() {
       // 3. Guardar en Supabase si está disponible
       const supabase = createClient();
       if (supabase) {
-        const { error: sbError } = await supabase.from('customers').insert(newCustomer);
+        const { error: sbError } = await supabase.from('customers').insert(cleanCustomerForSupabase(newCustomer as any));
         if (sbError) {
           console.warn('Supabase insert notice:', sbError.message);
         }
