@@ -1,5 +1,5 @@
 import { Customer, CreditCycle } from '@/types';
-import { getStoredData, saveCustomers } from '@/lib/storage';
+import { getStoredData, saveCustomers, areCustomersSamePerson, deduplicateCustomers } from '@/lib/storage';
 import { sanitizeText, validateAmount } from '@/lib/validation';
 import { safeCompare } from '@/lib/security';
 
@@ -15,6 +15,18 @@ export interface CreateCustomerInput {
 
 export function createNewCustomer(input: CreateCustomerInput): Customer {
   const { customers, tenant } = getStoredData();
+
+  const existing = customers.find((c) =>
+    areCustomersSamePerson(c, {
+      full_name: input.full_name,
+      document_id: input.document_id,
+      phone: input.phone,
+    } as any)
+  );
+
+  if (existing) {
+    return existing;
+  }
 
   const token = 'cli-' + Math.random().toString(36).substring(2, 9) + '-' + Date.now().toString(36);
   const pin = Math.floor(1000 + Math.random() * 9000).toString();
@@ -40,7 +52,7 @@ export function createNewCustomer(input: CreateCustomerInput): Customer {
     updated_at: new Date().toISOString(),
   };
 
-  const updated = [newCust, ...customers];
+  const updated = deduplicateCustomers([newCust, ...customers]);
   saveCustomers(updated);
   return newCust;
 }

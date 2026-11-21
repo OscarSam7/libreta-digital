@@ -1,7 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { Customer } from '@/types';
 import { sanitizeText, validateAmount } from '@/lib/validation';
-import { INITIAL_CUSTOMERS, INITIAL_TENANT, cleanCustomerForSupabase, restoreCustomerFromSupabase, cleanTenantForSupabase } from '@/lib/storage';
+import {
+  INITIAL_CUSTOMERS,
+  INITIAL_TENANT,
+  cleanCustomerForSupabase,
+  restoreCustomerFromSupabase,
+  cleanTenantForSupabase,
+  deduplicateCustomers,
+  areCustomersSamePerson,
+  mergeCustomers,
+} from '@/lib/storage';
 import { createClient as createSupabaseClient } from '@supabase/supabase-js';
 
 // Repositorio en memoria compartido a nivel de servidor (Node / Edge runtime en Vercel)
@@ -117,21 +126,12 @@ export async function GET(req: NextRequest) {
         if (!error && data) {
           // Combinar registros sin duplicar IDs y restaurar campos
           const restoredData = (data as any[]).map(restoreCustomerFromSupabase);
-          const map = new Map<string, Customer>();
-          if (tenantId === INITIAL_TENANT.id) {
-            for (const c of INITIAL_CUSTOMERS) {
-              map.set(c.id, c);
-            }
-          }
-          for (const c of restoredData) {
-            map.set(c.id, c);
-          }
-          for (const c of memoryList) {
-            if (!map.has(c.id)) {
-              map.set(c.id, c);
-            }
-          }
-          const combined = Array.from(map.values()).sort(
+          const rawList = [
+            ...(tenantId === INITIAL_TENANT.id ? INITIAL_CUSTOMERS : []),
+            ...restoredData,
+            ...memoryList,
+          ];
+          const combined = deduplicateCustomers(rawList).sort(
             (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
           );
           customerStore.set(tenantId, combined);
@@ -142,7 +142,9 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    return NextResponse.json({ success: true, customers: memoryList });
+    const finalMemory = deduplicateCustomers(memoryList);
+    customerStore.set(tenantId, finalMemory);
+    return NextResponse.json({ success: true, customers: finalMemory });
   } catch (err: any) {
     return NextResponse.json(
       { success: false, error: err.message || 'Error al obtener clientes' },
@@ -204,15 +206,16 @@ export async function POST(req: NextRequest) {
       updated_at: new Date().toISOString(),
     };
 
-    // 1. Guardar en store compartido en servidor
+    // 1. Guardar en store compartido en servidor deduplicando exhaustivamente
     if (tenantId === INITIAL_TENANT.id && !customerStore.has(INITIAL_TENANT.id)) {
       customerStore.set(INITIAL_TENANT.id, [...INITIAL_CUSTOMERS]);
     }
     const currentList = customerStore.get(tenantId) || [];
-    // Evitar duplicados por id o qr_token
-    const filtered = currentList.filter((c) => c.id !== customer.id && c.qr_token !== customer.qr_token);
-    const updated = [customer, ...filtered];
+    const updated = deduplicateCustomers([customer, ...currentList]);
     customerStore.set(tenantId, updated);
+
+    // Obtener la versión consolidada/canónica
+    const savedCustomer = updated.find((c) => areCustomersSamePerson(c, customer)) || customer;
 
     // 2. Guardar en Supabase si está disponible
     const supabase = getServerSupabase();
@@ -221,7 +224,7 @@ export async function POST(req: NextRequest) {
         if (tenantId === INITIAL_TENANT.id) {
           await supabase.from('tenants').upsert(cleanTenantForSupabase(INITIAL_TENANT));
         }
-        const cleanedCustomer = cleanCustomerForSupabase(customer);
+        const cleanedCustomer = cleanCustomerForSupabase(savedCustomer);
         const { error: sbError } = await supabase.from('customers').upsert(cleanedCustomer);
         if (sbError) {
           console.warn('Supabase upsert warning:', sbError.message);
@@ -231,7 +234,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    return NextResponse.json({ success: true, customer });
+    return NextResponse.json({ success: true, customer: savedCustomer });
   } catch (err: any) {
     return NextResponse.json(
       { success: false, error: err.message || 'Error al guardar cliente' },

@@ -21,7 +21,13 @@ import {
   EyeOff
 } from 'lucide-react';
 import { Tenant } from '@/types';
-import { getStoredData, saveCustomers, cleanCustomerForSupabase } from '@/lib/storage';
+import {
+  getStoredData,
+  saveCustomers,
+  cleanCustomerForSupabase,
+  deduplicateCustomers,
+  areCustomersSamePerson,
+} from '@/lib/storage';
 import { createClient } from '@/lib/supabase/client';
 import confetti from 'canvas-confetti';
 import { BrandLogo } from '@/components/BrandLogo';
@@ -161,23 +167,34 @@ function ClientRegisterContent() {
     setSubmitting(true);
 
     try {
+      const stored = getStoredData();
+      const existing = stored.customers.find((c) =>
+        areCustomersSamePerson(c, {
+          document_id: documentId,
+          phone: cleanPhone,
+          full_name: fullName,
+        } as any)
+      );
+
       const cleanDoc = documentId.replace(/\D/g, '') || Math.floor(1000 + Math.random() * 9000).toString();
       const randomSuffix = Math.random().toString(36).substring(2, 6);
-      const generatedToken = `c-${cleanDoc}-${randomSuffix}`;
-      const newCustomerId = crypto.randomUUID();
+      const generatedToken = existing?.qr_token || `c-${cleanDoc}-${randomSuffix}`;
+      const customerIdToUse = existing?.id || crypto.randomUUID();
+      const currentLimit = existing ? existing.credit_limit : 0;
+      const currentBal = existing ? existing.current_balance : 0;
 
       const newCustomer = {
-        id: newCustomerId,
+        id: customerIdToUse,
         tenant_id: selectedTenantId,
         full_name: sanitizeText(fullName, 100),
-        nickname: address.trim() ? `Dir: ${sanitizeText(address, 150)}` : '',
+        nickname: address.trim() ? `Dir: ${sanitizeText(address, 150)}` : (existing?.nickname || ''),
         document_id: sanitizeText(documentId, 30),
         phone: cleanPhone,
         qr_token: generatedToken,
         security_pin: securityPin,
-        credit_limit: 0, // Inicia con 0 hasta que el almacenero evalúe el límite
-        current_balance: 0,
-        is_blocked: false,
+        credit_limit: currentLimit,
+        current_balance: currentBal,
+        is_blocked: existing ? existing.is_blocked : false,
         credit_cycle: 'MENSUAL' as const,
         terms_accepted: true,
         terms_accepted_at: new Date().toISOString(),
@@ -185,10 +202,10 @@ function ClientRegisterContent() {
         terms_acceptance_metadata: {
           userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : 'Customer Mobile Web',
           registeredVia: 'SELF_REGISTER_FORM',
-          registrationDate: new Date().toISOString()
+          registrationDate: new Date().toISOString(),
         },
         registered_via: 'SELF_MOBILE_LINK' as const,
-        created_at: new Date().toISOString(),
+        created_at: existing ? existing.created_at : new Date().toISOString(),
         updated_at: new Date().toISOString(),
       };
 
@@ -215,15 +232,14 @@ function ClientRegisterContent() {
       // 3. Guardar en Supabase si está disponible
       const supabase = createClient();
       if (supabase) {
-        const { error: sbError } = await supabase.from('customers').insert(cleanCustomerForSupabase(newCustomer as any));
+        const { error: sbError } = await supabase.from('customers').upsert(cleanCustomerForSupabase(newCustomer as any));
         if (sbError) {
           console.warn('Supabase insert notice:', sbError.message);
         }
       }
 
-      // Guardar en almacenamiento local
-      const stored = getStoredData();
-      saveCustomers([newCustomer, ...stored.customers]);
+      // Guardar en almacenamiento local deduplicado
+      saveCustomers(deduplicateCustomers([newCustomer, ...stored.customers]));
 
       confetti({
         particleCount: 80,

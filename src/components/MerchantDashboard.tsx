@@ -3,7 +3,20 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { Customer, Transaction, Tenant, TransactionType, PaymentMethod, StaffMember, StaffRole, StaffPermissions } from '@/types';
-import { getStoredData, saveCustomers, saveTransactions, saveTenant, syncFromSupabase, saveStaff, setCurrentOperator } from '@/lib/storage';
+import {
+  getStoredData,
+  saveCustomers,
+  saveTransactions,
+  saveTenant,
+  syncFromSupabase,
+  saveStaff,
+  setCurrentOperator,
+  deduplicateCustomers,
+  deduplicateTransactions,
+  areCustomersSamePerson,
+  normalizeDocumentId,
+  normalizePhone,
+} from '@/lib/storage';
 import { executeLedgerTransaction, certifyTransactionWithPin } from '@/lib/ledger';
 import { exportTransactionsToCSV, generateWhatsAppReminderUrl } from '@/lib/reports';
 import { CustomerQRModal } from '@/components/CustomerQRModal';
@@ -164,9 +177,11 @@ export function MerchantDashboard() {
 
   const loadData = () => {
     const data = getStoredData();
+    const cleanCusts = deduplicateCustomers(data.customers);
+    const cleanTxs = deduplicateTransactions(data.transactions);
     setTenant(data.tenant);
-    setCustomers(data.customers);
-    setTransactions(data.transactions);
+    setCustomers(cleanCusts);
+    setTransactions(cleanTxs);
     setStaff(data.staff);
     setCurrentOperatorState(data.currentOperator);
   };
@@ -208,24 +223,41 @@ export function MerchantDashboard() {
           const json = await res.json();
           if (json.success && Array.isArray(json.customers) && isMounted) {
             setCustomers((prevCustomers) => {
-              const prevIds = new Set(prevCustomers.map((c) => c.id));
-              const newOnes = json.customers.filter((c: Customer) => !prevIds.has(c.id));
-              const cloudMap = new Map<string, Customer>();
-              for (const c of json.customers) cloudMap.set(c.id, c);
+              const cleanCloud = deduplicateCustomers(json.customers);
+              const merged = deduplicateCustomers([...cleanCloud, ...prevCustomers]);
 
-              let hasDiff = newOnes.length > 0;
-              const merged = prevCustomers.map((p) => {
-                const cloud = cloudMap.get(p.id);
-                if (cloud && (cloud.current_balance !== p.current_balance || cloud.credit_limit !== p.credit_limit)) {
-                  hasDiff = true;
-                  return { ...p, ...cloud };
-                }
-                return p;
+              // Identificar si hay clientes genuinamente nuevos para alertar (no falsos positivos de duplicados)
+              const prevIds = new Set(prevCustomers.map((c) => c.id));
+              const prevDocs = new Set(prevCustomers.map((c) => normalizeDocumentId(c.document_id)).filter(Boolean));
+              const prevPhones = new Set(prevCustomers.map((c) => normalizePhone(c.phone)).filter(Boolean));
+
+              const genuinelyNew = cleanCloud.filter((c) => {
+                if (prevIds.has(c.id)) return false;
+                const doc = normalizeDocumentId(c.document_id);
+                if (doc && prevDocs.has(doc)) return false;
+                const ph = normalizePhone(c.phone);
+                if (ph && prevPhones.has(ph)) return false;
+                return true;
               });
 
-              if (newOnes.length > 0) {
-                merged.unshift(...newOnes);
-                const latest = newOnes[0];
+              let hasDiff = merged.length !== prevCustomers.length || genuinelyNew.length > 0;
+              if (!hasDiff) {
+                for (const m of merged) {
+                  const p = prevCustomers.find((c) => c.id === m.id);
+                  if (
+                    p &&
+                    (p.current_balance !== m.current_balance ||
+                      p.credit_limit !== m.credit_limit ||
+                      p.full_name !== m.full_name)
+                  ) {
+                    hasDiff = true;
+                    break;
+                  }
+                }
+              }
+
+              if (genuinelyNew.length > 0) {
+                const latest = genuinelyNew[0];
                 setNewCustomerAlert({
                   id: latest.id,
                   name: latest.full_name,
@@ -292,8 +324,8 @@ export function MerchantDashboard() {
           if (event.data?.type === 'NEW_CUSTOMER_REGISTERED' && event.data.customer) {
             const newC = event.data.customer;
             setCustomers((prev) => {
-              if (prev.some((c) => c.id === newC.id)) return prev;
-              const merged = [newC, ...prev];
+              if (prev.some((c) => areCustomersSamePerson(c, newC))) return prev;
+              const merged = deduplicateCustomers([newC, ...prev]);
               saveCustomers(merged);
               setNewCustomerAlert({
                 id: newC.id,
@@ -398,6 +430,23 @@ export function MerchantDashboard() {
     const finalPhone = isNoPhoneException && !newCustPhone.trim()
       ? 'Sin celular (Excepción Dueño)'
       : sanitizeText(newCustPhone, 30);
+
+    // Verificación preventiva contra doble registro
+    const duplicate = customers.find((c) =>
+      areCustomersSamePerson(c, {
+        document_id: newCustDoc.trim(),
+        phone: finalPhone,
+        full_name: newCustName.trim(),
+      } as Customer)
+    );
+
+    if (duplicate) {
+      setNewCustError(
+        `Ya existe un cliente registrado con estos datos: "${duplicate.full_name}" (Doc: ${duplicate.document_id || 'N/A'}, Tel: ${duplicate.phone || 'N/A'}). No se permiten duplicados.`
+      );
+      return;
+    }
+
     const newCustomerId = typeof crypto !== 'undefined' && crypto.randomUUID
       ? crypto.randomUUID()
       : '019339bb-' + Math.random().toString(36).substring(2, 6) + '-7662-8e39-165f123d9299';
@@ -420,7 +469,7 @@ export function MerchantDashboard() {
       updated_at: new Date().toISOString(),
     };
 
-    const updated = [newCustomer, ...customers];
+    const updated = deduplicateCustomers([newCustomer, ...customers]);
     saveCustomers(updated);
     setCustomers(updated);
 

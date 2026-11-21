@@ -27,6 +27,165 @@ const STORAGE_KEYS = {
   IS_LOGGED_IN: 'libretadigital_is_logged_in_v2',
 };
 
+// ==========================================
+// MOTOR DE NORMALIZACIÓN Y DEDUPLICACIÓN
+// ==========================================
+
+export function normalizeDocumentId(doc?: string | null): string {
+  if (!doc) return '';
+  return String(doc).replace(/\D/g, '').trim();
+}
+
+export function normalizePhone(phone?: string | null): string {
+  if (!phone) return '';
+  const str = String(phone);
+  if (/sin\s*celular|excepci[oó]n/i.test(str)) return '';
+  let digits = str.replace(/\D/g, '');
+  if (digits.startsWith('595')) {
+    digits = digits.slice(3);
+  }
+  if (digits.startsWith('0')) {
+    digits = digits.slice(1);
+  }
+  return digits;
+}
+
+export function normalizeName(name?: string | null): string {
+  if (!name) return '';
+  return String(name)
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+export function areCustomersSamePerson(c1: Partial<Customer>, c2: Partial<Customer>): boolean {
+  if (!c1 || !c2) return false;
+
+  // 1. Mismo ID exacto
+  if (c1.id && c2.id && c1.id === c2.id) return true;
+
+  // 2. Mismo QR token
+  if (c1.qr_token && c2.qr_token && c1.qr_token === c2.qr_token) return true;
+
+  // 3. Documento de identidad normalizado (Cédula / DNI / RUC)
+  const doc1 = normalizeDocumentId(c1.document_id);
+  const doc2 = normalizeDocumentId(c2.document_id);
+  const hasDocMatch = doc1 && doc2 && doc1.length >= 4 && doc1 === doc2;
+  if (hasDocMatch) return true;
+
+  // 4. Teléfono normalizado
+  const phone1 = normalizePhone(c1.phone);
+  const phone2 = normalizePhone(c2.phone);
+  const hasPhoneMatch = phone1 && phone2 && phone1.length >= 6 && phone1 === phone2;
+  if (hasPhoneMatch) return true;
+
+  // 5. Mismo nombre completo normalizado (verificando que no haya documentos contradictorios)
+  const name1 = normalizeName(c1.full_name);
+  const name2 = normalizeName(c2.full_name);
+  if (name1 && name2 && name1.length >= 5 && name1 === name2) {
+    // Si ambos tienen documento pero son diferentes, no son la misma persona
+    if (doc1 && doc2 && doc1 !== doc2) return false;
+    // Si ambos tienen teléfono pero son diferentes, no son la misma persona
+    if (phone1 && phone2 && phone1 !== phone2) return false;
+    return true;
+  }
+
+  return false;
+}
+
+export function mergeCustomers(a: Customer, b: Customer): Customer {
+  const isAInitial = INITIAL_CUSTOMERS.some((ic) => ic.id === a.id);
+  const isBInitial = INITIAL_CUSTOMERS.some((ic) => ic.id === b.id);
+
+  let primary = a;
+  let secondary = b;
+  if (isBInitial && !isAInitial) {
+    primary = b;
+    secondary = a;
+  }
+
+  const termsAccepted = Boolean(primary.terms_accepted || secondary.terms_accepted);
+  const termsAcceptedAt = primary.terms_accepted_at || secondary.terms_accepted_at;
+  const termsMethod = primary.terms_acceptance_method || secondary.terms_acceptance_method;
+  const creditLimit = Math.max(Number(primary.credit_limit) || 0, Number(secondary.credit_limit) || 0);
+  const currentBalance = Math.max(Number(primary.current_balance) || 0, Number(secondary.current_balance) || 0);
+
+  const earlistCreated =
+    primary.created_at && secondary.created_at
+      ? new Date(primary.created_at).getTime() < new Date(secondary.created_at).getTime()
+        ? primary.created_at
+        : secondary.created_at
+      : primary.created_at || secondary.created_at || new Date().toISOString();
+
+  return {
+    ...secondary,
+    ...primary,
+    id: primary.id,
+    full_name: primary.full_name || secondary.full_name,
+    nickname: primary.nickname || secondary.nickname || '',
+    document_id: primary.document_id || secondary.document_id || '',
+    phone: primary.phone || secondary.phone || '',
+    qr_token: primary.qr_token || secondary.qr_token,
+    security_pin: primary.security_pin || secondary.security_pin || '1234',
+    pin_hash: primary.pin_hash || secondary.pin_hash,
+    credit_limit: creditLimit,
+    current_balance: currentBalance,
+    is_blocked: Boolean(primary.is_blocked || secondary.is_blocked),
+    credit_cycle: primary.credit_cycle || secondary.credit_cycle || 'MENSUAL',
+    terms_accepted: termsAccepted,
+    terms_accepted_at: termsAcceptedAt,
+    terms_acceptance_method: termsMethod,
+    terms_acceptance_metadata: {
+      ...(secondary.terms_acceptance_metadata || {}),
+      ...(primary.terms_acceptance_metadata || {}),
+    },
+    registered_via: primary.registered_via || secondary.registered_via || 'SELF_MOBILE_LINK',
+    created_at: earlistCreated,
+    updated_at: new Date().toISOString(),
+  };
+}
+
+export function deduplicateCustomers(customers: Customer[]): Customer[] {
+  if (!Array.isArray(customers) || customers.length <= 1) return customers || [];
+
+  const deduplicated: Customer[] = [];
+  for (const item of customers) {
+    if (!item || !item.full_name) continue;
+    const matchIdx = deduplicated.findIndex((existing) => areCustomersSamePerson(existing, item));
+    if (matchIdx >= 0) {
+      deduplicated[matchIdx] = mergeCustomers(deduplicated[matchIdx], item);
+    } else {
+      deduplicated.push({ ...item });
+    }
+  }
+  return deduplicated;
+}
+
+export function deduplicateTransactions(
+  transactions: Transaction[],
+  customerIdRemap?: Map<string, string>
+): Transaction[] {
+  if (!Array.isArray(transactions) || transactions.length === 0) return [];
+  const result: Transaction[] = [];
+  const seenTx = new Set<string>();
+
+  for (const tx of transactions) {
+    if (!tx || !tx.id) continue;
+    if (seenTx.has(tx.id)) continue;
+    seenTx.add(tx.id);
+
+    const remapped = { ...tx };
+    if (customerIdRemap && customerIdRemap.has(remapped.customer_id)) {
+      remapped.customer_id = customerIdRemap.get(remapped.customer_id)!;
+    }
+    result.push(remapped);
+  }
+  return result;
+}
+
 export function isMerchantLoggedIn(): boolean {
   if (typeof window === 'undefined') return false;
   return localStorage.getItem(STORAGE_KEYS.IS_LOGGED_IN) === 'true';
@@ -81,33 +240,33 @@ export function loginDemoDonMario(): void {
     localStorage.setItem(STORAGE_KEYS.STAFF, JSON.stringify(INITIAL_STAFF));
     localStorage.setItem(STORAGE_KEYS.CURRENT_OPERATOR, JSON.stringify(INITIAL_STAFF[0]));
 
-    // PRESERVAR CLIENTES REALES REGISTRADOS EN EL DEMO (no sobreescribir con solo los 3 mocks)
+    // PRESERVAR CLIENTES REALES REGISTRADOS EN EL DEMO SIN DUPLICAR
     const existingCustRaw = localStorage.getItem(STORAGE_KEYS.CUSTOMERS);
     let finalCustomers = INITIAL_CUSTOMERS;
     if (existingCustRaw) {
       try {
         const existing: Customer[] = JSON.parse(existingCustRaw);
         if (Array.isArray(existing) && existing.length > 0) {
-          const baseIds = new Set(INITIAL_CUSTOMERS.map((c) => c.id));
-          const newRealCustomers = existing.filter((c) => !baseIds.has(c.id));
-          finalCustomers = [...newRealCustomers, ...INITIAL_CUSTOMERS];
+          finalCustomers = deduplicateCustomers([...existing, ...INITIAL_CUSTOMERS]);
         }
       } catch (e) {}
+    } else {
+      finalCustomers = deduplicateCustomers(INITIAL_CUSTOMERS);
     }
     localStorage.setItem(STORAGE_KEYS.CUSTOMERS, JSON.stringify(finalCustomers));
 
-    // PRESERVAR TRANSACCIONES REALES REGISTRADAS EN EL DEMO
+    // PRESERVAR TRANSACCIONES REALES REGISTRADAS EN EL DEMO SIN DUPLICAR
     const existingTxRaw = localStorage.getItem(STORAGE_KEYS.TRANSACTIONS);
     let finalTxs = INITIAL_TRANSACTIONS;
     if (existingTxRaw) {
       try {
         const existingTx: Transaction[] = JSON.parse(existingTxRaw);
         if (Array.isArray(existingTx) && existingTx.length > 0) {
-          const baseTxIds = new Set(INITIAL_TRANSACTIONS.map((t) => t.id));
-          const newRealTxs = existingTx.filter((t) => !baseTxIds.has(t.id));
-          finalTxs = [...newRealTxs, ...INITIAL_TRANSACTIONS];
+          finalTxs = deduplicateTransactions([...existingTx, ...INITIAL_TRANSACTIONS]);
         }
       } catch (e) {}
+    } else {
+      finalTxs = deduplicateTransactions(INITIAL_TRANSACTIONS);
     }
     localStorage.setItem(STORAGE_KEYS.TRANSACTIONS, JSON.stringify(finalTxs));
 
@@ -368,14 +527,24 @@ export function getStoredData() {
   const operatorRaw = localStorage.getItem(STORAGE_KEYS.CURRENT_OPERATOR);
 
   const tenant: Tenant = tenantRaw ? JSON.parse(tenantRaw) : INITIAL_TENANT;
-  const customers: Customer[] = customersRaw ? JSON.parse(customersRaw) : INITIAL_CUSTOMERS;
-  const transactions: Transaction[] = txRaw ? JSON.parse(txRaw) : INITIAL_TRANSACTIONS;
+  let customers: Customer[] = customersRaw ? JSON.parse(customersRaw) : INITIAL_CUSTOMERS;
+  let transactions: Transaction[] = txRaw ? JSON.parse(txRaw) : INITIAL_TRANSACTIONS;
   const staff: StaffMember[] = staffRaw ? JSON.parse(staffRaw) : INITIAL_STAFF;
   const currentOperator: StaffMember = operatorRaw ? JSON.parse(operatorRaw) : (staff[0] || INITIAL_STAFF[0]);
 
+  // Ejecutar deduplicación exhaustiva
+  const rawCustomerCount = customers.length;
+  customers = deduplicateCustomers(customers);
+  transactions = deduplicateTransactions(transactions);
+
+  // Si se detectaron y limpiaron duplicados, o no existía la clave, reescribir localStorage inmediatamente
+  if (!customersRaw || customers.length !== rawCustomerCount) {
+    localStorage.setItem(STORAGE_KEYS.CUSTOMERS, JSON.stringify(customers));
+  }
+  if (!txRaw) {
+    localStorage.setItem(STORAGE_KEYS.TRANSACTIONS, JSON.stringify(transactions));
+  }
   if (!tenantRaw) localStorage.setItem(STORAGE_KEYS.TENANT, JSON.stringify(INITIAL_TENANT));
-  if (!customersRaw) localStorage.setItem(STORAGE_KEYS.CUSTOMERS, JSON.stringify(INITIAL_CUSTOMERS));
-  if (!txRaw) localStorage.setItem(STORAGE_KEYS.TRANSACTIONS, JSON.stringify(INITIAL_TRANSACTIONS));
   if (!staffRaw) localStorage.setItem(STORAGE_KEYS.STAFF, JSON.stringify(INITIAL_STAFF));
   if (!operatorRaw) localStorage.setItem(STORAGE_KEYS.CURRENT_OPERATOR, JSON.stringify(currentOperator));
 
@@ -521,13 +690,14 @@ export function saveTransactions(transactions: Transaction[]) {
 
 export function saveCustomers(customers: Customer[]) {
   if (typeof window !== 'undefined') {
-    localStorage.setItem(STORAGE_KEYS.CUSTOMERS, JSON.stringify(customers));
+    const cleanCustomers = deduplicateCustomers(customers);
+    localStorage.setItem(STORAGE_KEYS.CUSTOMERS, JSON.stringify(cleanCustomers));
     window.dispatchEvent(new Event('libreta_data_updated'));
 
     try {
       const supabase = createClient();
       if (supabase) {
-        const cleaned = customers.map(cleanCustomerForSupabase);
+        const cleaned = cleanCustomers.map(cleanCustomerForSupabase);
         supabase.from('customers').upsert(cleaned).then(({ error }: { error: any }) => {
           if (error) console.warn('Supabase customers sync notice:', error.message);
         });
@@ -537,7 +707,7 @@ export function saveCustomers(customers: Customer[]) {
     }
 
     // Sincronizar también con la API central /api/customers
-    for (const c of customers) {
+    for (const c of cleanCustomers) {
       fetch('/api/customers', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -588,10 +758,10 @@ export async function syncFromSupabase() {
         if (localRaw) {
           try {
             const localCusts: Customer[] = JSON.parse(localRaw);
-            const cloudIds = new Set(restored.map((c: any) => c.id));
-            const onlyLocal = localCusts.filter((c) => !cloudIds.has(c.id));
-            merged = [...restored, ...onlyLocal];
+            merged = deduplicateCustomers([...restored, ...localCusts]);
           } catch (e) {}
+        } else {
+          merged = deduplicateCustomers(restored);
         }
         localStorage.setItem(STORAGE_KEYS.CUSTOMERS, JSON.stringify(merged));
       }
@@ -602,12 +772,12 @@ export async function syncFromSupabase() {
         if (localTxRaw) {
           try {
             const localTxs: Transaction[] = JSON.parse(localTxRaw);
-            const cloudTxIds = new Set(txRes.data.map((t: any) => t.id));
-            const onlyLocalTx = localTxs.filter((t) => !cloudTxIds.has(t.id));
-            mergedTx = [...txRes.data, ...onlyLocalTx].sort(
+            mergedTx = deduplicateTransactions([...txRes.data, ...localTxs]).sort(
               (a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
             );
           } catch (e) {}
+        } else {
+          mergedTx = deduplicateTransactions(txRes.data);
         }
         localStorage.setItem(STORAGE_KEYS.TRANSACTIONS, JSON.stringify(mergedTx));
       }
@@ -628,23 +798,14 @@ export async function syncFromSupabase() {
     if (apiCustRes && apiCustRes.success && Array.isArray(apiCustRes.customers)) {
       const currentRaw = localStorage.getItem(STORAGE_KEYS.CUSTOMERS);
       const currentCusts: Customer[] = currentRaw ? JSON.parse(currentRaw) : [];
-      const map = new Map<string, Customer>();
-      for (const c of currentCusts) map.set(c.id, c);
-      for (const c of apiCustRes.customers) {
-        const existing = map.get(c.id);
-        map.set(c.id, existing ? { ...existing, ...c } : c);
-      }
-      const finalCusts = Array.from(map.values());
+      const finalCusts = deduplicateCustomers([...apiCustRes.customers, ...currentCusts]);
       localStorage.setItem(STORAGE_KEYS.CUSTOMERS, JSON.stringify(finalCusts));
     }
 
     if (apiTxRes && apiTxRes.success && Array.isArray(apiTxRes.transactions)) {
       const currentTxRaw = localStorage.getItem(STORAGE_KEYS.TRANSACTIONS);
       const currentTxs: Transaction[] = currentTxRaw ? JSON.parse(currentTxRaw) : [];
-      const txMap = new Map<string, Transaction>();
-      for (const t of currentTxs) txMap.set(t.id, t);
-      for (const t of apiTxRes.transactions) txMap.set(t.id, t);
-      const finalTxs = Array.from(txMap.values()).sort(
+      const finalTxs = deduplicateTransactions([...apiTxRes.transactions, ...currentTxs]).sort(
         (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
       );
       localStorage.setItem(STORAGE_KEYS.TRANSACTIONS, JSON.stringify(finalTxs));
