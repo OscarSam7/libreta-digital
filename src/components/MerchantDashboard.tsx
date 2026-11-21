@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import Link from 'next/link';
 import { Customer, Transaction, Tenant, TransactionType, PaymentMethod, StaffMember, StaffRole, StaffPermissions } from '@/types';
 import { getStoredData, saveCustomers, saveTransactions, saveTenant, syncFromSupabase, saveStaff, setCurrentOperator } from '@/lib/storage';
 import { executeLedgerTransaction, certifyTransactionWithPin } from '@/lib/ledger';
@@ -48,6 +49,7 @@ import {
   X,
   Printer,
   Lock,
+  KeyRound,
   Globe2,
   CreditCard,
   UserCheck,
@@ -729,6 +731,16 @@ export function MerchantDashboard() {
               <UserCheck className="w-3.5 h-3.5 text-blue-400" /> Cuenta
             </button>
 
+            {/* Acceso a Super Admin */}
+            <Link
+              href="/admin"
+              className="flex items-center gap-1.5 px-2.5 py-1.5 bg-indigo-950/70 hover:bg-indigo-900/90 border border-indigo-700/60 text-indigo-200 hover:text-white rounded-xl text-xs font-bold transition whitespace-nowrap shrink-0 shadow-xs cursor-pointer"
+              title="Entrar al Panel de Control Super Admin"
+            >
+              <ShieldCheck className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
+              <span>Super Admin</span>
+            </Link>
+
             {/* Plan de Suscripción */}
             <button
               onClick={() => setShowSubscriptionModal(true)}
@@ -1227,6 +1239,26 @@ export function MerchantDashboard() {
             })}
           </div>
         </section>
+
+        {/* PIE DE SEGURIDAD & ACCESO SUPER ADMIN */}
+        <footer className="pt-6 pb-8 border-t border-slate-200/80 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-500">
+          <div className="flex items-center gap-2">
+            <ShieldCheck className="w-4 h-4 text-emerald-600" />
+            <span className="font-semibold text-slate-700">
+              LibretaDigital PRO • Plataforma Certificada & Libro Mayor Inmutable
+            </span>
+          </div>
+          <div className="flex items-center gap-3">
+            <Link
+              href="/admin"
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-indigo-300 hover:text-white rounded-xl font-bold transition shadow-xs text-xs"
+              title="Acceso al Panel de Super Administrador de la Plataforma"
+            >
+              <KeyRound className="w-3.5 h-3.5 text-indigo-400" />
+              <span>Entrar al Panel Super Admin</span>
+            </Link>
+          </div>
+        </footer>
       </main>
 
       {/* MODAL ALTA DE CLIENTE */}
