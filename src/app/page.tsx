@@ -131,20 +131,6 @@ export default function Home() {
                 )}
               </button>
 
-              {/* ACCESO SUPER ADMIN (SOLO VISIBLE SI YA TIENE SESIÓN DE SUPER ADMIN) */}
-              {/* Acceso a Super Admin */}
-              <Link
-                href="/admin"
-                className={`text-xs font-bold px-2.5 py-1.5 rounded-xl border transition flex items-center gap-1.5 ${
-                  isLight
-                    ? 'text-indigo-700 hover:bg-indigo-50 border-indigo-200 bg-white'
-                    : 'text-indigo-300 hover:text-white border-indigo-800/80 bg-indigo-950/40 hover:bg-indigo-900/60'
-                }`}
-                title="Acceso al Panel de Super Administrador"
-              >
-                <ShieldCheck className="w-3.5 h-3.5 text-indigo-500" />
-                <span>Super Admin</span>
-              </Link>
               <Link
                 href="/showcase"
                 className={`text-xs font-bold px-3 py-1.5 rounded-xl border transition flex items-center gap-1.5 ${

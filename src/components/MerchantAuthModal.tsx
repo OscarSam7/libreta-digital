@@ -358,16 +358,7 @@ export function MerchantAuthModal({ onSuccess, onCancel }: Props) {
             )}
           </div>
 
-          <div className="pt-2 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-2">
-            <a
-              href="/admin"
-              className="w-full sm:w-auto text-xs font-bold text-indigo-600 hover:text-indigo-800 flex items-center justify-center gap-1.5 transition py-1.5 px-3 rounded-xl hover:bg-indigo-50 border border-indigo-200"
-              title="Acceso al Panel de Super Administrador"
-            >
-              <ShieldCheck className="w-3.5 h-3.5 text-indigo-600" />
-              <span>Panel Super Admin</span>
-            </a>
-
+          <div className="pt-2 border-t border-slate-100 flex justify-end">
             <button
               type="button"
               onClick={async () => {
@@ -381,7 +372,7 @@ export function MerchantAuthModal({ onSuccess, onCancel }: Props) {
                   window.location.href = '/registro-comercio';
                 }
               }}
-              className="w-full sm:w-auto text-xs font-bold text-rose-600 hover:text-rose-700 flex items-center justify-center gap-1.5 transition py-1.5 px-3 rounded-xl hover:bg-rose-50 border border-rose-200 cursor-pointer"
+              className="text-xs font-bold text-rose-600 hover:text-rose-700 flex items-center gap-1.5 transition py-1.5 px-3 rounded-xl hover:bg-rose-50 border border-rose-200 cursor-pointer"
             >
               <LogOut className="w-3.5 h-3.5" /> Cerrar Sesión del Comercio
             </button>

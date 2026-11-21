@@ -731,16 +731,6 @@ export function MerchantDashboard() {
               <UserCheck className="w-3.5 h-3.5 text-blue-400" /> Cuenta
             </button>
 
-            {/* Acceso a Super Admin */}
-            <Link
-              href="/admin"
-              className="flex items-center gap-1.5 px-2.5 py-1.5 bg-indigo-950/70 hover:bg-indigo-900/90 border border-indigo-700/60 text-indigo-200 hover:text-white rounded-xl text-xs font-bold transition whitespace-nowrap shrink-0 shadow-xs cursor-pointer"
-              title="Entrar al Panel de Control Super Admin"
-            >
-              <ShieldCheck className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
-              <span>Super Admin</span>
-            </Link>
-
             {/* Plan de Suscripción */}
             <button
               onClick={() => setShowSubscriptionModal(true)}

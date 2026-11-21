@@ -51,7 +51,6 @@ const SUPERADMIN_STORAGE_KEY = 'libretadigital_superadmin_session_v2';
 
 export default function SuperAdminPage() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [authTab, setAuthTab] = useState<'LOGIN' | 'CREATE_ADMIN'>('LOGIN');
 
   // Login de Super Admin
   const [adminEmail, setAdminEmail] = useState('');
@@ -59,13 +58,6 @@ export default function SuperAdminPage() {
   const [showAdminPassword, setShowAdminPassword] = useState(false);
   const [authLoading, setAuthLoading] = useState(false);
   const [authError, setAuthError] = useState('');
-
-  // Registro de Super Admin Fundador
-  const [newAdminEmail, setNewAdminEmail] = useState('');
-  const [newAdminPassword, setNewAdminPassword] = useState('');
-  const [newAdminConfirm, setNewAdminConfirm] = useState('');
-  const [showNewAdminPassword, setShowNewAdminPassword] = useState(false);
-  const [showNewAdminConfirm, setShowNewAdminConfirm] = useState(false);
 
   // Usuario autenticado
   const [currentAdminUser, setCurrentAdminUser] = useState<{ email: string } | null>(null);
@@ -232,66 +224,6 @@ export default function SuperAdminPage() {
     } catch (err: any) {
       recordFailedAttempt(`superadmin_login_${cleanEmail}`, 5, 5);
       setAuthError(err.message || 'Error al autenticar Super Administrador.');
-    } finally {
-      setAuthLoading(false);
-    }
-  };
-
-  // Creación de cuenta propia de Super Admin Fundador
-  const handleCreateSuperAdmin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setAuthError('');
-
-    if (!newAdminEmail.trim() || !newAdminEmail.includes('@')) {
-      setAuthError('Ingresa un correo válido para tu cuenta de Super Admin.');
-      return;
-    }
-    if (newAdminPassword.length < 6) {
-      setAuthError('La contraseña debe tener al menos 6 caracteres.');
-      return;
-    }
-    if (newAdminPassword !== newAdminConfirm) {
-      setAuthError('Las contraseñas no coinciden. Verifícalas.');
-      return;
-    }
-
-    setAuthLoading(true);
-
-    try {
-      const emailFormatted = newAdminEmail.trim().toLowerCase();
-      const supabase = createClient();
-      if (supabase) {
-        const { data, error } = await supabase.auth.signUp({
-          email: emailFormatted,
-          password: newAdminPassword,
-          options: {
-            data: {
-              role: 'SUPER_ADMIN',
-              is_super_admin: true,
-            },
-          },
-        });
-
-        if (error && !error.message.includes('already registered')) {
-          console.warn('Aviso Supabase SignUp Admin:', error.message);
-        }
-      }
-
-      // Guardar credenciales de forma segura
-      localStorage.setItem(`libretadigital_superadmin_pwd_${emailFormatted}`, newAdminPassword);
-      localStorage.setItem(SUPERADMIN_STORAGE_KEY, emailFormatted);
-      setCurrentAdminUser({ email: emailFormatted });
-      setIsAuthenticated(true);
-
-      confetti({
-        particleCount: 80,
-        spread: 70,
-        origin: { y: 0.6 },
-      });
-
-      loadAdminData();
-    } catch (err: any) {
-      setAuthError(err.message || 'Error al crear la cuenta de Super Admin.');
     } finally {
       setAuthLoading(false);
     }
@@ -604,38 +536,7 @@ export default function SuperAdminPage() {
             </p>
           </div>
 
-          {/* TABS SELECTORES */}
-          <div className="grid grid-cols-2 p-1 bg-slate-950/80 rounded-2xl border border-slate-800 text-xs font-bold">
-            <button
-              type="button"
-              onClick={() => {
-                setAuthTab('LOGIN');
-                setAuthError('');
-              }}
-              className={`py-2 rounded-xl transition ${
-                authTab === 'LOGIN'
-                  ? 'bg-indigo-600 text-white shadow-md'
-                  : 'text-slate-400 hover:text-white'
-              }`}
-            >
-              🔑 Iniciar Sesión
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setAuthTab('CREATE_ADMIN');
-                setAuthError('');
-              }}
-              className={`py-2 rounded-xl transition ${
-                authTab === 'CREATE_ADMIN'
-                  ? 'bg-indigo-600 text-white shadow-md'
-                  : 'text-slate-400 hover:text-white'
-              }`}
-            >
-              ✨ Crear Super Admin
-            </button>
-          </div>
-
+          {/* MENSAJE DE ERROR */}
           {authError && (
             <div className="p-3 bg-rose-500/10 border border-rose-500/30 rounded-xl text-rose-300 text-xs flex items-center gap-2">
               <AlertTriangle className="w-4 h-4 shrink-0 text-rose-400" />
@@ -643,139 +544,63 @@ export default function SuperAdminPage() {
             </div>
           )}
 
-          {authTab === 'LOGIN' ? (
-            /* FORMULARIO DE INICIO DE SESIÓN CON CORREO Y CONTRASEÑA PROPIA */
-            <form onSubmit={handleLogin} className="space-y-4">
-              <div>
-                <label className="block text-[11px] font-bold uppercase text-slate-300 mb-1 flex items-center gap-1.5">
-                  <Mail className="w-3.5 h-3.5 text-indigo-400" /> Correo Electrónico de Administrador
-                </label>
+          {/* FORMULARIO ÚNICO DE INICIO DE SESIÓN CON CORREO Y CONTRASEÑA */}
+          <form onSubmit={handleLogin} className="space-y-4">
+            <div>
+              <label className="block text-[11px] font-bold uppercase text-slate-300 mb-1 flex items-center gap-1.5">
+                <Mail className="w-3.5 h-3.5 text-indigo-400" /> Correo Electrónico de Administrador
+              </label>
+              <input
+                type="email"
+                required
+                placeholder="admin@tuempresa.com"
+                value={adminEmail}
+                onChange={(e) => setAdminEmail(e.target.value)}
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-indigo-500 transition font-semibold"
+              />
+            </div>
+
+            <div>
+              <label className="block text-[11px] font-bold uppercase text-slate-300 mb-1 flex items-center gap-1.5">
+                <Lock className="w-3.5 h-3.5 text-indigo-400" /> Contraseña de Super Admin
+              </label>
+              <div className="relative">
                 <input
-                  type="email"
+                  type={showAdminPassword ? "text" : "password"}
                   required
-                  placeholder="admin@tuempresa.com"
-                  value={adminEmail}
-                  onChange={(e) => setAdminEmail(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-indigo-500 transition font-semibold"
+                  placeholder="Tu contraseña personal"
+                  value={adminPassword}
+                  onChange={(e) => setAdminPassword(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-3.5 pr-10 py-2.5 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-indigo-500 transition font-semibold"
                 />
+                <button
+                  type="button"
+                  onClick={() => setShowAdminPassword(!showAdminPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white transition p-1 cursor-pointer"
+                  title={showAdminPassword ? "Ocultar contraseña" : "Ver contraseña"}
+                >
+                  {showAdminPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
               </div>
-
-              <div>
-                <label className="block text-[11px] font-bold uppercase text-slate-300 mb-1 flex items-center gap-1.5">
-                  <Lock className="w-3.5 h-3.5 text-indigo-400" /> Tu Contraseña Privada
-                </label>
-                <div className="relative">
-                  <input
-                    type={showAdminPassword ? "text" : "password"}
-                    required
-                    placeholder="Tu contraseña personal"
-                    value={adminPassword}
-                    onChange={(e) => setAdminPassword(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-3.5 pr-10 py-2.5 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-indigo-500 transition font-semibold"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowAdminPassword(!showAdminPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white transition p-1 cursor-pointer"
-                    title={showAdminPassword ? "Ocultar contraseña" : "Ver contraseña"}
-                  >
-                    {showAdminPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                  </button>
-                </div>
-                <div className="flex justify-end pt-1.5">
-                  <Link
-                    href="/recuperar-password"
-                    className="text-[11px] font-bold text-indigo-400 hover:text-indigo-300 transition"
-                  >
-                    ¿Olvidaste tu contraseña? Recuperar por Correo
-                  </Link>
-                </div>
+              <div className="flex justify-end pt-1.5">
+                <Link
+                  href="/recuperar-password"
+                  className="text-[11px] font-bold text-indigo-400 hover:text-indigo-300 transition"
+                >
+                  ¿Olvidaste tu contraseña? Recuperar por Correo
+                </Link>
               </div>
+            </div>
 
-              <button
-                type="submit"
-                disabled={authLoading}
-                className="w-full py-3.5 px-4 bg-indigo-600 hover:bg-indigo-500 text-white font-black rounded-xl text-xs sm:text-sm flex items-center justify-center gap-2 shadow-lg shadow-indigo-950 transition active:scale-98 disabled:opacity-50 cursor-pointer"
-              >
-                <ShieldCheck className="w-4 h-4" />
-                <span>{authLoading ? 'Verificando...' : 'Acceder al Panel Maestro'}</span>
-              </button>
-            </form>
-          ) : (
-            /* FORMULARIO PARA CREAR CUENTA DE SUPER ADMIN PROPIA */
-            <form onSubmit={handleCreateSuperAdmin} className="space-y-4">
-              <div>
-                <label className="block text-[11px] font-bold uppercase text-slate-300 mb-1 flex items-center gap-1.5">
-                  <Mail className="w-3.5 h-3.5 text-indigo-400" /> Tu Correo Electrónico
-                </label>
-                <input
-                  type="email"
-                  required
-                  placeholder="tu-correo@gmail.com"
-                  value={newAdminEmail}
-                  onChange={(e) => setNewAdminEmail(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-indigo-500 transition font-semibold"
-                />
-              </div>
-
-              <div>
-                <label className="block text-[11px] font-bold uppercase text-slate-300 mb-1 flex items-center gap-1.5">
-                  <Lock className="w-3.5 h-3.5 text-indigo-400" /> Crea tu Contraseña Privada
-                </label>
-                <div className="relative">
-                  <input
-                    type={showNewAdminPassword ? "text" : "password"}
-                    required
-                    placeholder="Mínimo 6 caracteres"
-                    value={newAdminPassword}
-                    onChange={(e) => setNewAdminPassword(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-3.5 pr-10 py-2.5 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-indigo-500 transition font-semibold"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowNewAdminPassword(!showNewAdminPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white transition p-1 cursor-pointer"
-                    title={showNewAdminPassword ? "Ocultar contraseña" : "Ver contraseña"}
-                  >
-                    {showNewAdminPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                  </button>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-[11px] font-bold uppercase text-slate-300 mb-1 flex items-center gap-1.5">
-                  <Lock className="w-3.5 h-3.5 text-indigo-400" /> Confirmar Contraseña
-                </label>
-                <div className="relative">
-                  <input
-                    type={showNewAdminConfirm ? "text" : "password"}
-                    required
-                    placeholder="Repite tu contraseña"
-                    value={newAdminConfirm}
-                    onChange={(e) => setNewAdminConfirm(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-3.5 pr-10 py-2.5 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-indigo-500 transition font-semibold"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowNewAdminConfirm(!showNewAdminConfirm)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white transition p-1 cursor-pointer"
-                    title={showNewAdminConfirm ? "Ocultar contraseña" : "Ver contraseña"}
-                  >
-                    {showNewAdminConfirm ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                  </button>
-                </div>
-              </div>
-
-              <button
-                type="submit"
-                disabled={authLoading}
-                className="w-full py-3.5 px-4 bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-500 hover:to-blue-500 text-white font-black rounded-xl text-xs sm:text-sm flex items-center justify-center gap-2 shadow-lg shadow-indigo-950 transition active:scale-98 disabled:opacity-50 cursor-pointer"
-              >
-                <Sparkles className="w-4 h-4 text-amber-300" />
-                <span>{authLoading ? 'Creando cuenta...' : 'Crear mi Cuenta de Super Admin'}</span>
-              </button>
-            </form>
-          )}
+            <button
+              type="submit"
+              disabled={authLoading}
+              className="w-full py-3.5 px-4 bg-indigo-600 hover:bg-indigo-500 text-white font-black rounded-xl text-xs sm:text-sm flex items-center justify-center gap-2 shadow-lg shadow-indigo-950 transition active:scale-98 disabled:opacity-50 cursor-pointer"
+            >
+              <ShieldCheck className="w-4 h-4" />
+              <span>{authLoading ? 'Verificando...' : 'Acceder al Panel Maestro'}</span>
+            </button>
+          </form>
 
           <div className="text-center pt-2 border-t border-slate-800/80">
             <Link href="/" className="text-xs text-slate-500 hover:text-slate-300 transition">
