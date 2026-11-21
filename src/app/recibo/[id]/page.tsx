@@ -17,7 +17,8 @@ import {
   ExternalLink,
   ShieldCheck,
   AlertCircle,
-  FileText
+  FileText,
+  Smartphone
 } from 'lucide-react';
 
 function ReceiptDetail({ id }: { id: string }) {
@@ -258,32 +259,47 @@ function ReceiptDetail({ id }: { id: string }) {
           {/* SELECTOR DE FORMATO DE IMPRESIÓN Y PDF */}
           <div className="bg-slate-50 p-2 rounded-2xl border border-slate-200">
             <label className="text-[10px] font-black uppercase tracking-wider text-slate-500 block text-center mb-1.5">
-              Elige el Formato de Descarga / Impresión:
+              Elige el Formato de tu Impresora:
             </label>
-            <div className="grid grid-cols-2 gap-1.5">
+            <div className="grid grid-cols-3 gap-1">
+              <button
+                type="button"
+                onClick={() => setFormat('TICKET_58MM')}
+                className={`flex flex-col items-center justify-center gap-1 py-1.5 px-1 rounded-xl text-[11px] font-black transition cursor-pointer ${
+                  format === 'TICKET_58MM'
+                    ? 'bg-indigo-600 text-white shadow-sm'
+                    : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-100'
+                }`}
+                title="POS Portátil 58mm / 57mm"
+              >
+                <Smartphone className="w-3.5 h-3.5" />
+                <span>POS 58mm</span>
+              </button>
               <button
                 type="button"
                 onClick={() => setFormat('TICKET_80MM')}
-                className={`flex items-center justify-center gap-1.5 py-2 px-2.5 rounded-xl text-xs font-black transition cursor-pointer ${
+                className={`flex flex-col items-center justify-center gap-1 py-1.5 px-1 rounded-xl text-[11px] font-black transition cursor-pointer ${
                   format === 'TICKET_80MM'
                     ? 'bg-indigo-600 text-white shadow-sm'
                     : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-100'
                 }`}
+                title="POS Mostrador 80mm"
               >
                 <Receipt className="w-3.5 h-3.5" />
-                <span>Ticket POS (80mm)</span>
+                <span>POS 80mm</span>
               </button>
               <button
                 type="button"
                 onClick={() => setFormat('PAGE_A4')}
-                className={`flex items-center justify-center gap-1.5 py-2 px-2.5 rounded-xl text-xs font-black transition cursor-pointer ${
+                className={`flex flex-col items-center justify-center gap-1 py-1.5 px-1 rounded-xl text-[11px] font-black transition cursor-pointer ${
                   format === 'PAGE_A4'
                     ? 'bg-indigo-600 text-white shadow-sm'
                     : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-100'
                 }`}
+                title="Hoja A4 estándar"
               >
                 <FileText className="w-3.5 h-3.5" />
-                <span>Hoja A4 Estándar</span>
+                <span>Hoja A4</span>
               </button>
             </div>
           </div>
@@ -295,7 +311,9 @@ function ReceiptDetail({ id }: { id: string }) {
               className="w-full py-3.5 px-4 bg-emerald-600 hover:bg-emerald-500 text-white font-black text-sm rounded-2xl flex items-center justify-center gap-2 shadow-lg shadow-emerald-600/30 transition active:scale-98 cursor-pointer"
             >
               <Download className="w-4 h-4" />
-              <span>Descargar PDF ({format === 'TICKET_80MM' ? 'Ticket 80mm' : 'Hoja A4'})</span>
+              <span>
+                Descargar PDF ({format === 'TICKET_58MM' ? 'POS 58mm' : format === 'TICKET_80MM' ? 'POS 80mm' : 'Hoja A4'})
+              </span>
             </button>
 
             <a

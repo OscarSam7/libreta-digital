@@ -23,7 +23,8 @@ import {
   User,
   ShoppingBag,
   ArrowDownLeft,
-  Receipt
+  Receipt,
+  Smartphone
 } from 'lucide-react';
 
 export type PDFReportMode =
@@ -117,30 +118,30 @@ export function PDFReportPreviewModal({
             position: absolute !important;
             left: 0 !important;
             top: 0 !important;
-            width: ${printerFormat === 'TICKET_80MM' ? '76mm' : '100%'} !important;
-            max-width: ${printerFormat === 'TICKET_80MM' ? '76mm' : '100%'} !important;
+            width: ${printerFormat === 'TICKET_58MM' ? '52mm' : printerFormat === 'TICKET_80MM' ? '76mm' : '100%'} !important;
+            max-width: ${printerFormat === 'TICKET_58MM' ? '52mm' : printerFormat === 'TICKET_80MM' ? '76mm' : '100%'} !important;
             margin: 0 !important;
-            padding: ${printerFormat === 'TICKET_80MM' ? '2mm' : '12mm'} !important;
+            padding: ${printerFormat === 'TICKET_58MM' ? '1.5mm' : printerFormat === 'TICKET_80MM' ? '2mm' : '12mm'} !important;
             box-shadow: none !important;
             border: none !important;
             background: white !important;
             color: black !important;
-            font-size: ${printerFormat === 'TICKET_80MM' ? '9.5px' : '12px'} !important;
-            font-family: ${printerFormat === 'TICKET_80MM' ? 'monospace' : 'system-ui, sans-serif'} !important;
+            font-size: ${printerFormat === 'TICKET_58MM' ? '8px' : printerFormat === 'TICKET_80MM' ? '9.5px' : '12px'} !important;
+            font-family: ${printerFormat === 'PAGE_A4' ? 'system-ui, sans-serif' : 'monospace'} !important;
           }
           .no-print {
             display: none !important;
           }
           @page {
-            size: ${printerFormat === 'TICKET_80MM' ? '80mm auto' : 'A4 portrait'};
-            margin: ${printerFormat === 'TICKET_80MM' ? '3mm' : '10mm'};
+            size: ${printerFormat === 'TICKET_58MM' ? '58mm auto' : printerFormat === 'TICKET_80MM' ? '80mm auto' : 'A4 portrait'};
+            margin: ${printerFormat === 'TICKET_58MM' ? '1.5mm' : printerFormat === 'TICKET_80MM' ? '3mm' : '10mm'};
           }
         }
       `}</style>
 
       <div className="w-full max-w-4xl bg-slate-900 rounded-3xl shadow-2xl flex flex-col max-h-[96vh] overflow-hidden my-auto border border-slate-700 animate-in zoom-in-95">
         {/* BARRA SUPERIOR DE ACCIONES */}
-        <div className="p-4 bg-slate-800 border-b border-slate-700 flex flex-wrap items-center justify-between gap-3 text-white shrink-0 no-print">
+        <div className="p-3.5 sm:p-4 bg-slate-800 border-b border-slate-700 flex flex-wrap items-center justify-between gap-2.5 text-white shrink-0 no-print">
           <div className="flex items-center gap-2">
             <div className="w-9 h-9 rounded-xl bg-indigo-600 flex items-center justify-center text-white font-bold">
               <FileText className="w-5 h-5" />
@@ -162,33 +163,46 @@ export function PDFReportPreviewModal({
           </div>
 
           <div className="flex items-center flex-wrap gap-2">
-            {/* CONMUTADOR DE FORMATO DE IMPRESIÓN: TICKET 80MM VS A4 */}
+            {/* CONMUTADOR DE FORMATO DE IMPRESIÓN: 58MM VS 80MM VS A4 */}
             <div className="flex items-center bg-slate-900 p-0.5 rounded-xl border border-slate-700">
               <button
                 type="button"
+                onClick={() => handleFormatChange('TICKET_58MM')}
+                className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-black transition cursor-pointer ${
+                  printerFormat === 'TICKET_58MM'
+                    ? 'bg-indigo-600 text-white shadow-xs'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+                title="POS Portátil 58mm / 57mm"
+              >
+                <Smartphone className="w-3.5 h-3.5" />
+                <span>58mm</span>
+              </button>
+              <button
+                type="button"
                 onClick={() => handleFormatChange('TICKET_80MM')}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-black transition cursor-pointer ${
+                className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-black transition cursor-pointer ${
                   printerFormat === 'TICKET_80MM'
                     ? 'bg-indigo-600 text-white shadow-xs'
                     : 'text-slate-400 hover:text-white'
                 }`}
-                title="Formato Ticket POS 80mm continuo"
+                title="POS Mostrador 80mm"
               >
                 <Receipt className="w-3.5 h-3.5" />
-                <span>Ticket 80mm</span>
+                <span>80mm</span>
               </button>
               <button
                 type="button"
                 onClick={() => handleFormatChange('PAGE_A4')}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-black transition cursor-pointer ${
+                className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-black transition cursor-pointer ${
                   printerFormat === 'PAGE_A4'
                     ? 'bg-indigo-600 text-white shadow-xs'
                     : 'text-slate-400 hover:text-white'
                 }`}
-                title="Formato Hoja A4 estándar"
+                title="Hoja A4 estándar"
               >
                 <FileText className="w-3.5 h-3.5" />
-                <span>Hoja A4</span>
+                <span>A4</span>
               </button>
             </div>
 
@@ -220,13 +234,15 @@ export function PDFReportPreviewModal({
           </div>
         </div>
 
-        {/* VISOR DE LA HOJA PDF (ADAPTABLE A TICKET 80MM O A4) */}
+        {/* VISOR DE LA HOJA PDF (ADAPTABLE A POS 58MM, 80MM O A4) */}
         <div className="p-3 sm:p-6 overflow-y-auto bg-slate-950/60 flex justify-center flex-1">
           <div
             id="printable-pdf-document"
             ref={printRef}
             className={`bg-white text-slate-900 rounded-xl shadow-2xl border border-slate-200 flex flex-col justify-between transition-all ${
-              printerFormat === 'TICKET_80MM'
+              printerFormat === 'TICKET_58MM'
+                ? 'w-full max-w-[300px] p-3 text-[10px] font-mono space-y-2'
+                : printerFormat === 'TICKET_80MM'
                 ? 'w-full max-w-[360px] p-4 text-[11px] font-mono space-y-3'
                 : 'w-full max-w-[210mm] min-h-[297mm] p-6 sm:p-10 text-xs font-sans'
             }`}

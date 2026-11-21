@@ -22,7 +22,8 @@ import {
   ArrowDownLeft,
   Receipt,
   Download,
-  FileText
+  FileText,
+  Smartphone
 } from 'lucide-react';
 
 interface Props {
@@ -84,29 +85,30 @@ export function PaymentReceiptModal({ transaction, customer, tenant, onClose }: 
             position: absolute !important;
             left: 0 !important;
             top: 0 !important;
-            width: ${format === 'TICKET_80MM' ? '76mm' : '100%'} !important;
-            max-width: ${format === 'TICKET_80MM' ? '76mm' : '100%'} !important;
+            width: ${format === 'TICKET_58MM' ? '52mm' : format === 'TICKET_80MM' ? '76mm' : '100%'} !important;
+            max-width: ${format === 'TICKET_58MM' ? '52mm' : format === 'TICKET_80MM' ? '76mm' : '100%'} !important;
             margin: 0 !important;
-            padding: ${format === 'TICKET_80MM' ? '2mm' : '10mm'} !important;
+            padding: ${format === 'TICKET_58MM' ? '1.5mm' : format === 'TICKET_80MM' ? '2mm' : '10mm'} !important;
             box-shadow: none !important;
             border: none !important;
             background: white !important;
             color: black !important;
-            font-family: ${format === 'TICKET_80MM' ? 'monospace' : 'system-ui, sans-serif'} !important;
+            font-size: ${format === 'TICKET_58MM' ? '8.5px' : format === 'TICKET_80MM' ? '10px' : '12px'} !important;
+            font-family: ${format === 'PAGE_A4' ? 'system-ui, sans-serif' : 'monospace'} !important;
           }
           .no-print {
             display: none !important;
           }
           @page {
-            size: ${format === 'TICKET_80MM' ? '80mm auto' : 'A4 portrait'};
-            margin: ${format === 'TICKET_80MM' ? '3mm' : '10mm'};
+            size: ${format === 'TICKET_58MM' ? '58mm auto' : format === 'TICKET_80MM' ? '80mm auto' : 'A4 portrait'};
+            margin: ${format === 'TICKET_58MM' ? '1.5mm' : format === 'TICKET_80MM' ? '3mm' : '10mm'};
           }
         }
       `}</style>
 
       <div className="bg-white rounded-3xl w-full max-w-lg shadow-2xl border border-slate-200 overflow-hidden my-auto max-h-[96vh] flex flex-col">
         {/* HEADER CON BOTÓN CERRAR Y SELECTOR DE FORMATO */}
-        <div className="p-4 bg-slate-900 text-white flex flex-col sm:flex-row sm:items-center justify-between gap-3 shrink-0">
+        <div className="p-3.5 sm:p-4 bg-slate-900 text-white flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 shrink-0">
           <div className="flex items-center gap-2">
             <Receipt className="w-5 h-5 text-emerald-400" />
             <div>
@@ -116,30 +118,43 @@ export function PaymentReceiptModal({ transaction, customer, tenant, onClose }: 
           </div>
 
           <div className="flex items-center justify-between sm:justify-end gap-2">
-            {/* CONMUTADOR DE IMPRESORA: TICKET 80MM VS HOJA A4 */}
+            {/* CONMUTADOR DE IMPRESORA: 58MM VS 80MM VS HOJA A4 */}
             <div className="flex items-center bg-slate-800 p-0.5 rounded-xl border border-slate-700">
               <button
                 type="button"
+                onClick={() => handleFormatChange('TICKET_58MM')}
+                className={`flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-black transition cursor-pointer ${
+                  format === 'TICKET_58MM'
+                    ? 'bg-indigo-600 text-white shadow-xs'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+                title="POS Portátil 58mm / 57mm"
+              >
+                <Smartphone className="w-3 h-3" />
+                <span>58mm</span>
+              </button>
+              <button
+                type="button"
                 onClick={() => handleFormatChange('TICKET_80MM')}
-                className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-black transition cursor-pointer ${
+                className={`flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-black transition cursor-pointer ${
                   format === 'TICKET_80MM'
                     ? 'bg-indigo-600 text-white shadow-xs'
                     : 'text-slate-400 hover:text-slate-200'
                 }`}
-                title="Formato Ticket POS 80mm continuo"
+                title="POS Mostrador 80mm"
               >
                 <Receipt className="w-3 h-3" />
-                <span>Ticket 80mm</span>
+                <span>80mm</span>
               </button>
               <button
                 type="button"
                 onClick={() => handleFormatChange('PAGE_A4')}
-                className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-black transition cursor-pointer ${
+                className={`flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-black transition cursor-pointer ${
                   format === 'PAGE_A4'
                     ? 'bg-indigo-600 text-white shadow-xs'
                     : 'text-slate-400 hover:text-slate-200'
                 }`}
-                title="Formato Hoja A4 estándar"
+                title="Hoja A4 Estándar"
               >
                 <FileText className="w-3 h-3" />
                 <span>A4</span>
@@ -156,11 +171,13 @@ export function PaymentReceiptModal({ transaction, customer, tenant, onClose }: 
         </div>
 
         {/* CONTENEDOR DEL RECIBO IMPRIMIBLE */}
-        <div className="p-4 sm:p-6 overflow-y-auto flex-1 bg-slate-100/60 print:p-0 print:bg-white flex justify-center" ref={receiptRef}>
+        <div className="p-3 sm:p-6 overflow-y-auto flex-1 bg-slate-100/60 print:p-0 print:bg-white flex justify-center" ref={receiptRef}>
           <div
             id="printable-receipt-container"
             className={`bg-white rounded-2xl border border-slate-200/90 shadow-sm print:shadow-none print:border-none transition-all ${
-              format === 'TICKET_80MM'
+              format === 'TICKET_58MM'
+                ? 'w-full max-w-[280px] p-3 font-mono text-[10.5px] space-y-2.5'
+                : format === 'TICKET_80MM'
                 ? 'w-full max-w-[340px] p-4 font-mono text-xs space-y-3'
                 : 'w-full p-5 sm:p-6 font-sans text-xs space-y-4'
             }`}
@@ -170,7 +187,7 @@ export function PaymentReceiptModal({ transaction, customer, tenant, onClose }: 
               <div className="flex justify-center mb-1.5">
                 <BrandLogo size="sm" theme="light" />
               </div>
-              <h2 className={`font-black text-slate-900 uppercase tracking-tight ${format === 'TICKET_80MM' ? 'text-base' : 'text-lg'}`}>
+              <h2 className={`font-black text-slate-900 uppercase tracking-tight ${format === 'TICKET_58MM' ? 'text-sm' : format === 'TICKET_80MM' ? 'text-base' : 'text-lg'}`}>
                 {tenant.business_name}
               </h2>
               <div className="text-[11px] text-slate-500 space-y-0.5 mt-1">
@@ -184,9 +201,14 @@ export function PaymentReceiptModal({ transaction, customer, tenant, onClose }: 
                   <p>📞 Tel / WhatsApp: {tenant.phone}</p>
                 )}
               </div>
+              {format === 'TICKET_58MM' && (
+                <div className="mt-1 text-[8.5px] text-indigo-700 font-bold bg-indigo-50 py-0.5 px-2 rounded-md inline-block">
+                  FORMATO POS PORTÁTIL 58mm
+                </div>
+              )}
               {format === 'TICKET_80MM' && (
                 <div className="mt-1 text-[9px] text-indigo-700 font-bold bg-indigo-50 py-0.5 px-2 rounded-md inline-block">
-                  FORMATO POS TICKET 80mm
+                  FORMATO POS MOSTRADOR 80mm
                 </div>
               )}
             </div>
@@ -309,7 +331,9 @@ export function PaymentReceiptModal({ transaction, customer, tenant, onClose }: 
             className="w-full py-3 px-4 bg-indigo-600 hover:bg-indigo-500 text-white font-black text-xs sm:text-sm rounded-2xl flex items-center justify-center gap-2 shadow-md shadow-indigo-600/25 transition active:scale-98 cursor-pointer"
           >
             <Download className="w-4 h-4" />
-            <span>Descargar PDF en {format === 'TICKET_80MM' ? 'Ticket POS 80mm' : 'Hoja A4'}</span>
+            <span>
+              Descargar PDF en {format === 'TICKET_58MM' ? 'POS Portátil 58mm' : format === 'TICKET_80MM' ? 'POS Mostrador 80mm' : 'Hoja A4'}
+            </span>
           </button>
 
           <a
@@ -329,7 +353,7 @@ export function PaymentReceiptModal({ transaction, customer, tenant, onClose }: 
               className="py-2.5 px-3 bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 transition cursor-pointer"
             >
               <Printer className="w-3.5 h-3.5" />
-              <span>Imprimir {format === 'TICKET_80MM' ? 'Ticket' : 'A4'}</span>
+              <span>Imprimir {format === 'TICKET_58MM' ? 'POS 58mm' : format === 'TICKET_80MM' ? 'Ticket 80mm' : 'A4'}</span>
             </button>
 
             <button

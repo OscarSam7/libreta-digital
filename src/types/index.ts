@@ -1,6 +1,6 @@
 export type SubscriptionStatus = 'trialing' | 'active' | 'past_due' | 'canceled';
 export type TenantRole = 'owner' | 'cashier';
-export type PrinterFormat = 'TICKET_80MM' | 'PAGE_A4';
+export type PrinterFormat = 'TICKET_58MM' | 'TICKET_80MM' | 'PAGE_A4';
 
 export type TransactionType =
   | 'DEBIT_PURCHASE'

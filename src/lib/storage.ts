@@ -7,7 +7,7 @@ export const PRINTER_STORAGE_KEY = 'libreta_printer_format_v2';
 export function getStoredPrinterFormat(): PrinterFormat {
   if (typeof window === 'undefined') return 'TICKET_80MM';
   const val = localStorage.getItem(PRINTER_STORAGE_KEY);
-  if (val === 'TICKET_80MM' || val === 'PAGE_A4') return val;
+  if (val === 'TICKET_58MM' || val === 'TICKET_80MM' || val === 'PAGE_A4') return val;
   return 'TICKET_80MM';
 }
 

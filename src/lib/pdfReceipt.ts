@@ -24,6 +24,154 @@ export function generateReceiptPDFBlob(
   };
 
   // =========================================================================
+  // FORMATO 0: TICKET POS PORTÁTIL 58mm / 57mm (Terminales Android, Sunmi, PAX, Bluetooth)
+  // =========================================================================
+  if (format === 'TICKET_58MM') {
+    const doc = new jsPDF({
+      orientation: 'portrait',
+      unit: 'mm',
+      format: [58, 210],
+    });
+
+    let y = 6;
+    const leftMargin = 3;
+    const rightMargin = 55;
+    const centerX = 29;
+
+    // Encabezado
+    doc.setFont('courier', 'bold');
+    doc.setFontSize(9);
+    doc.setTextColor(0, 0, 0);
+    doc.text('LibretaDigital PRO', centerX, y, { align: 'center' });
+
+    y += 4;
+    doc.setFontSize(8);
+    doc.text(tenant.business_name.toUpperCase().slice(0, 25), centerX, y, { align: 'center' });
+
+    y += 3.5;
+    doc.setFont('courier', 'normal');
+    doc.setFontSize(6.5);
+    if (tenant.tax_id) {
+      doc.text(`RUC: ${tenant.tax_id}`, centerX, y, { align: 'center' });
+      y += 3;
+    }
+    if (tenant.phone) {
+      doc.text(`Tel/WA: ${tenant.phone}`, centerX, y, { align: 'center' });
+      y += 3;
+    }
+    if (tenant.address) {
+      doc.text(tenant.address.slice(0, 28), centerX, y, { align: 'center' });
+      y += 3;
+    }
+
+    // Línea divisoria
+    doc.text('--------------------------------', centerX, y, { align: 'center' });
+    y += 3.5;
+
+    // Título del Ticket
+    doc.setFont('courier', 'bold');
+    doc.setFontSize(8);
+    doc.text('RECIBO OFICIAL DE PAGO', centerX, y, { align: 'center' });
+    y += 3.5;
+    doc.setFontSize(7);
+    doc.text(isFullPayment ? '** CANCELACION TOTAL **' : '** ABONO A CUENTA **', centerX, y, { align: 'center' });
+    y += 3.5;
+    doc.setFont('courier', 'normal');
+    doc.setFontSize(6.5);
+    doc.text(`Nro: ${receiptNum}`, centerX, y, { align: 'center' });
+    y += 3;
+    doc.text(`Fecha: ${dateFormatted}`, centerX, y, { align: 'center' });
+    y += 3;
+
+    // Línea divisoria
+    doc.text('--------------------------------', centerX, y, { align: 'center' });
+    y += 3.5;
+
+    // Datos del Cliente
+    doc.setFont('courier', 'bold');
+    doc.setFontSize(7);
+    doc.text(`CLIENTE: ${customer.full_name.slice(0, 20)}`, leftMargin, y);
+    y += 3;
+    doc.setFont('courier', 'normal');
+    doc.setFontSize(6.5);
+    if (customer.document_id) {
+      doc.text(`DOC/CI : ${customer.document_id}`, leftMargin, y);
+      y += 3;
+    }
+    if (customer.phone) {
+      doc.text(`TEL/WA : ${customer.phone}`, leftMargin, y);
+      y += 3;
+    }
+
+    // Línea divisoria
+    doc.text('--------------------------------', centerX, y, { align: 'center' });
+    y += 4;
+
+    // Desglose de importes
+    doc.setFont('courier', 'normal');
+    doc.setFontSize(7);
+    doc.text('Saldo Anterior:', leftMargin, y);
+    doc.text(formatCurrency(transaction.previous_balance), rightMargin, y, { align: 'right' });
+    y += 4;
+
+    doc.setFont('courier', 'bold');
+    doc.setFontSize(8);
+    doc.text('(-) PAGO RECIBIDO:', leftMargin, y);
+    doc.text(formatCurrency(transaction.amount), rightMargin, y, { align: 'right' });
+    y += 4.5;
+
+    doc.setFont('courier', 'bold');
+    doc.setFontSize(7.5);
+    doc.text('SALDO RESTANTE:', leftMargin, y);
+    doc.text(formatCurrency(transaction.new_balance), rightMargin, y, { align: 'right' });
+    y += 3.5;
+
+    if (isFullPayment) {
+      doc.setFontSize(7);
+      doc.text('>> CUENTA AL DIA (DEUDA 0) <<', centerX, y, { align: 'center' });
+      y += 3.5;
+    }
+
+    // Línea divisoria
+    doc.setFont('courier', 'normal');
+    doc.setFontSize(6.5);
+    doc.text('--------------------------------', centerX, y, { align: 'center' });
+    y += 3.5;
+
+    // Detalles de cobro
+    doc.text(`Medio Pago: ${transaction.payment_method || 'Efectivo'}`, leftMargin, y);
+    y += 3;
+    if (transaction.payment_reference) {
+      doc.text(`Ref: ${transaction.payment_reference.slice(0, 22)}`, leftMargin, y);
+      y += 3;
+    }
+    doc.text(`Cajero/Op : ${transaction.operator_name || 'Caja POS'}`, leftMargin, y);
+    y += 3;
+
+    if (transaction.blockchain_hash) {
+      doc.setFontSize(5.5);
+      doc.text(`Hash: ${transaction.blockchain_hash.slice(0, 24)}`, leftMargin, y);
+      y += 3;
+    }
+
+    doc.setFontSize(6.5);
+    doc.text('--------------------------------', centerX, y, { align: 'center' });
+    y += 3.5;
+
+    // Pie legal
+    doc.setFontSize(5.5);
+    doc.text('Validez legal Ley 6822/21 y 6534/20', centerX, y, { align: 'center' });
+    y += 2.5;
+    doc.text('Comercio fija limites y plazos', centerX, y, { align: 'center' });
+    y += 3.5;
+    doc.setFont('courier', 'bold');
+    doc.setFontSize(6.5);
+    doc.text('¡Gracias por su pago!', centerX, y, { align: 'center' });
+
+    return doc.output('blob');
+  }
+
+  // =========================================================================
   // FORMATO 1: TICKET TÉRMICO POS 80mm (8.0 cm)
   // =========================================================================
   if (format === 'TICKET_80MM') {
@@ -433,7 +581,8 @@ export function downloadReceiptPDF(
   link.href = url;
   const cleanName = customer.full_name.replace(/[^a-zA-Z0-9]/g, '_');
   const receiptCode = transaction.id.slice(-6).toUpperCase();
-  const formatSuffix = format === 'TICKET_80MM' ? 'Ticket_80mm' : 'A4';
+  const formatSuffix =
+    format === 'TICKET_58MM' ? 'POS_58mm' : format === 'TICKET_80MM' ? 'Ticket_80mm' : 'A4';
   link.download = `Recibo_Pago_${cleanName}_REC-${receiptCode}_${formatSuffix}.pdf`;
   document.body.appendChild(link);
   link.click();
