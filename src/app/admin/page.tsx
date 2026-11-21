@@ -34,7 +34,9 @@ import {
   Sun,
   Moon,
   Eye,
-  EyeOff
+  EyeOff,
+  Download,
+  HardDrive
 } from 'lucide-react';
 import { Tenant } from '@/types';
 import { getStoredData, saveTenant, loginDemoDonMario } from '@/lib/storage';
@@ -707,6 +709,21 @@ export default function SuperAdminPage() {
               <span>Abrir Demo (Don Mario)</span>
             </button>
 
+            {/* BOTÓN DESCARGA INMEDIATA DE BACKUP */}
+            <a
+              href="/api/admin/backup"
+              download
+              className={`py-2 px-3.5 rounded-xl text-xs font-bold flex items-center gap-1.5 border transition cursor-pointer ${
+                isLight
+                  ? 'bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border-emerald-300'
+                  : 'bg-emerald-950/70 hover:bg-emerald-900 text-emerald-300 border-emerald-800/60'
+              }`}
+              title="Descargar copia de seguridad completa e inmutable de la plataforma en JSON"
+            >
+              <Download className="w-3.5 h-3.5 text-emerald-500" />
+              <span>Backup Total</span>
+            </a>
+
             <button
               onClick={() => setShowCreateModal(true)}
               className="py-2.5 px-3.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl text-xs flex items-center gap-1.5 shadow-md shadow-indigo-600/30 transition cursor-pointer"
@@ -814,6 +831,84 @@ export default function SuperAdminPage() {
             <span className="text-[11px] text-rose-500 font-medium flex items-center gap-1 mt-1">
               <AlertTriangle className="w-3 h-3" /> Requieren cobro
             </span>
+          </div>
+        </div>
+
+        {/* PANEL DEL SISTEMA DE COPIAS DE SEGURIDAD (BACKUPS 3-2-1) */}
+        <div
+          className={`p-6 rounded-3xl border transition-colors ${
+            isLight ? 'bg-white border-slate-200 shadow-sm' : 'bg-slate-900 border-slate-800 shadow-xl'
+          }`}
+        >
+          <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 pb-4 border-b border-slate-800/60">
+            <div>
+              <div className="flex items-center gap-2">
+                <HardDrive className="w-5 h-5 text-emerald-500" />
+                <h2 className={`text-base font-bold ${isLight ? 'text-slate-900' : 'text-white'}`}>
+                  Sistema Integral de Copias de Seguridad (Backups)
+                </h2>
+                <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-[10px] font-bold">
+                  Regla 3-2-1 Activa
+                </span>
+              </div>
+              <p className={`text-xs mt-1 ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
+                Resguardo inmutable de comercios, clientes, libretas de crédito y libro mayor contable con trazabilidad criptográfica.
+              </p>
+            </div>
+            <a
+              href="/api/admin/backup"
+              download
+              className="py-2.5 px-4 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-xs flex items-center gap-2 shadow-md shadow-emerald-950 transition cursor-pointer"
+            >
+              <Download className="w-4 h-4" />
+              <span>Descargar Snapshot Completo (JSON)</span>
+            </a>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 pt-4">
+            <div className={`p-3.5 rounded-2xl border ${isLight ? 'bg-slate-50 border-slate-200' : 'bg-slate-950/60 border-slate-800'}`}>
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-blue-500">Backup Diario</span>
+                <span className="text-[10px] font-semibold text-slate-400">23:59 hs</span>
+              </div>
+              <p className={`text-xs ${isLight ? 'text-slate-600' : 'text-slate-300'}`}>
+                Transacciones del día y balances activos.
+              </p>
+              <span className="text-[10px] text-slate-500 block mt-2">Retención: <b>30 días</b></span>
+            </div>
+
+            <div className={`p-3.5 rounded-2xl border ${isLight ? 'bg-slate-50 border-slate-200' : 'bg-slate-950/60 border-slate-800'}`}>
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-500">Backup Semanal</span>
+                <span className="text-[10px] font-semibold text-slate-400">Dom 02:00 hs</span>
+              </div>
+              <p className={`text-xs ${isLight ? 'text-slate-600' : 'text-slate-300'}`}>
+                Dump completo de estructura DDL y datos.
+              </p>
+              <span className="text-[10px] text-slate-500 block mt-2">Retención: <b>12 semanas</b></span>
+            </div>
+
+            <div className={`p-3.5 rounded-2xl border ${isLight ? 'bg-slate-50 border-slate-200' : 'bg-slate-950/60 border-slate-800'}`}>
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-amber-500">Backup Quincenal</span>
+                <span className="text-[10px] font-semibold text-slate-400">Días 1 y 15</span>
+              </div>
+              <p className={`text-xs ${isLight ? 'text-slate-600' : 'text-slate-300'}`}>
+                Snapshot consolidado con prueba de restauración.
+              </p>
+              <span className="text-[10px] text-slate-500 block mt-2">Retención: <b>6 meses</b></span>
+            </div>
+
+            <div className={`p-3.5 rounded-2xl border ${isLight ? 'bg-slate-50 border-slate-200' : 'bg-slate-950/60 border-slate-800'}`}>
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-purple-500">Backup Mensual</span>
+                <span className="text-[10px] font-semibold text-slate-400">Fin de Mes</span>
+              </div>
+              <p className={`text-xs ${isLight ? 'text-slate-600' : 'text-slate-300'}`}>
+                Cierre legal contable inmutable con hash SHA-256.
+              </p>
+              <span className="text-[10px] text-slate-500 block mt-2">Retención: <b>5 a 10 años</b></span>
+            </div>
           </div>
         </div>
 
