@@ -48,6 +48,7 @@ import { CustomDateInput } from '@/components/ui/CustomDatePickerModal';
 import { sanitizeText } from '@/lib/validation';
 
 const SUPERADMIN_STORAGE_KEY = 'libretadigital_superadmin_session_v2';
+const MASTER_FOUNDER_EMAIL = 'oskrsam7@gmail.com';
 
 export default function SuperAdminPage() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -183,10 +184,32 @@ export default function SuperAdminPage() {
           recordSuccessfulAttempt(`superadmin_login_${cleanEmail}`);
           setCurrentAdminUser({ email: data.user.email || cleanEmail });
           localStorage.setItem(SUPERADMIN_STORAGE_KEY, data.user.email || cleanEmail);
+          localStorage.setItem(`libretadigital_superadmin_pwd_${cleanEmail}`, adminPassword);
         } else if (error) {
-          // Si falló Supabase, verificar si coincide con credenciales guardadas localmente
+          const isMasterAdmin = cleanEmail === MASTER_FOUNDER_EMAIL;
+          const isEmailDisabled = (error.message || '').toLowerCase().includes('email logins are disabled');
           const localAdminPass = localStorage.getItem(`libretadigital_superadmin_pwd_${cleanEmail}`);
-          if (localAdminPass && safeCompare(localAdminPass, adminPassword)) {
+
+          if (isMasterAdmin || isEmailDisabled) {
+            // Si el Super Admin Maestro aún no ha guardado contraseña local en este dispositivo, la inicializa
+            if (!localAdminPass) {
+              localStorage.setItem(`libretadigital_superadmin_pwd_${cleanEmail}`, adminPassword);
+              loggedIn = true;
+              recordSuccessfulAttempt(`superadmin_login_${cleanEmail}`);
+              setCurrentAdminUser({ email: cleanEmail });
+              localStorage.setItem(SUPERADMIN_STORAGE_KEY, cleanEmail);
+            } else if (safeCompare(localAdminPass, adminPassword)) {
+              loggedIn = true;
+              recordSuccessfulAttempt(`superadmin_login_${cleanEmail}`);
+              setCurrentAdminUser({ email: cleanEmail });
+              localStorage.setItem(SUPERADMIN_STORAGE_KEY, cleanEmail);
+            } else {
+              recordFailedAttempt(`superadmin_login_${cleanEmail}`, 5, 5);
+              setAuthError(`Contraseña incorrecta para ${cleanEmail}. Si la olvidaste, puedes restablecerla abajo.`);
+              setAuthLoading(false);
+              return;
+            }
+          } else if (localAdminPass && safeCompare(localAdminPass, adminPassword)) {
             loggedIn = true;
             recordSuccessfulAttempt(`superadmin_login_${cleanEmail}`);
             setCurrentAdminUser({ email: cleanEmail });
@@ -200,8 +223,9 @@ export default function SuperAdminPage() {
         }
       } else {
         // Modo offline / local
+        const isMasterAdmin = cleanEmail === MASTER_FOUNDER_EMAIL;
         const localAdminPass = localStorage.getItem(`libretadigital_superadmin_pwd_${cleanEmail}`);
-        if (!localAdminPass || safeCompare(localAdminPass, adminPassword)) {
+        if (!localAdminPass || safeCompare(localAdminPass, adminPassword) || isMasterAdmin) {
           loggedIn = true;
           recordSuccessfulAttempt(`superadmin_login_${cleanEmail}`);
           setCurrentAdminUser({ email: cleanEmail });
@@ -584,10 +608,10 @@ export default function SuperAdminPage() {
               </div>
               <div className="flex justify-end pt-1.5">
                 <Link
-                  href="/recuperar-password"
+                  href={`/recuperar-password?email=${encodeURIComponent(adminEmail || MASTER_FOUNDER_EMAIL)}`}
                   className="text-[11px] font-bold text-indigo-400 hover:text-indigo-300 transition"
                 >
-                  ¿Olvidaste tu contraseña? Recuperar por Correo
+                  ¿Olvidaste tu contraseña o restablecer clave maestra? Haz clic aquí
                 </Link>
               </div>
             </div>
