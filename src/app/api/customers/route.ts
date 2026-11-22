@@ -9,9 +9,16 @@ import {
   cleanTenantForSupabase,
   deduplicateCustomers,
   areCustomersSamePerson,
-  mergeCustomers,
 } from '@/lib/storage';
 import { createClient as createSupabaseClient } from '@supabase/supabase-js';
+
+export const dynamic = 'force-dynamic';
+
+const NO_CACHE_HEADERS = {
+  'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+  Pragma: 'no-cache',
+  Expires: '0',
+};
 
 // Repositorio en memoria compartido a nivel de servidor (Node / Edge runtime en Vercel)
 // Permite que un cliente que se registre en su teléfono móvil aparezca DE INMEDIATO
@@ -43,6 +50,67 @@ function getServerSupabase() {
   } catch (err) {
     console.warn('Supabase server init notice:', err);
     return null;
+  }
+}
+
+// Helper resiliente para guardar un cliente en Supabase:
+// - Asegura que exista el tenant (usando insert para no chocar con RLS UPDATE de anon)
+// - Si falta alguna columna en el esquema real de Supabase (PGRST204), la quita dinámicamente y reintenta
+// - Si upsert falla por RLS de UPDATE (42501), reintenta con INSERT puro
+async function persistCustomerToSupabase(
+  supabase: any,
+  tenantId: string,
+  customer: Customer
+): Promise<{ synced: boolean; error?: string }> {
+  try {
+    if (tenantId === INITIAL_TENANT.id) {
+      // Insertar tenant inicial si no existe (ignorar 23505 duplicate key)
+      await supabase.from('tenants').insert(cleanTenantForSupabase(INITIAL_TENANT));
+    }
+
+    const payload: Record<string, any> = { ...cleanCustomerForSupabase(customer) };
+    let lastError: string | undefined;
+
+    for (let attempt = 0; attempt < 8; attempt++) {
+      const { error } = await supabase.from('customers').upsert(payload);
+      if (!error) {
+        return { synced: true };
+      }
+
+      lastError = `${error.code || ''} ${error.message}`.trim();
+
+      // Caso 1: Columna inexistente en esquema PostgREST (PGRST204)
+      const colMatch =
+        error.message?.match(/Could not find the '([^']+)' column/i) ||
+        error.message?.match(/column "([^"]+)" of relation/i);
+      if (colMatch && colMatch[1] && colMatch[1] in payload) {
+        delete payload[colMatch[1]];
+        continue;
+      }
+
+      // Caso 2: RLS bloquea UPDATE durante upsert -> intentar INSERT directo
+      if (error.code === '42501' || /row-level security/i.test(error.message || '')) {
+        const { error: insErr } = await supabase.from('customers').insert(payload);
+        if (!insErr) {
+          return { synced: true };
+        }
+        // Si falló insert por columna inexistente, quitar y reintentar
+        const insColMatch =
+          insErr.message?.match(/Could not find the '([^']+)' column/i) ||
+          insErr.message?.match(/column "([^"]+)" of relation/i);
+        if (insColMatch && insColMatch[1] && insColMatch[1] in payload) {
+          delete payload[insColMatch[1]];
+          continue;
+        }
+        lastError = `${insErr.code || ''} ${insErr.message}`.trim();
+      }
+
+      break;
+    }
+
+    return { synced: false, error: lastError };
+  } catch (e: any) {
+    return { synced: false, error: e?.message || 'Unexpected Supabase error' };
   }
 }
 
@@ -103,6 +171,8 @@ export async function GET(req: NextRequest) {
       );
     }
 
+    const debugMode = searchParams.get('debug') === '1';
+
     if (tenantId === INITIAL_TENANT.id && !customerStore.has(INITIAL_TENANT.id)) {
       customerStore.set(INITIAL_TENANT.id, [...INITIAL_CUSTOMERS]);
     }
@@ -111,12 +181,11 @@ export async function GET(req: NextRequest) {
 
     // Si Supabase está configurado, consultar también en Supabase y combinar
     const supabase = getServerSupabase();
+    let sbErrorMsg: string | null = null;
+    let sbRowCount = 0;
+
     if (supabase) {
       try {
-        if (tenantId === INITIAL_TENANT.id) {
-          await supabase.from('tenants').upsert(cleanTenantForSupabase(INITIAL_TENANT));
-        }
-
         const { data, error } = await supabase
           .from('customers')
           .select('*')
@@ -124,27 +193,64 @@ export async function GET(req: NextRequest) {
           .order('created_at', { ascending: false });
 
         if (!error && data) {
-          // Combinar registros sin duplicar IDs y restaurar campos
+          sbRowCount = data.length;
+          // Priorizar registros reales de Supabase antes que los iniciales locales
           const restoredData = (data as any[]).map(restoreCustomerFromSupabase);
           const rawList = [
-            ...(tenantId === INITIAL_TENANT.id ? INITIAL_CUSTOMERS : []),
             ...restoredData,
             ...memoryList,
+            ...(tenantId === INITIAL_TENANT.id ? INITIAL_CUSTOMERS : []),
           ];
           const combined = deduplicateCustomers(rawList).sort(
             (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
           );
           customerStore.set(tenantId, combined);
-          return NextResponse.json({ success: true, customers: combined });
+          return NextResponse.json(
+            {
+              success: true,
+              customers: combined,
+              ...(debugMode
+                ? {
+                    debug: {
+                      supabase_configured: true,
+                      supabase_rows: sbRowCount,
+                      memory_rows: memoryList.length,
+                      supabase_error: null,
+                    },
+                  }
+                : {}),
+            },
+            { headers: NO_CACHE_HEADERS }
+          );
+        } else if (error) {
+          sbErrorMsg = `${error.code || ''} ${error.message}`.trim();
+          console.warn('Error al consultar Supabase:', sbErrorMsg);
         }
-      } catch (sbErr) {
+      } catch (sbErr: any) {
+        sbErrorMsg = sbErr?.message || 'Exception querying Supabase';
         console.warn('Error al consultar Supabase:', sbErr);
       }
     }
 
     const finalMemory = deduplicateCustomers(memoryList);
     customerStore.set(tenantId, finalMemory);
-    return NextResponse.json({ success: true, customers: finalMemory });
+    return NextResponse.json(
+      {
+        success: true,
+        customers: finalMemory,
+        ...(debugMode
+          ? {
+              debug: {
+                supabase_configured: Boolean(supabase),
+                supabase_rows: sbRowCount,
+                memory_rows: memoryList.length,
+                supabase_error: sbErrorMsg,
+              },
+            }
+          : {}),
+      },
+      { headers: NO_CACHE_HEADERS }
+    );
   } catch (err: any) {
     return NextResponse.json(
       { success: false, error: err.message || 'Error al obtener clientes' },
@@ -217,24 +323,25 @@ export async function POST(req: NextRequest) {
     // Obtener la versión consolidada/canónica
     const savedCustomer = updated.find((c) => areCustomersSamePerson(c, customer)) || customer;
 
-    // 2. Guardar en Supabase si está disponible
+    // 2. Guardar en Supabase si está disponible (con auto-reparación ante columnas faltantes o RLS)
     const supabase = getServerSupabase();
+    let cloudSync: { synced: boolean; error?: string } = { synced: false, error: 'Supabase no configurado' };
     if (supabase) {
-      try {
-        if (tenantId === INITIAL_TENANT.id) {
-          await supabase.from('tenants').upsert(cleanTenantForSupabase(INITIAL_TENANT));
-        }
-        const cleanedCustomer = cleanCustomerForSupabase(savedCustomer);
-        const { error: sbError } = await supabase.from('customers').upsert(cleanedCustomer);
-        if (sbError) {
-          console.warn('Supabase upsert warning:', sbError.message);
-        }
-      } catch (e) {
-        console.warn('Supabase error on save:', e);
+      cloudSync = await persistCustomerToSupabase(supabase, tenantId, savedCustomer);
+      if (!cloudSync.synced) {
+        console.warn('Supabase customer persist warning:', cloudSync.error);
       }
     }
 
-    return NextResponse.json({ success: true, customer: savedCustomer });
+    return NextResponse.json(
+      {
+        success: true,
+        customer: savedCustomer,
+        cloud_synced: cloudSync.synced,
+        ...(cloudSync.error ? { cloud_error: cloudSync.error } : {}),
+      },
+      { headers: NO_CACHE_HEADERS }
+    );
   } catch (err: any) {
     return NextResponse.json(
       { success: false, error: err.message || 'Error al guardar cliente' },

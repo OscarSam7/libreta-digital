@@ -6,6 +6,7 @@ import { Customer, Transaction, Tenant, TransactionType, PaymentMethod, StaffMem
 import {
   getStoredData,
   saveCustomers,
+  saveCustomersLocalOnly,
   saveTransactions,
   saveTenant,
   syncFromSupabase,
@@ -218,7 +219,9 @@ export function MerchantDashboard() {
 
       try {
         // 1. Sincronizar clientes (nuevos registros y actualización de saldos)
-        const res = await fetch(`/api/customers?tenantId=${currentTenantId}`);
+        const res = await fetch(`/api/customers?tenantId=${currentTenantId}&t=${Date.now()}`, {
+          cache: 'no-store',
+        });
         if (res.ok) {
           const json = await res.json();
           if (json.success && Array.isArray(json.customers) && isMounted) {
@@ -282,7 +285,7 @@ export function MerchantDashboard() {
               }
 
               if (hasDiff) {
-                saveCustomers(merged);
+                saveCustomersLocalOnly(merged);
                 return merged;
               }
               return prevCustomers;
@@ -291,7 +294,9 @@ export function MerchantDashboard() {
         }
 
         // 2. Sincronizar transacciones en tiempo real
-        const txRes = await fetch(`/api/transactions?tenantId=${currentTenantId}`);
+        const txRes = await fetch(`/api/transactions?tenantId=${currentTenantId}&t=${Date.now()}`, {
+          cache: 'no-store',
+        });
         if (txRes.ok) {
           const txJson = await txRes.json();
           if (txJson.success && Array.isArray(txJson.transactions) && isMounted) {

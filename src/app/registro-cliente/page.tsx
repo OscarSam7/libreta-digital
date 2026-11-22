@@ -24,7 +24,7 @@ import {
 import { Tenant } from '@/types';
 import {
   getStoredData,
-  saveCustomers,
+  saveCustomersLocalOnly,
   cleanCustomerForSupabase,
   deduplicateCustomers,
   areCustomersSamePerson,
@@ -180,7 +180,16 @@ function ClientRegisterContent() {
       const cleanDoc = documentId.replace(/\D/g, '') || Math.floor(1000 + Math.random() * 9000).toString();
       const randomSuffix = Math.random().toString(36).substring(2, 6);
       const generatedToken = existing?.qr_token || `c-${cleanDoc}-${randomSuffix}`;
-      const customerIdToUse = existing?.id || crypto.randomUUID();
+      const fallbackUuid = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (ch) => {
+        const r = (Math.random() * 16) | 0;
+        const v = ch === 'x' ? r : (r & 0x3) | 0x8;
+        return v.toString(16);
+      });
+      const customerIdToUse =
+        existing?.id ||
+        (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+          ? crypto.randomUUID()
+          : fallbackUuid);
       const currentLimit = existing ? existing.credit_limit : 0;
       const currentBal = existing ? existing.current_balance : 0;
 
@@ -210,13 +219,20 @@ function ClientRegisterContent() {
         updated_at: new Date().toISOString(),
       };
 
-      // 1. Sincronizar de inmediato con el servidor central para que el almacenero lo vea al instante
+      // 1. Sincronizar de inmediato con el servidor central (API + Supabase con auto-reparación)
+      let savedCustomer = newCustomer;
       try {
-        await fetch('/api/customers', {
+        const apiRes = await fetch('/api/customers', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(newCustomer),
         });
+        if (apiRes.ok) {
+          const apiJson = await apiRes.json();
+          if (apiJson?.customer) {
+            savedCustomer = apiJson.customer;
+          }
+        }
       } catch (apiErr) {
         console.warn('API cloud sync notice:', apiErr);
       }
@@ -225,22 +241,16 @@ function ClientRegisterContent() {
       try {
         if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
           const bc = new BroadcastChannel('libretadigital_customers_channel');
-          bc.postMessage({ type: 'NEW_CUSTOMER_REGISTERED', customer: newCustomer });
+          bc.postMessage({ type: 'NEW_CUSTOMER_REGISTERED', customer: savedCustomer });
           bc.close();
         }
       } catch (e) {}
 
-      // 3. Guardar en Supabase si está disponible
-      const supabase = createClient();
-      if (supabase) {
-        const { error: sbError } = await supabase.from('customers').upsert(cleanCustomerForSupabase(newCustomer as any));
-        if (sbError) {
-          console.warn('Supabase insert notice:', sbError.message);
-        }
+      // 3. Guardar en almacenamiento local deduplicado (sin disparar tormenta de POSTs redundantes)
+      saveCustomersLocalOnly(deduplicateCustomers([savedCustomer as any, ...stored.customers]));
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new Event('libreta_data_updated'));
       }
-
-      // Guardar en almacenamiento local deduplicado
-      saveCustomers(deduplicateCustomers([newCustomer, ...stored.customers]));
 
       confetti({
         particleCount: 80,

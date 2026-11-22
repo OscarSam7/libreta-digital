@@ -688,6 +688,14 @@ export function saveTransactions(transactions: Transaction[]) {
   }
 }
 
+export function saveCustomersLocalOnly(customers: Customer[]): Customer[] {
+  const cleanCustomers = deduplicateCustomers(customers);
+  if (typeof window !== 'undefined') {
+    localStorage.setItem(STORAGE_KEYS.CUSTOMERS, JSON.stringify(cleanCustomers));
+  }
+  return cleanCustomers;
+}
+
 export function saveCustomers(customers: Customer[]) {
   if (typeof window !== 'undefined') {
     const cleanCustomers = deduplicateCustomers(customers);
@@ -790,9 +798,14 @@ export async function syncFromSupabase() {
     // SIEMPRE consultar también la API central compartida /api/customers y /api/transactions
     const tenantRaw = localStorage.getItem(STORAGE_KEYS.TENANT);
     const tenantId = tenantRaw ? JSON.parse(tenantRaw).id : INITIAL_TENANT.id;
+    const ts = Date.now();
     const [apiCustRes, apiTxRes] = await Promise.all([
-      fetch(`/api/customers?tenantId=${tenantId}`).then((r) => r.json()).catch(() => null),
-      fetch(`/api/transactions?tenantId=${tenantId}`).then((r) => r.json()).catch(() => null),
+      fetch(`/api/customers?tenantId=${tenantId}&t=${ts}`, { cache: 'no-store' })
+        .then((r) => r.json())
+        .catch(() => null),
+      fetch(`/api/transactions?tenantId=${tenantId}&t=${ts}`, { cache: 'no-store' })
+        .then((r) => r.json())
+        .catch(() => null),
     ]);
 
     if (apiCustRes && apiCustRes.success && Array.isArray(apiCustRes.customers)) {
