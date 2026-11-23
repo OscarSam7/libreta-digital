@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { QRCodeSVG } from 'qrcode.react';
 import { Customer, Transaction, Tenant, TransactionType, PaymentMethod, StaffMember, StaffRole, StaffPermissions } from '@/types';
 import {
   getStoredData,
@@ -1695,30 +1696,22 @@ export function MerchantDashboard() {
               </form>
             )}
 
-            {txStep === 'PIN_VERIFY' && createdTx && (
-              <div className="text-center space-y-4 py-2">
-                <div className="w-16 h-16 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center mx-auto shadow-inner">
-                  <ShieldCheck className="w-9 h-9" />
+            {txStep === 'PIN_VERIFY' && createdTx && activeTxCustomer && (
+              <div className="text-center space-y-4 py-1 max-h-[80vh] overflow-y-auto">
+                <div className="w-14 h-14 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center mx-auto shadow-inner">
+                  <ShieldCheck className="w-8 h-8" />
                 </div>
 
                 <div>
-                  <h4 className="text-xl font-black text-slate-900">Validación en Mostrador</h4>
+                  <h4 className="text-xl font-black text-slate-900">Firma del Cliente</h4>
                   <p className="text-xs text-slate-500 mt-1 max-w-xs mx-auto">
-                    El cliente conforma la entrega por <b>{formatCurrency(createdTx.amount)}</b>:
+                    Pedí a <b>{activeTxCustomer.full_name}</b> que ingrese su <b>PIN secreto de 4 dígitos</b> para
+                    confirmar el fiado por <b className="text-slate-900">{formatCurrency(createdTx.amount)}</b>:
                   </p>
                 </div>
 
-                <div className="bg-slate-50 py-2.5 px-4 rounded-2xl border border-dashed border-slate-300 inline-block">
-                  <span className="text-[10px] uppercase font-bold text-slate-400 block">
-                    PIN Rápido Mostrador
-                  </span>
-                  <span className="text-2xl font-mono font-black tracking-widest text-blue-600">
-                    {createdTx.validation_pin}
-                  </span>
-                </div>
-
                 {txError && (
-                  <p className="text-xs font-semibold text-rose-600 bg-rose-50 py-1.5 px-3 rounded-lg">
+                  <p className="text-xs font-semibold text-rose-600 bg-rose-50 py-2 px-3 rounded-xl border border-rose-200">
                     {txError}
                   </p>
                 )}
@@ -1726,29 +1719,67 @@ export function MerchantDashboard() {
                 <div>
                   <input
                     type="password"
+                    inputMode="numeric"
                     maxLength={4}
                     placeholder="• • • •"
                     value={enteredPin}
-                    onChange={(e) => setEnteredPin(e.target.value)}
+                    onChange={(e) => setEnteredPin(e.target.value.replace(/\D/g, '').slice(0, 4))}
                     className="w-44 text-center text-3xl tracking-widest font-mono py-2.5 border-2 border-blue-500 rounded-2xl focus:outline-none mx-auto bg-white shadow-sm block"
                   />
+                  <p className="text-[10px] text-slate-400 mt-1.5">
+                    El PIN es privado y solo lo conoce el cliente (no se muestra en caja).
+                  </p>
                 </div>
 
-                <div className="flex gap-2.5 pt-2">
+                <div className="flex gap-2.5 pt-1">
                   <button
                     type="button"
                     onClick={() => setActiveTxCustomer(null)}
-                    className="w-1/2 py-3 bg-slate-100 hover:bg-slate-200 text-slate-600 font-semibold rounded-2xl text-xs"
+                    className="w-1/2 py-3 bg-slate-100 hover:bg-slate-200 text-slate-600 font-semibold rounded-2xl text-xs cursor-pointer"
                   >
                     Dejar Pendiente
                   </button>
                   <button
                     type="button"
                     onClick={handleVerifyPin}
-                    className="w-1/2 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-2xl shadow-md text-xs"
+                    className="w-1/2 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-2xl shadow-md text-xs cursor-pointer"
                   >
                     Firmar y Certificar
                   </button>
+                </div>
+
+                {/* OPCIÓN ALTERNATIVA: ESCANEO DE QR O ENVÍO POR WHATSAPP PARA FIRMA REMOTA */}
+                <div className="pt-3 border-t border-slate-200 space-y-2.5">
+                  <p className="text-[11px] font-bold text-slate-600">
+                    ¿El cliente prefiere aprobar desde su propio celular?
+                  </p>
+                  <div className="flex items-center justify-center gap-4 bg-slate-50 p-3 rounded-2xl border border-slate-200">
+                    <div className="bg-white p-2 rounded-xl border border-slate-200 shadow-xs flex-shrink-0">
+                      <QRCodeSVG
+                        value={`${typeof window !== 'undefined' ? window.location.origin : 'https://libreta-digital-six.vercel.app'}/portal/${activeTxCustomer.qr_token}`}
+                        size={86}
+                        level="M"
+                      />
+                    </div>
+                    <div className="text-left space-y-2 flex-1">
+                      <p className="text-[11px] text-slate-500 leading-snug">
+                        Que escanee este QR con su cámara o recibí su firma remota enviándole el enlace:
+                      </p>
+                      {activeTxCustomer.phone && !/sin\s*celular|excepci[oó]n/i.test(activeTxCustomer.phone) && (
+                        <a
+                          href={`https://wa.me/${activeTxCustomer.phone.replace(/\D/g, '').replace(/^0/, '595')}?text=${encodeURIComponent(
+                            `Hola *${activeTxCustomer.full_name}*! Registramos tu compra fiada en *${tenant.business_name}* por *${formatCurrency(createdTx.amount)}* (${createdTx.description || 'Mercaderías'}). Por favor confirmá la operación con tu PIN aquí:\n${typeof window !== 'undefined' ? window.location.origin : 'https://libreta-digital-six.vercel.app'}/portal/${activeTxCustomer.qr_token}`
+                          )}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-[11px] transition shadow-xs"
+                        >
+                          <MessageCircle className="w-3.5 h-3.5" />
+                          Enviar por WhatsApp
+                        </a>
+                      )}
+                    </div>
+                  </div>
                 </div>
               </div>
             )}

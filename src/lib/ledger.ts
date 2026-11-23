@@ -190,12 +190,14 @@ export function certifyTransactionWithPin(
     return { success: false, message: 'Esta operación ya fue certificada' };
   }
 
-  const isValid =
-    safeCompare(enteredPin.trim(), (tx.validation_pin || '').trim()) ||
-    safeCompare(enteredPin.trim(), (customer.security_pin || '').trim());
+  const customerPin = (customer.security_pin || '').trim();
+  const isValid = Boolean(customerPin) && safeCompare(enteredPin.trim(), customerPin);
 
   if (!isValid) {
-    return { success: false, message: 'PIN de seguridad incorrecto' };
+    return {
+      success: false,
+      message: 'PIN incorrecto. Debe ingresar el PIN secreto de 4 dígitos elegido por el cliente.',
+    };
   }
 
   const certifiedTx: Transaction = {
