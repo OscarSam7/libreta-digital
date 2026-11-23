@@ -58,10 +58,13 @@ export function CustomerPortalView({ token }: Props) {
   const [txTypeFilter, setTxTypeFilter] = useState<'ALL' | 'DEBIT' | 'CREDIT'>('ALL');
 
   // Helper de fecha local sin desviación UTC
-  const getLocalDateString = (d: Date = new Date()) => {
-    const year = d.getFullYear();
-    const month = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
+  const getLocalDateString = (d?: string | Date | null) => {
+    if (!d) return '';
+    const dateObj = typeof d === 'string' ? new Date(d) : d;
+    if (isNaN(dateObj.getTime())) return '';
+    const year = dateObj.getFullYear();
+    const month = String(dateObj.getMonth() + 1).padStart(2, '0');
+    const day = String(dateObj.getDate()).padStart(2, '0');
     return `${year}-${month}-${day}`;
   };
 
@@ -92,6 +95,38 @@ export function CustomerPortalView({ token }: Props) {
       setDateTo(todayStr);
     }
   };
+
+  // Transacciones filtradas con fecha local precisa y sin distorsión UTC (al tope para respetar Reglas de Hooks de React)
+  const filteredTransactions = useMemo(() => {
+    return transactions.filter((tx) => {
+      const isPurchase = tx.type === 'DEBIT_PURCHASE' || tx.type === 'ADJUSTMENT_DEBIT';
+      if (txTypeFilter === 'DEBIT' && !isPurchase) return false;
+      if (txTypeFilter === 'CREDIT' && isPurchase) return false;
+
+      const txLocalDate = getLocalDateString(tx.created_at);
+      let effectiveFrom = dateFrom;
+      let effectiveTo = dateTo;
+      if (effectiveFrom && effectiveTo && effectiveFrom > effectiveTo) {
+        [effectiveFrom, effectiveTo] = [effectiveTo, effectiveFrom];
+      }
+
+      if (effectiveFrom && txLocalDate < effectiveFrom) return false;
+      if (effectiveTo && txLocalDate > effectiveTo) return false;
+      return true;
+    });
+  }, [transactions, txTypeFilter, dateFrom, dateTo]);
+
+  const totalDebitsFiltered = useMemo(() => {
+    return filteredTransactions
+      .filter((t) => t.type === 'DEBIT_PURCHASE' || t.type === 'ADJUSTMENT_DEBIT')
+      .reduce((acc, t) => acc + t.amount, 0);
+  }, [filteredTransactions]);
+
+  const totalCreditsFiltered = useMemo(() => {
+    return filteredTransactions
+      .filter((t) => t.type === 'CREDIT_PAYMENT' || t.type === 'ADJUSTMENT_CREDIT')
+      .reduce((acc, t) => acc + t.amount, 0);
+  }, [filteredTransactions]);
 
   const loadData = async () => {
     // 1. Cargar datos locales de inmediato si existen
@@ -271,38 +306,6 @@ export function CustomerPortalView({ token }: Props) {
       tenant?.currency_code === 'PYG' ? 'es-PY' : tenant?.currency_code === 'BRL' ? 'pt-BR' : 'es-PE'
     ).format(val || 0)}`;
   };
-
-  // Transacciones filtradas con fecha local precisa y sin distorsión UTC
-  const filteredTransactions = useMemo(() => {
-    return transactions.filter((tx) => {
-      const isPurchase = tx.type === 'DEBIT_PURCHASE' || tx.type === 'ADJUSTMENT_DEBIT';
-      if (txTypeFilter === 'DEBIT' && !isPurchase) return false;
-      if (txTypeFilter === 'CREDIT' && isPurchase) return false;
-
-      const txLocalDate = getLocalDateString(new Date(tx.created_at));
-      let effectiveFrom = dateFrom;
-      let effectiveTo = dateTo;
-      if (effectiveFrom && effectiveTo && effectiveFrom > effectiveTo) {
-        [effectiveFrom, effectiveTo] = [effectiveTo, effectiveFrom];
-      }
-
-      if (effectiveFrom && txLocalDate < effectiveFrom) return false;
-      if (effectiveTo && txLocalDate > effectiveTo) return false;
-      return true;
-    });
-  }, [transactions, txTypeFilter, dateFrom, dateTo]);
-
-  const totalDebitsFiltered = useMemo(() => {
-    return filteredTransactions
-      .filter((t) => t.type === 'DEBIT_PURCHASE' || t.type === 'ADJUSTMENT_DEBIT')
-      .reduce((acc, t) => acc + t.amount, 0);
-  }, [filteredTransactions]);
-
-  const totalCreditsFiltered = useMemo(() => {
-    return filteredTransactions
-      .filter((t) => t.type === 'CREDIT_PAYMENT' || t.type === 'ADJUSTMENT_CREDIT')
-      .reduce((acc, t) => acc + t.amount, 0);
-  }, [filteredTransactions]);
 
   return (
     <main className="min-h-screen bg-slate-100 p-4 max-w-md mx-auto pb-16 font-sans">
