@@ -84,7 +84,99 @@ export function PDFReportPreviewModal({
   };
 
   const handlePrintOrDownloadPDF = () => {
-    window.print();
+    const contentEl = printRef.current;
+    if (!contentEl || typeof window === 'undefined') {
+      window.print();
+      return;
+    }
+
+    // Imprimir en un iframe aislado con SOLO el documento para evitar que position:fixed
+    // repita el extracto en cada hoja del dashboard oculto detrás del modal
+    const iframe = document.createElement('iframe');
+    iframe.style.position = 'fixed';
+    iframe.style.right = '0';
+    iframe.style.bottom = '0';
+    iframe.style.width = '0';
+    iframe.style.height = '0';
+    iframe.style.border = '0';
+    iframe.style.visibility = 'hidden';
+    document.body.appendChild(iframe);
+
+    const doc = iframe.contentWindow?.document;
+    if (!doc) {
+      document.body.removeChild(iframe);
+      window.print();
+      return;
+    }
+
+    // Copiar estilos de la app excluyendo reglas de ocultar body con visibility:hidden
+    const stylesHtml = Array.from(document.querySelectorAll('link[rel="stylesheet"], style'))
+      .filter((node) => !(node.tagName === 'STYLE' && (node.textContent || '').includes('visibility: hidden')))
+      .map((node) => node.outerHTML)
+      .join('\n');
+
+    const pageCss = `
+      @page {
+        size: ${printerFormat === 'TICKET_58MM' ? '58mm auto' : printerFormat === 'TICKET_80MM' ? '80mm auto' : 'A4 portrait'};
+        margin: ${printerFormat === 'TICKET_58MM' ? '1.5mm' : printerFormat === 'TICKET_80MM' ? '3mm' : '10mm'};
+      }
+      html, body {
+        margin: 0 !important;
+        padding: 0 !important;
+        background: #ffffff !important;
+        color: #000000 !important;
+        height: auto !important;
+        min-height: 0 !important;
+        overflow: visible !important;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+      }
+      #printable-pdf-document {
+        position: static !important;
+        width: ${printerFormat === 'TICKET_58MM' ? '52mm' : printerFormat === 'TICKET_80MM' ? '76mm' : '100%'} !important;
+        max-width: ${printerFormat === 'TICKET_58MM' ? '52mm' : printerFormat === 'TICKET_80MM' ? '76mm' : '100%'} !important;
+        margin: 0 auto !important;
+        padding: ${printerFormat === 'TICKET_58MM' ? '1.5mm' : printerFormat === 'TICKET_80MM' ? '2mm' : '6mm'} !important;
+        box-shadow: none !important;
+        border: none !important;
+        border-radius: 0 !important;
+        background: #ffffff !important;
+        color: #000000 !important;
+        font-size: ${printerFormat === 'TICKET_58MM' ? '8px' : printerFormat === 'TICKET_80MM' ? '9.5px' : '12px'} !important;
+        font-family: ${printerFormat === 'PAGE_A4' ? 'system-ui, -apple-system, sans-serif' : 'monospace'} !important;
+      }
+      .no-print {
+        display: none !important;
+      }
+    `;
+
+    doc.open();
+    doc.write(`<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <title>Extracto PDF - ${tenant.business_name}</title>
+    ${stylesHtml}
+    <style>${pageCss}</style>
+  </head>
+  <body>
+    ${contentEl.outerHTML}
+  </body>
+</html>`);
+    doc.close();
+
+    setTimeout(() => {
+      try {
+        iframe.contentWindow?.focus();
+        iframe.contentWindow?.print();
+      } finally {
+        setTimeout(() => {
+          if (iframe.parentNode) {
+            iframe.parentNode.removeChild(iframe);
+          }
+        }, 2000);
+      }
+    }, 350);
   };
 
   // URL de portal para QR si es un cliente
@@ -103,21 +195,32 @@ export function PDFReportPreviewModal({
   });
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-2 sm:p-4 overflow-y-auto">
-      {/* Estilos específicos de impresión para generar PDF perfecto */}
+    <div className="pdf-modal-overlay fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-2 sm:p-4 overflow-y-auto">
+      {/* Estilos específicos de impresión de respaldo (Ctrl+P) */}
       <style jsx global>{`
         @media print {
+          html, body {
+            height: auto !important;
+            overflow: visible !important;
+            background: white !important;
+          }
           body * {
             visibility: hidden !important;
+          }
+          .pdf-modal-overlay {
+            position: static !important;
+            inset: auto !important;
+            display: block !important;
+            padding: 0 !important;
+            background: white !important;
+            overflow: visible !important;
           }
           #printable-pdf-document,
           #printable-pdf-document * {
             visibility: visible !important;
           }
           #printable-pdf-document {
-            position: absolute !important;
-            left: 0 !important;
-            top: 0 !important;
+            position: static !important;
             width: ${printerFormat === 'TICKET_58MM' ? '52mm' : printerFormat === 'TICKET_80MM' ? '76mm' : '100%'} !important;
             max-width: ${printerFormat === 'TICKET_58MM' ? '52mm' : printerFormat === 'TICKET_80MM' ? '76mm' : '100%'} !important;
             margin: 0 !important;
