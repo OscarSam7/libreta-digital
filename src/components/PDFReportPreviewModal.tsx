@@ -338,16 +338,16 @@ export function PDFReportPreviewModal({
         </div>
 
         {/* VISOR DE LA HOJA PDF (ADAPTABLE A POS 58MM, 80MM O A4) */}
-        <div className="p-3 sm:p-6 overflow-y-auto bg-slate-950/60 flex justify-center flex-1">
+        <div className="p-3 sm:p-6 overflow-y-auto bg-slate-950/60 flex items-start justify-center flex-1">
           <div
             id="printable-pdf-document"
             ref={printRef}
-            className={`bg-white text-slate-900 rounded-xl shadow-2xl border border-slate-200 flex flex-col justify-between transition-all ${
+            className={`bg-white text-slate-900 rounded-xl shadow-2xl border border-slate-200 flex flex-col justify-between h-fit transition-all ${
               printerFormat === 'TICKET_58MM'
                 ? 'w-full max-w-[300px] p-3 text-[10px] font-mono space-y-2'
                 : printerFormat === 'TICKET_80MM'
                 ? 'w-full max-w-[360px] p-4 text-[11px] font-mono space-y-3'
-                : 'w-full max-w-[210mm] min-h-[297mm] p-6 sm:p-10 text-xs font-sans'
+                : 'w-full max-w-[210mm] p-5 sm:p-10 text-xs font-sans'
             }`}
           >
             {/* ENCABEZADO OFICIAL DEL COMERCIO */}
@@ -761,18 +761,26 @@ export function PDFReportPreviewModal({
 
                   {/* Cuadro de Consentimiento y Firma */}
                   {customer.terms_accepted ? (
-                    <div className="bg-emerald-50 border-2 border-emerald-300 p-3.5 rounded-xl text-emerald-950 space-y-1.5">
+                    <div className="bg-emerald-50 border-2 border-emerald-300 p-3.5 rounded-xl text-emerald-950 space-y-2">
                       <div className="flex items-center gap-2">
-                        <CheckCircle2 className="w-5 h-5 text-emerald-600" />
+                        <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
                         <span className="font-black text-xs uppercase tracking-wide">
                           CONSENTIMIENTO ELECTRÓNICO CONVALIDADO Y REGISTRADO
                         </span>
                       </div>
-                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-[10px] pt-1">
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-[10px] pt-1">
                         <div>
                           <span className="text-emerald-700 font-bold block">Fecha & Hora:</span>
-                          <span className="font-mono font-bold text-slate-800">
-                            {new Date(customer.terms_accepted_at!).toLocaleString('es-PY')}
+                          <span className="font-mono font-bold text-slate-800 whitespace-nowrap">
+                            {new Date(customer.terms_accepted_at || customer.created_at).toLocaleString('es-PY', {
+                              day: '2-digit',
+                              month: '2-digit',
+                              year: 'numeric',
+                              hour: '2-digit',
+                              minute: '2-digit',
+                              second: '2-digit',
+                              hour12: false,
+                            })}
                           </span>
                         </div>
                         <div>
@@ -785,16 +793,19 @@ export function PDFReportPreviewModal({
                         </div>
                         <div>
                           <span className="text-emerald-700 font-bold block">Evidencia Digital:</span>
-                          <span className="font-mono text-slate-600 truncate block">
-                            IP {customer.terms_acceptance_metadata?.ip || '190.128.45.10'} • ID: {customer.id.slice(-8)}
+                          <span className="font-mono text-slate-700 break-all">
+                            {customer.terms_acceptance_metadata?.ip
+                              ? `IP ${customer.terms_acceptance_metadata.ip} • `
+                              : ''}
+                            Cód: {customer.id.slice(0, 8).toUpperCase()}
                           </span>
                         </div>
                       </div>
                     </div>
                   ) : (
-                    <div className="bg-amber-50 border border-amber-200 p-3 rounded-xl text-[10px] text-amber-900 flex justify-between items-center">
+                    <div className="bg-amber-50 border border-amber-200 p-3 rounded-xl text-[10px] text-amber-900 flex justify-between items-center gap-2">
                       <span>⚠️ Documento emitido para firma en soporte físico o validación previa con PIN.</span>
-                      <span className="font-bold">Pendiente de convalidación</span>
+                      <span className="font-bold shrink-0">Pendiente</span>
                     </div>
                   )}
                 </div>
@@ -802,30 +813,30 @@ export function PDFReportPreviewModal({
             </div>
 
             {/* PIE DE PÁGINA Y SELLO DE CERTIFICACIÓN */}
-            <div className="pt-6 mt-8 border-t-2 border-slate-200 flex justify-between items-center text-[10px] text-slate-500">
-              <div className="flex items-center gap-3">
+            <div className="pt-5 mt-6 border-t-2 border-slate-200 flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4 text-[10px] text-slate-500">
+              <div className="flex items-start gap-3">
                 {customer && portalUrl ? (
                   <div className="p-1 bg-white border border-slate-300 rounded-lg shrink-0">
                     <QRCodeSVG value={portalUrl} size={54} />
                   </div>
                 ) : (
-                  <div className="w-12 h-12 bg-slate-100 rounded-lg border border-slate-300 flex items-center justify-center font-black text-slate-400">
+                  <div className="w-12 h-12 bg-slate-100 rounded-lg border border-slate-300 flex items-center justify-center font-black text-slate-400 shrink-0">
                     <ShieldCheck className="w-6 h-6 text-emerald-600" />
                   </div>
                 )}
-                <div>
-                  <span className="font-black text-slate-800 block">
+                <div className="min-w-0">
+                  <span className="font-black text-slate-800 block leading-snug">
                     {tenant.business_name} • Certificado de Registro Inmutable
                   </span>
-                  <p className="max-w-xs text-slate-400">
+                  <p className="max-w-xs text-slate-500 leading-snug mt-0.5">
                     Documento generado por LibretaDigital Pro. Todas las operaciones cuentan con
                     trazabilidad y doble verificación contra disputas.
                   </p>
                 </div>
               </div>
 
-              <div className="text-right">
-                <div className="w-36 border-b border-slate-400 mb-1 inline-block" />
+              <div className="w-full sm:w-auto text-right pt-2 sm:pt-0 shrink-0">
+                <div className="w-40 border-b border-slate-400 mb-1 inline-block" />
                 <span className="block font-bold text-slate-700">Firma / Sello del Comercio</span>
                 <span className="text-[9px] text-slate-400">Auditoría POS LibretaDigital</span>
               </div>
