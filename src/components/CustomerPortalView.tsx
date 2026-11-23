@@ -1,9 +1,15 @@
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import Link from 'next/link';
 import { Customer, Transaction, Tenant } from '@/types';
-import { getStoredData, syncFromSupabase, saveCustomers } from '@/lib/storage';
+import {
+  getStoredData,
+  saveCustomersLocalOnly,
+  saveTransactionsLocalOnly,
+  deduplicateTransactions,
+  ensureValidUuid,
+} from '@/lib/storage';
 import { certifyTransactionWithPin } from '@/lib/ledger';
 import { acceptCustomerTerms } from '@/lib/customers';
 import { exportTransactionsToCSV } from '@/lib/reports';
@@ -56,6 +62,7 @@ export function CustomerPortalView({ token }: Props) {
   const [dateTo, setDateTo] = useState('');
   const [datePreset, setDatePreset] = useState<'ALL' | 'TODAY' | '7D' | 'THIS_MONTH' | '30D' | 'CUSTOM'>('ALL');
   const [txTypeFilter, setTxTypeFilter] = useState<'ALL' | 'DEBIT' | 'CREDIT'>('ALL');
+  const pushedTxIdsRef = useRef<Set<string>>(new Set());
 
   // Helper de fecha local sin desviación UTC
   const getLocalDateString = (d?: string | Date | null) => {
@@ -130,39 +137,95 @@ export function CustomerPortalView({ token }: Props) {
 
   const loadData = async () => {
     // 1. Cargar datos locales de inmediato si existen
-    const data = getStoredData();
-    if (data.tenant) setTenant(data.tenant);
-    const found = data.customers.find((c) => c.qr_token === token);
-    if (found) {
-      setCustomer(found);
-      const custTxs = data.transactions.filter((t) => t.customer_id === found.id);
-      setTransactions(custTxs);
+    const localData = getStoredData();
+    if (localData.tenant) setTenant(localData.tenant);
+    const localCustomer = localData.customers.find((c) => c.qr_token === token) || null;
+    const initialLocalTxs = localCustomer
+      ? deduplicateTransactions(
+          localData.transactions.filter(
+            (t) =>
+              t.customer_id === localCustomer.id ||
+              ensureValidUuid(t.customer_id) === ensureValidUuid(localCustomer.id)
+          )
+        ).sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+      : [];
+
+    if (localCustomer) {
+      setCustomer(localCustomer);
+      setTransactions(initialLocalTxs);
       setIsLoadingCloud(false);
     }
 
-    // 2. Consultar siempre la nube central para sincronización real en cualquier celular
+    // 2. Consultar siempre la nube central combinando sin sobrescribir movimientos locales con listas vacías
     try {
-      const res = await fetch(`/api/customers?token=${encodeURIComponent(token)}`);
+      const res = await fetch(`/api/customers?token=${encodeURIComponent(token)}&t=${Date.now()}`, {
+        cache: 'no-store',
+      });
       if (res.ok) {
         const json = await res.json();
         if (json.success && json.customer) {
-          setCustomer(json.customer);
+          const cloudCust: Customer = json.customer;
+          setCustomer(cloudCust);
           if (json.tenant) setTenant(json.tenant);
 
-          // Cargar transacciones del cliente desde la API central
-          const txRes = await fetch(`/api/transactions?tenantId=${json.customer.tenant_id}&customerId=${json.customer.id}`);
+          const targetCloudCustUuid = ensureValidUuid(cloudCust.id);
+          const matchingLocalTxs: Transaction[] = localData.transactions
+            .filter(
+              (t) =>
+                t.customer_id === cloudCust.id ||
+                ensureValidUuid(t.customer_id) === targetCloudCustUuid ||
+                (localCustomer &&
+                  (t.customer_id === localCustomer.id ||
+                    ensureValidUuid(t.customer_id) === ensureValidUuid(localCustomer.id)))
+            )
+            .map((t) => ({
+              ...t,
+              id: ensureValidUuid(t.id),
+              tenant_id: ensureValidUuid(cloudCust.tenant_id || t.tenant_id),
+              customer_id: cloudCust.id,
+            }));
+
+          let cloudTxs: Transaction[] = [];
+          const txRes = await fetch(
+            `/api/transactions?tenantId=${encodeURIComponent(cloudCust.tenant_id)}&customerId=${encodeURIComponent(cloudCust.id)}&t=${Date.now()}`,
+            { cache: 'no-store' }
+          );
           if (txRes.ok) {
             const txJson = await txRes.json();
             if (txJson.success && Array.isArray(txJson.transactions)) {
-              setTransactions(txJson.transactions);
+              cloudTxs = txJson.transactions;
             }
           }
 
-          // Guardar localmente para disponibilidad offline
-          const currentData = getStoredData();
-          if (!currentData.customers.some((c) => c.id === json.customer.id)) {
-            const updatedCusts = [json.customer, ...currentData.customers];
-            saveCustomers(updatedCusts);
+          // Fusionar nube + local (nunca borrar asientos locales si la nube respondió vacío)
+          const mergedCustTxs = deduplicateTransactions([...cloudTxs, ...matchingLocalTxs]).sort(
+            (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+          );
+          setTransactions(mergedCustTxs);
+
+          // Persistir localmente de forma silenciosa para evitar bucles de eventos
+          const latestLocal = getStoredData();
+          saveCustomersLocalOnly([cloudCust, ...latestLocal.customers]);
+          const otherTxs = latestLocal.transactions.filter(
+            (t) =>
+              t.customer_id !== cloudCust.id &&
+              ensureValidUuid(t.customer_id) !== targetCloudCustUuid &&
+              (!localCustomer || t.customer_id !== localCustomer.id)
+          );
+          saveTransactionsLocalOnly([...mergedCustTxs, ...otherTxs]);
+
+          // Auto-sanar: subir silenciosamente asientos locales que aún no existen en la nube
+          const cloudIdSet = new Set(cloudTxs.map((t) => ensureValidUuid(t.id)));
+          for (const localTx of matchingLocalTxs) {
+            const normId = ensureValidUuid(localTx.id);
+            if (!cloudIdSet.has(normId) && !pushedTxIdsRef.current.has(normId)) {
+              pushedTxIdsRef.current.add(normId);
+              fetch('/api/transactions', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(localTx),
+              }).catch(() => {});
+            }
           }
         }
       }
@@ -175,15 +238,21 @@ export function CustomerPortalView({ token }: Props) {
 
   useEffect(() => {
     loadData();
-    syncFromSupabase();
 
     const handleUpdate = () => loadData();
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        loadData();
+      }
+    };
     window.addEventListener('libreta_data_updated', handleUpdate);
     window.addEventListener('storage', handleUpdate);
+    document.addEventListener('visibilitychange', handleVisibility);
 
     return () => {
       window.removeEventListener('libreta_data_updated', handleUpdate);
       window.removeEventListener('storage', handleUpdate);
+      document.removeEventListener('visibilitychange', handleVisibility);
     };
   }, [token]);
 
@@ -827,6 +896,9 @@ export function CustomerPortalView({ token }: Props) {
           mode="CUSTOMER_STATEMENT"
           tenant={tenant}
           customer={customer}
+          transactions={filteredTransactions}
+          dateFrom={dateFrom || undefined}
+          dateTo={dateTo || undefined}
           onClose={() => setShowStatementPDF(false)}
         />
       )}

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { QRCodeSVG } from 'qrcode.react';
 import { Customer, Transaction, Tenant, TransactionType, PaymentMethod, StaffMember, StaffRole, StaffPermissions } from '@/types';
@@ -8,7 +8,7 @@ import {
   getStoredData,
   saveCustomers,
   saveCustomersLocalOnly,
-  saveTransactions,
+  saveTransactionsLocalOnly,
   saveTenant,
   syncFromSupabase,
   saveStaff,
@@ -18,6 +18,7 @@ import {
   areCustomersSamePerson,
   normalizeDocumentId,
   normalizePhone,
+  ensureValidUuid,
 } from '@/lib/storage';
 import { executeLedgerTransaction, certifyTransactionWithPin } from '@/lib/ledger';
 import { exportTransactionsToCSV, generateWhatsAppReminderUrl } from '@/lib/reports';
@@ -178,6 +179,7 @@ export function MerchantDashboard() {
     phone?: string;
   } | null>(null);
   const [receiptData, setReceiptData] = useState<{ transaction: Transaction; customer: Customer } | null>(null);
+  const pushedLocalTxIdsRef = useRef<Set<string>>(new Set());
 
   // Filtros del Libro Mayor (Asientos Inmutables) por fecha, tipo y cliente
   const [ledgerDateFrom, setLedgerDateFrom] = useState('');
@@ -319,21 +321,47 @@ export function MerchantDashboard() {
           }
         }
 
-        // 2. Sincronizar transacciones en tiempo real
+        // 2. Sincronizar transacciones en tiempo real y auto-sanar asientos locales heredados
         const txRes = await fetch(`/api/transactions?tenantId=${currentTenantId}&t=${Date.now()}`, {
           cache: 'no-store',
         });
         if (txRes.ok) {
           const txJson = await txRes.json();
           if (txJson.success && Array.isArray(txJson.transactions) && isMounted) {
+            const cloudTxs: Transaction[] = txJson.transactions;
+            const cloudIds = new Set(cloudTxs.map((t) => ensureValidUuid(t.id)));
+
+            // Subir silenciosamente una vez cualquier asiento local aún ausente en la nube
+            const currentLocalTxs = getStoredData().transactions;
+            for (const localTx of currentLocalTxs) {
+              const normId = ensureValidUuid(localTx.id);
+              if (
+                ensureValidUuid(localTx.tenant_id) === ensureValidUuid(currentTenantId) &&
+                !cloudIds.has(normId) &&
+                !pushedLocalTxIdsRef.current.has(normId)
+              ) {
+                pushedLocalTxIdsRef.current.add(normId);
+                fetch('/api/transactions', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify(localTx),
+                }).catch(() => {});
+              }
+            }
+
             setTransactions((prevTx) => {
-              const localIds = new Set(prevTx.map((t) => t.id));
-              const newTxs = txJson.transactions.filter((t: Transaction) => !localIds.has(t.id));
-              if (newTxs.length > 0) {
-                const mergedTx = [...newTxs, ...prevTx].sort(
-                  (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-                );
-                saveTransactions(mergedTx);
+              const prevByNormId = new Map(prevTx.map((t) => [ensureValidUuid(t.id), t]));
+              const hasCloudChanges = cloudTxs.some((t) => {
+                const prevMatch = prevByNormId.get(ensureValidUuid(t.id));
+                return !prevMatch || prevMatch.status !== t.status;
+              });
+
+              const mergedTx = deduplicateTransactions([...cloudTxs, ...prevTx]).sort(
+                (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+              );
+
+              if (hasCloudChanges || mergedTx.length !== prevTx.length) {
+                saveTransactionsLocalOnly(mergedTx);
                 return mergedTx;
               }
               return prevTx;

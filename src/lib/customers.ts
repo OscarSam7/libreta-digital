@@ -1,5 +1,5 @@
 import { Customer, CreditCycle } from '@/types';
-import { getStoredData, saveCustomers, areCustomersSamePerson, deduplicateCustomers } from '@/lib/storage';
+import { getStoredData, saveCustomers, areCustomersSamePerson, deduplicateCustomers, ensureValidUuid } from '@/lib/storage';
 import { sanitizeText, validateAmount } from '@/lib/validation';
 import { safeCompare } from '@/lib/security';
 
@@ -32,7 +32,7 @@ export function createNewCustomer(input: CreateCustomerInput): Customer {
   const pin = Math.floor(1000 + Math.random() * 9000).toString();
 
   const newCust: Customer = {
-    id: `cust-${Date.now()}`,
+    id: ensureValidUuid(),
     tenant_id: tenant.id,
     full_name: sanitizeText(input.full_name, 100),
     nickname: input.nickname ? sanitizeText(input.nickname, 50) : undefined,

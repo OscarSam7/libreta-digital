@@ -2,7 +2,14 @@
 
 import React, { useState, useEffect, Suspense, use } from 'react';
 import { Customer, Tenant, Transaction, PrinterFormat } from '@/types';
-import { getStoredData, INITIAL_CUSTOMERS, INITIAL_TENANT, INITIAL_TRANSACTIONS, getStoredPrinterFormat } from '@/lib/storage';
+import {
+  getStoredData,
+  INITIAL_CUSTOMERS,
+  INITIAL_TENANT,
+  INITIAL_TRANSACTIONS,
+  getStoredPrinterFormat,
+  ensureValidUuid,
+} from '@/lib/storage';
 import { downloadReceiptPDF } from '@/lib/pdfReceipt';
 import { BrandLogo } from '@/components/BrandLogo';
 import {
@@ -36,21 +43,28 @@ function ReceiptDetail({ id }: { id: string }) {
     async function loadReceipt() {
       // 1. Intentar desde almacenamiento local primero
       const local = getStoredData();
-      const localTx = local.transactions.find((t) => t.id === id);
+      const targetUuid = ensureValidUuid(id);
+      const localTx = local.transactions.find(
+        (t) => t.id === id || ensureValidUuid(t.id) === targetUuid
+      );
       if (localTx) {
         setTransaction(localTx);
         setTenant(local.tenant);
-        const localCust = local.customers.find((c) => c.id === localTx.customer_id);
+        const localCust = local.customers.find(
+          (c) => c.id === localTx.customer_id || ensureValidUuid(c.id) === ensureValidUuid(localTx.customer_id)
+        );
         if (localCust) setCustomer(localCust);
       }
 
       // 2. Consultar en la API en la nube central
       try {
-        const txRes = await fetch(`/api/transactions`);
+        const txRes = await fetch(`/api/transactions?t=${Date.now()}`, { cache: 'no-store' });
         if (txRes.ok) {
           const txJson = await txRes.json();
           if (txJson.success && Array.isArray(txJson.transactions)) {
-            const foundTx = txJson.transactions.find((t: Transaction) => t.id === id);
+            const foundTx = txJson.transactions.find(
+              (t: Transaction) => t.id === id || ensureValidUuid(t.id) === targetUuid
+            );
             if (foundTx) {
               setTransaction(foundTx);
 

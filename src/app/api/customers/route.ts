@@ -122,46 +122,87 @@ export async function GET(req: NextRequest) {
 
     // BÚSQUEDA POR TOKEN QR (Para visualización real en el celular del cliente /portal/[token])
     if (token) {
-      // 1. Buscar en memoria compartida
-      for (const [tId, custList] of customerStore.entries()) {
-        const found = custList.find((c) => c.qr_token === token);
-        if (found) {
-          const tenant = tId === INITIAL_TENANT.id ? INITIAL_TENANT : null;
-          return NextResponse.json({
-            success: true,
-            customer: found,
-            tenant: tenant || INITIAL_TENANT,
-          });
-        }
-      }
-
-      // 2. Buscar en clientes base de Don Mario
-      const initialMatch = INITIAL_CUSTOMERS.find((c) => c.qr_token === token);
-      if (initialMatch) {
-        return NextResponse.json({
-          success: true,
-          customer: initialMatch,
-          tenant: INITIAL_TENANT,
-        });
-      }
-
-      // 3. Buscar en Supabase
       const supabase = getServerSupabase();
+
+      // 1. Consultar Supabase PRIMERO para obtener el saldo y datos más recientes sin depender de memoria stale
       if (supabase) {
         try {
-          const { data: cData } = await supabase.from('customers').select('*').eq('qr_token', token).single();
+          const { data: cData } = await supabase
+            .from('customers')
+            .select('*')
+            .eq('qr_token', token)
+            .maybeSingle();
+
           if (cData) {
-            const { data: tData } = await supabase.from('tenants').select('*').eq('id', cData.tenant_id).single();
-            return NextResponse.json({
-              success: true,
-              customer: cData,
-              tenant: tData || INITIAL_TENANT,
-            });
+            const restoredCustomer = restoreCustomerFromSupabase(cData);
+            const tenantList = customerStore.get(restoredCustomer.tenant_id) || [];
+            const memMatch = tenantList.find((c) => c.qr_token === token || areCustomersSamePerson(c, restoredCustomer));
+            const mergedCustomer = memMatch
+              ? deduplicateCustomers([restoredCustomer, memMatch])[0] || restoredCustomer
+              : restoredCustomer;
+
+            const { data: tData } = await supabase
+              .from('tenants')
+              .select('*')
+              .eq('id', restoredCustomer.tenant_id)
+              .maybeSingle();
+
+            return NextResponse.json(
+              {
+                success: true,
+                customer: mergedCustomer,
+                tenant: tData || INITIAL_TENANT,
+              },
+              { headers: NO_CACHE_HEADERS }
+            );
           }
         } catch (e) {}
       }
 
-      return NextResponse.json({ success: false, error: 'Código o cliente no encontrado' }, { status: 404 });
+      // 2. Buscar en memoria compartida si aún no está en Supabase o Supabase no está configurado
+      for (const [tId, custList] of customerStore.entries()) {
+        const found = custList.find((c) => c.qr_token === token);
+        if (found) {
+          let resolvedTenant = tId === INITIAL_TENANT.id ? INITIAL_TENANT : null;
+          if (!resolvedTenant && supabase) {
+            try {
+              const { data: tData } = await supabase
+                .from('tenants')
+                .select('*')
+                .eq('id', tId)
+                .maybeSingle();
+              if (tData) resolvedTenant = tData;
+            } catch (e) {}
+          }
+
+          return NextResponse.json(
+            {
+              success: true,
+              customer: found,
+              tenant: resolvedTenant || INITIAL_TENANT,
+            },
+            { headers: NO_CACHE_HEADERS }
+          );
+        }
+      }
+
+      // 3. Buscar en clientes base de Don Mario
+      const initialMatch = INITIAL_CUSTOMERS.find((c) => c.qr_token === token);
+      if (initialMatch) {
+        return NextResponse.json(
+          {
+            success: true,
+            customer: initialMatch,
+            tenant: INITIAL_TENANT,
+          },
+          { headers: NO_CACHE_HEADERS }
+        );
+      }
+
+      return NextResponse.json(
+        { success: false, error: 'Código o cliente no encontrado' },
+        { status: 404, headers: NO_CACHE_HEADERS }
+      );
     }
 
     if (!tenantId) {

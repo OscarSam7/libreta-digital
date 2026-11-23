@@ -1,11 +1,31 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { Transaction } from '@/types';
-import { INITIAL_TENANT, INITIAL_TRANSACTIONS, cleanTransactionForSupabase, cleanTenantForSupabase } from '@/lib/storage';
+import { Customer, Transaction } from '@/types';
+import {
+  INITIAL_TENANT,
+  INITIAL_TRANSACTIONS,
+  UUID_REGEX,
+  cleanTransactionForSupabase,
+  cleanTenantForSupabase,
+  cleanCustomerForSupabase,
+  restoreTransactionFromSupabase,
+  deduplicateTransactions,
+  ensureValidUuid,
+} from '@/lib/storage';
 import { createClient as createSupabaseClient } from '@supabase/supabase-js';
+
+export const dynamic = 'force-dynamic';
+
+const NO_CACHE_HEADERS = {
+  'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+  Pragma: 'no-cache',
+  Expires: '0',
+};
 
 declare global {
   // eslint-disable-next-line no-var
   var __LIBRETA_SHARED_TRANSACTIONS__: Map<string, Transaction[]> | undefined;
+  // eslint-disable-next-line no-var
+  var __LIBRETA_SHARED_CUSTOMERS__: Map<string, Customer[]> | undefined;
 }
 
 if (!globalThis.__LIBRETA_SHARED_TRANSACTIONS__) {
@@ -27,56 +47,222 @@ function getServerSupabase() {
   }
 }
 
+async function ensureCustomerExistsInSupabase(
+  supabase: any,
+  tenantId: string,
+  customerId: string
+): Promise<void> {
+  const sharedMap = globalThis.__LIBRETA_SHARED_CUSTOMERS__;
+  if (!sharedMap) return;
+
+  let matched: Customer | undefined;
+  const tenantList = sharedMap.get(tenantId);
+  if (tenantList) {
+    matched = tenantList.find((c) => c.id === customerId || ensureValidUuid(c.id) === customerId);
+  }
+  if (!matched) {
+    for (const list of sharedMap.values()) {
+      matched = list.find((c) => c.id === customerId || ensureValidUuid(c.id) === customerId);
+      if (matched) break;
+    }
+  }
+  if (!matched) return;
+
+  const custPayload: Record<string, any> = {
+    ...cleanCustomerForSupabase(matched),
+    id: customerId,
+    tenant_id: tenantId,
+  };
+
+  for (let attempt = 0; attempt < 6; attempt++) {
+    const { error } = await supabase.from('customers').insert(custPayload);
+    if (!error || error.code === '23505') return;
+
+    const colMatch =
+      error.message?.match(/Could not find the '([^']+)' column/i) ||
+      error.message?.match(/column "([^"]+)" of relation/i);
+    if (colMatch && colMatch[1] && colMatch[1] in custPayload) {
+      delete custPayload[colMatch[1]];
+      continue;
+    }
+    break;
+  }
+}
+
+// Helper resiliente compatible con inmutabilidad RLS (transactions solo permite SELECT e INSERT)
+async function persistTransactionToSupabase(
+  supabase: any,
+  tenantId: string,
+  tx: Transaction
+): Promise<{ synced: boolean; error?: string }> {
+  try {
+    if (tenantId === INITIAL_TENANT.id) {
+      try {
+        await supabase.from('tenants').insert(cleanTenantForSupabase(INITIAL_TENANT));
+      } catch (e) {}
+    }
+
+    const payload: Record<string, any> = { ...cleanTransactionForSupabase(tx) };
+    let retriedMissingCustomer = false;
+    let lastError: string | undefined;
+
+    for (let attempt = 0; attempt < 8; attempt++) {
+      const { error } = await supabase.from('transactions').insert(payload);
+
+      if (!error) {
+        try {
+          await supabase
+            .from('customers')
+            .update({ current_balance: Number(tx.new_balance) || 0 })
+            .eq('id', payload.customer_id);
+        } catch (e) {}
+        return { synced: true };
+      }
+
+      // El asiento ya existe en el libro inmutable (clave primaria duplicada): idempotente -> sincronizado
+      if (error.code === '23505') {
+        return { synced: true };
+      }
+
+      lastError = `${error.code || ''} ${error.message || ''}`.trim();
+
+      // Caso 1: Columna inexistente en el esquema desplegado (PGRST204 / 42703)
+      const colMatch =
+        error.message?.match(/Could not find the '([^']+)' column/i) ||
+        error.message?.match(/column "([^"]+)" of relation/i);
+      if (colMatch && colMatch[1] && colMatch[1] in payload) {
+        delete payload[colMatch[1]];
+        continue;
+      }
+
+      // Caso 2: Sintaxis UUID inválida en columna opcional en esquema previo (22P02)
+      if (error.code === '22P02') {
+        if ('created_by' in payload && !UUID_REGEX.test(String(payload.created_by || ''))) {
+          delete payload.created_by;
+          continue;
+        }
+        if ('operator_id' in payload && payload.operator_id && !UUID_REGEX.test(String(payload.operator_id))) {
+          delete payload.operator_id;
+          continue;
+        }
+      }
+
+      // Caso 3: Violación de clave foránea porque el cliente aún no se persistió en Supabase (23503)
+      if (error.code === '23503' && !retriedMissingCustomer) {
+        retriedMissingCustomer = true;
+        await ensureCustomerExistsInSupabase(supabase, tenantId, payload.customer_id);
+        continue;
+      }
+
+      break;
+    }
+
+    return { synced: false, error: lastError };
+  } catch (e: any) {
+    return { synced: false, error: e?.message || 'Unexpected Supabase transaction insert error' };
+  }
+}
+
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
     const tenantId = searchParams.get('tenantId') || INITIAL_TENANT.id;
     const customerId = searchParams.get('customerId');
+    const debugMode = searchParams.get('debug') === '1';
 
     if (!txStore.has(tenantId) && tenantId === INITIAL_TENANT.id) {
       txStore.set(INITIAL_TENANT.id, [...INITIAL_TRANSACTIONS]);
     }
 
-    let txs = txStore.get(tenantId) || (tenantId === INITIAL_TENANT.id ? [...INITIAL_TRANSACTIONS] : []);
+    const memoryList = txStore.get(tenantId) || (tenantId === INITIAL_TENANT.id ? [...INITIAL_TRANSACTIONS] : []);
+    let txs = memoryList;
 
     const supabase = getServerSupabase();
+    let sbErrorMsg: string | null = null;
+    let sbRowCount = 0;
+
     if (supabase) {
       try {
         let query = supabase.from('transactions').select('*').eq('tenant_id', tenantId);
-        if (customerId) query = query.eq('customer_id', customerId);
-        const { data } = await query.order('created_at', { ascending: false });
-        if (data && data.length > 0) {
-          const map = new Map<string, Transaction>();
-          for (const t of data as Transaction[]) map.set(t.id, t);
-          for (const t of txs) if (!map.has(t.id)) map.set(t.id, t);
-          txs = Array.from(map.values()).sort(
+        if (customerId) {
+          query = query.eq('customer_id', ensureValidUuid(customerId));
+        }
+        const { data, error } = await query.order('created_at', { ascending: false });
+        if (!error && data) {
+          sbRowCount = data.length;
+          const restoredData = (data as any[]).map(restoreTransactionFromSupabase);
+          // Conservar SIEMPRE todo el listado del comercio en txStore sin sobrescribir otros clientes
+          const combinedTenantTxs = deduplicateTransactions([...restoredData, ...memoryList]).sort(
             (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
           );
-          txStore.set(tenantId, txs);
+          txStore.set(tenantId, combinedTenantTxs);
+          txs = combinedTenantTxs;
+        } else if (error) {
+          sbErrorMsg = `${error.code || ''} ${error.message || ''}`.trim();
         }
-      } catch (e) {}
+      } catch (e: any) {
+        sbErrorMsg = e?.message || 'Exception querying Supabase transactions';
+      }
     }
 
+    let responseTxs = txs;
     if (customerId) {
-      txs = txs.filter((t) => t.customer_id === customerId);
+      const targetCustomerUuid = ensureValidUuid(customerId);
+      responseTxs = txs.filter(
+        (t) => t.customer_id === customerId || ensureValidUuid(t.customer_id) === targetCustomerUuid
+      );
     }
 
-    return NextResponse.json({ success: true, transactions: txs });
+    return NextResponse.json(
+      {
+        success: true,
+        transactions: responseTxs,
+        ...(debugMode
+          ? {
+              debug: {
+                supabase_configured: Boolean(supabase),
+                supabase_rows: sbRowCount,
+                memory_rows: memoryList.length,
+                supabase_error: sbErrorMsg,
+              },
+            }
+          : {}),
+      },
+      { headers: NO_CACHE_HEADERS }
+    );
   } catch (err: any) {
-    return NextResponse.json({ success: false, error: err.message || 'Error al obtener transacciones' }, { status: 500 });
+    return NextResponse.json(
+      { success: false, error: err.message || 'Error al obtener transacciones' },
+      { status: 500, headers: NO_CACHE_HEADERS }
+    );
   }
 }
 
 export async function POST(req: NextRequest) {
   try {
-    const tx: Transaction = await req.json();
-    if (!tx || !tx.tenant_id || !tx.customer_id) {
-      return NextResponse.json({ success: false, error: 'Datos de transacción incompletos' }, { status: 400 });
+    const rawTx: Transaction = await req.json();
+    if (!rawTx || !rawTx.tenant_id || !rawTx.customer_id) {
+      return NextResponse.json(
+        { success: false, error: 'Datos de transacción incompletos' },
+        { status: 400, headers: NO_CACHE_HEADERS }
+      );
     }
 
-    const tenantId = tx.tenant_id;
+    const normalizedTx: Transaction = {
+      ...rawTx,
+      id: ensureValidUuid(rawTx.id),
+      tenant_id: ensureValidUuid(rawTx.tenant_id),
+      customer_id: ensureValidUuid(rawTx.customer_id),
+      amount: Number(rawTx.amount) || 0,
+      previous_balance: Number(rawTx.previous_balance) || 0,
+      new_balance: Number(rawTx.new_balance) || 0,
+      items: Array.isArray(rawTx.items) ? rawTx.items : [],
+      created_at: rawTx.created_at || new Date().toISOString(),
+    };
+
+    const tenantId = normalizedTx.tenant_id;
     const currentTxs = txStore.get(tenantId) || (tenantId === INITIAL_TENANT.id ? [...INITIAL_TRANSACTIONS] : []);
-    const updated = [tx, ...currentTxs.filter((t) => t.id !== tx.id)].sort(
+    const updated = deduplicateTransactions([normalizedTx, ...currentTxs]).sort(
       (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
     );
     txStore.set(tenantId, updated);
@@ -85,11 +271,13 @@ export async function POST(req: NextRequest) {
     if (globalThis.__LIBRETA_SHARED_CUSTOMERS__) {
       const custList = globalThis.__LIBRETA_SHARED_CUSTOMERS__.get(tenantId);
       if (custList) {
-        const cIndex = custList.findIndex((c) => c.id === tx.customer_id);
+        const cIndex = custList.findIndex(
+          (c) => c.id === normalizedTx.customer_id || ensureValidUuid(c.id) === normalizedTx.customer_id
+        );
         if (cIndex !== -1) {
           custList[cIndex] = {
             ...custList[cIndex],
-            current_balance: tx.new_balance,
+            current_balance: normalizedTx.new_balance,
             updated_at: new Date().toISOString(),
           };
           globalThis.__LIBRETA_SHARED_CUSTOMERS__.set(tenantId, custList);
@@ -98,18 +286,30 @@ export async function POST(req: NextRequest) {
     }
 
     const supabase = getServerSupabase();
+    let cloudSync: { synced: boolean; error?: string } = {
+      synced: false,
+      error: 'Supabase no configurado',
+    };
     if (supabase) {
-      try {
-        if (tenantId === INITIAL_TENANT.id) {
-          await supabase.from('tenants').upsert(cleanTenantForSupabase(INITIAL_TENANT));
-        }
-        await supabase.from('transactions').upsert(cleanTransactionForSupabase(tx));
-        await supabase.from('customers').update({ current_balance: tx.new_balance }).eq('id', tx.customer_id);
-      } catch (e) {}
+      cloudSync = await persistTransactionToSupabase(supabase, tenantId, normalizedTx);
+      if (!cloudSync.synced) {
+        console.warn('Supabase transaction persist warning:', cloudSync.error);
+      }
     }
 
-    return NextResponse.json({ success: true, transaction: tx });
+    return NextResponse.json(
+      {
+        success: true,
+        transaction: normalizedTx,
+        cloud_synced: cloudSync.synced,
+        ...(cloudSync.error ? { cloud_error: cloudSync.error } : {}),
+      },
+      { headers: NO_CACHE_HEADERS }
+    );
   } catch (err: any) {
-    return NextResponse.json({ success: false, error: err.message || 'Error al guardar transacción' }, { status: 500 });
+    return NextResponse.json(
+      { success: false, error: err.message || 'Error al guardar transacción' },
+      { status: 500, headers: NO_CACHE_HEADERS }
+    );
   }
 }

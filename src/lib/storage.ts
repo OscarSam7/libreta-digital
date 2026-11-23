@@ -27,6 +27,50 @@ const STORAGE_KEYS = {
   IS_LOGGED_IN: 'libretadigital_is_logged_in_v2',
 };
 
+export const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Normaliza un identificador a UUID v4 válido de forma puramente determinista.
+ * Mantiene sin cambios los UUIDs válidos y convierte IDs heredados (ej. "tx-...", "cust-...")
+ * siempre al mismo UUID estable tanto en navegador como en Node.js.
+ */
+export function ensureValidUuid(rawId?: string | null): string {
+  const trimmed = typeof rawId === 'string' ? rawId.trim() : '';
+  if (trimmed && UUID_REGEX.test(trimmed)) {
+    return trimmed.toLowerCase();
+  }
+
+  if (trimmed) {
+    const seeds = [0x811c9dc5, 0x9e3779b9, 0x85ebca6b, 0xc2b2ae35];
+    const hexParts = seeds.map((seed, lane) => {
+      let hash = (seed ^ trimmed.length) >>> 0;
+      for (let i = 0; i < trimmed.length; i++) {
+        hash ^= trimmed.charCodeAt(i) + ((lane + 1) * 31);
+        hash = Math.imul(hash, 0x01000193) >>> 0;
+      }
+      // Ronda extra de mezcla para diferenciar entradas cortas similares
+      hash ^= hash >>> 16;
+      hash = Math.imul(hash, 0x45d9f3b) >>> 0;
+      hash ^= hash >>> 16;
+      return (hash >>> 0).toString(16).padStart(8, '0');
+    });
+
+    const hex = hexParts.join('');
+    const variantNibble = ((parseInt(hex[16], 16) & 0x3) | 0x8).toString(16);
+    return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-4${hex.slice(13, 16)}-${variantNibble}${hex.slice(17, 20)}-${hex.slice(20, 32)}`;
+  }
+
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID().toLowerCase();
+  }
+
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (ch) => {
+    const r = (Math.random() * 16) | 0;
+    const v = ch === 'x' ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+}
+
 // ==========================================
 // MOTOR DE NORMALIZACIÓN Y DEDUPLICACIÓN
 // ==========================================
@@ -170,17 +214,46 @@ export function deduplicateTransactions(
 ): Transaction[] {
   if (!Array.isArray(transactions) || transactions.length === 0) return [];
   const result: Transaction[] = [];
-  const seenTx = new Set<string>();
+  const indexById = new Map<string, number>();
+  const indexByFingerprint = new Map<string, number>();
 
   for (const tx of transactions) {
     if (!tx || !tx.id) continue;
-    if (seenTx.has(tx.id)) continue;
-    seenTx.add(tx.id);
 
-    const remapped = { ...tx };
+    const remapped: Transaction = {
+      ...tx,
+      id: ensureValidUuid(tx.id),
+      amount: Number(tx.amount) || 0,
+      previous_balance: Number(tx.previous_balance) || 0,
+      new_balance: Number(tx.new_balance) || 0,
+      items: Array.isArray(tx.items) ? tx.items : [],
+    };
     if (customerIdRemap && customerIdRemap.has(remapped.customer_id)) {
       remapped.customer_id = customerIdRemap.get(remapped.customer_id)!;
     }
+
+    const fingerprint = `${remapped.customer_id}|${remapped.type}|${remapped.amount}|${remapped.previous_balance}|${remapped.new_balance}|${String(remapped.created_at || '').slice(0, 19)}`;
+
+    const existingIdx = indexById.get(remapped.id) ?? indexByFingerprint.get(fingerprint);
+    if (existingIdx !== undefined) {
+      const existing = result[existingIdx];
+      // Si la versión entrante ya fue certificada y la almacenada seguía pendiente, actualizar en sitio
+      if (existing.status === 'PENDING_CUSTOMER' && remapped.status === 'CERTIFIED_BOTH') {
+        result[existingIdx] = {
+          ...existing,
+          ...remapped,
+          status: 'CERTIFIED_BOTH',
+          validated_at: remapped.validated_at || existing.validated_at,
+          validation_method: remapped.validation_method || existing.validation_method,
+          validation_metadata: remapped.validation_metadata || existing.validation_metadata,
+        };
+      }
+      continue;
+    }
+
+    const nextIdx = result.length;
+    indexById.set(remapped.id, nextIdx);
+    indexByFingerprint.set(fingerprint, nextIdx);
     result.push(remapped);
   }
   return result;
@@ -532,16 +605,18 @@ export function getStoredData() {
   const staff: StaffMember[] = staffRaw ? JSON.parse(staffRaw) : INITIAL_STAFF;
   const currentOperator: StaffMember = operatorRaw ? JSON.parse(operatorRaw) : (staff[0] || INITIAL_STAFF[0]);
 
-  // Ejecutar deduplicación exhaustiva
+  // Ejecutar deduplicación y normalización de UUIDs exhaustiva
   const rawCustomerCount = customers.length;
+  const rawTxCount = transactions.length;
+  const hadLegacyTxIds = transactions.some((t) => !t?.id || !UUID_REGEX.test(t.id));
   customers = deduplicateCustomers(customers);
   transactions = deduplicateTransactions(transactions);
 
-  // Si se detectaron y limpiaron duplicados, o no existía la clave, reescribir localStorage inmediatamente
+  // Si se detectaron duplicados/IDs heredados, o no existía la clave, reescribir localStorage inmediatamente
   if (!customersRaw || customers.length !== rawCustomerCount) {
     localStorage.setItem(STORAGE_KEYS.CUSTOMERS, JSON.stringify(customers));
   }
-  if (!txRaw) {
+  if (!txRaw || hadLegacyTxIds || transactions.length !== rawTxCount) {
     localStorage.setItem(STORAGE_KEYS.TRANSACTIONS, JSON.stringify(transactions));
   }
   if (!tenantRaw) localStorage.setItem(STORAGE_KEYS.TENANT, JSON.stringify(INITIAL_TENANT));
@@ -617,9 +692,9 @@ export function restoreCustomerFromSupabase(row: any): Customer {
 
 export function cleanTransactionForSupabase(tx: Transaction): any {
   return {
-    id: tx.id,
-    tenant_id: tx.tenant_id,
-    customer_id: tx.customer_id,
+    id: ensureValidUuid(tx.id),
+    tenant_id: ensureValidUuid(tx.tenant_id),
+    customer_id: ensureValidUuid(tx.customer_id),
     created_by: tx.created_by || 'user-owner-001',
     operator_id: tx.operator_id || null,
     operator_name: tx.operator_name || null,
@@ -638,6 +713,17 @@ export function cleanTransactionForSupabase(tx: Transaction): any {
     validation_metadata: tx.validation_metadata || {},
     blockchain_hash: tx.blockchain_hash || null,
     created_at: tx.created_at || new Date().toISOString(),
+  };
+}
+
+export function restoreTransactionFromSupabase(row: any): Transaction {
+  return {
+    ...row,
+    id: ensureValidUuid(row.id),
+    amount: Number(row.amount) || 0,
+    previous_balance: Number(row.previous_balance) || 0,
+    new_balance: Number(row.new_balance) || 0,
+    items: Array.isArray(row.items) ? row.items : [],
   };
 }
 
@@ -660,25 +746,23 @@ export function cleanTenantForSupabase(tenant: Tenant): any {
   };
 }
 
+export function saveTransactionsLocalOnly(transactions: Transaction[]): Transaction[] {
+  const cleanTransactions = deduplicateTransactions(transactions).sort(
+    (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+  );
+  if (typeof window !== 'undefined') {
+    localStorage.setItem(STORAGE_KEYS.TRANSACTIONS, JSON.stringify(cleanTransactions));
+  }
+  return cleanTransactions;
+}
+
 export function saveTransactions(transactions: Transaction[]) {
   if (typeof window !== 'undefined') {
-    localStorage.setItem(STORAGE_KEYS.TRANSACTIONS, JSON.stringify(transactions));
+    const cleanTransactions = saveTransactionsLocalOnly(transactions);
     window.dispatchEvent(new Event('libreta_data_updated'));
 
-    try {
-      const supabase = createClient();
-      if (supabase) {
-        const cleaned = transactions.map(cleanTransactionForSupabase);
-        supabase.from('transactions').upsert(cleaned).then(({ error }: { error: any }) => {
-          if (error) console.warn('Supabase transactions sync notice:', error.message);
-        });
-      }
-    } catch (e) {
-      // Offline fallback
-    }
-
-    // Sincronizar también con la API central /api/transactions
-    for (const tx of transactions.slice(0, 10)) {
+    // Sincronizar mediante API central (usa INSERT resiliente compatible con inmutabilidad RLS)
+    for (const tx of cleanTransactions.slice(0, 25)) {
       fetch('/api/transactions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

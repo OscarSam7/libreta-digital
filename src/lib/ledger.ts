@@ -1,5 +1,5 @@
 import { Customer, Transaction, TransactionType, PaymentMethod, ValidationStatus, TransactionItem } from '@/types';
-import { getStoredData, saveCustomers, saveTransactions } from './storage';
+import { getStoredData, saveCustomers, saveTransactions, ensureValidUuid } from './storage';
 import { safeCompare } from './security';
 import { validateAmount, sanitizeText } from './validation';
 
@@ -105,7 +105,7 @@ export function executeLedgerTransaction(input: CreateTxInput): {
   const txDate = input.createdAt || new Date().toISOString();
 
   const newTx: Transaction = {
-    id: `tx-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+    id: ensureValidUuid(),
     tenant_id: tenant.id,
     customer_id: customer.id,
     created_by: 'user-active-session',
@@ -334,7 +334,7 @@ export function processHistoricalBatchTransactions(
     const entryDate = entry.date.includes('T') ? entry.date : `${entry.date}T12:00:00.000Z`;
 
     const tx: Transaction = {
-      id: `tx-hist-${Date.now()}-${i}-${Math.random().toString(36).substring(2, 6)}`,
+      id: ensureValidUuid(),
       tenant_id: tenant.id,
       customer_id: customer.id,
       created_by: 'comerciante-carga-historica',
@@ -378,6 +378,22 @@ export function processHistoricalBatchTransactions(
 
   saveCustomers(customers);
   saveTransactions(updatedTransactions);
+
+  if (typeof window !== 'undefined') {
+    for (const tx of createdTransactions) {
+      fetch('/api/transactions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(tx),
+      }).catch(() => {});
+    }
+
+    fetch('/api/customers', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updatedCustomer),
+    }).catch(() => {});
+  }
 
   return {
     success: true,
