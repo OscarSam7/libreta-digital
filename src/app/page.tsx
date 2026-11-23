@@ -24,6 +24,7 @@ export default function Home() {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
   const [theme, setTheme] = useState<'light' | 'dark'>('light');
   const [isSuperAdmin, setIsSuperAdmin] = useState(false);
+  const [lastCustomer, setLastCustomer] = useState<{ token: string; name: string; businessName: string } | null>(null);
 
   useEffect(() => {
     // Cargar preferencia de tema (por defecto tema blanco)
@@ -31,6 +32,17 @@ export default function Home() {
     if (savedTheme) {
       setTheme(savedTheme);
     }
+
+    // Cargar última sesión de cliente si existe en este dispositivo
+    try {
+      const rawCust = localStorage.getItem('libretadigital_last_customer');
+      if (rawCust) {
+        const parsed = JSON.parse(rawCust);
+        if (parsed?.token && parsed?.name) {
+          setLastCustomer(parsed);
+        }
+      }
+    } catch {}
 
     async function checkAuth() {
       // 1. Verificar si es Super Admin autenticado
@@ -259,6 +271,66 @@ export default function Home() {
               >
                 <Sparkles className="w-3.5 h-3.5 text-amber-500" />
                 <span>Ver Simulador</span>
+              </Link>
+            </div>
+          </div>
+
+          {/* ACCESO DIRECTO PARA CLIENTES DEL ALMACÉN */}
+          <div
+            className={`w-full max-w-md p-4 rounded-3xl text-left space-y-3 border-2 transition ${
+              isLight
+                ? 'bg-emerald-50/80 border-emerald-200 shadow-sm'
+                : 'bg-emerald-950/30 border-emerald-800/60'
+            }`}
+          >
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 rounded-xl bg-emerald-600 text-white flex items-center justify-center flex-shrink-0">
+                <Users className="w-4 h-4" />
+              </div>
+              <div>
+                <div className={`text-xs font-black ${isLight ? 'text-emerald-950' : 'text-emerald-200'}`}>
+                  ¿Sos Cliente de un Almacén?
+                </div>
+                <div className={`text-[11px] ${isLight ? 'text-emerald-700' : 'text-emerald-400'}`}>
+                  Consultá tu saldo, recibos y libreta con tu Cédula y PIN
+                </div>
+              </div>
+            </div>
+
+            {lastCustomer && (
+              <Link
+                href={`/portal/${lastCustomer.token}`}
+                className="w-full py-2.5 px-3.5 bg-emerald-600 hover:bg-emerald-500 text-white font-black rounded-xl text-xs flex items-center justify-between shadow-md shadow-emerald-600/20 transition"
+              >
+                <span>Volver a Mi Libreta ({lastCustomer.name})</span>
+                <ArrowRight className="w-4 h-4 flex-shrink-0" />
+              </Link>
+            )}
+
+            <div className="grid grid-cols-2 gap-2">
+              <Link
+                href="/acceso-cliente"
+                className={`py-2.5 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition ${
+                  lastCustomer
+                    ? isLight
+                      ? 'bg-white hover:bg-emerald-100/60 text-emerald-800 border border-emerald-300'
+                      : 'bg-slate-900 hover:bg-slate-800 text-emerald-300 border border-emerald-800'
+                    : 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-md shadow-emerald-600/20'
+                }`}
+              >
+                <UserCheck className="w-3.5 h-3.5" />
+                <span>Entrar con PIN</span>
+              </Link>
+
+              <Link
+                href="/registro-cliente"
+                className={`py-2.5 px-3 rounded-xl text-xs font-bold border transition flex items-center justify-center gap-1.5 ${
+                  isLight
+                    ? 'bg-white hover:bg-emerald-100/60 text-emerald-800 border-emerald-300'
+                    : 'bg-slate-900 hover:bg-slate-800 text-emerald-300 border-emerald-800'
+                }`}
+              >
+                <span>Registrarme</span>
               </Link>
             </div>
           </div>

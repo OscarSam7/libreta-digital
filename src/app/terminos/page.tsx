@@ -1,31 +1,60 @@
 'use client';
 
-import React from 'react';
+import React, { useState, useEffect, Suspense } from 'react';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import { ArrowLeft, ShieldCheck, FileText, CheckCircle2, AlertTriangle, Scale, Lock, ExternalLink } from 'lucide-react';
 import { BrandLogo } from '@/components/BrandLogo';
+import { isMerchantLoggedIn } from '@/lib/storage';
 
-export default function TerminosPage() {
+function TerminosContent() {
+  const searchParams = useSearchParams();
+  const queryReturnTo = searchParams.get('returnTo');
+  const [backHref, setBackHref] = useState('/');
+  const [backLabel, setBackLabel] = useState('Volver a la App');
+
+  useEffect(() => {
+    if (queryReturnTo && queryReturnTo.startsWith('/')) {
+      setBackHref(queryReturnTo);
+      setBackLabel(queryReturnTo.startsWith('/portal/') ? 'Volver a Mi Libreta' : 'Volver');
+      return;
+    }
+    if (!isMerchantLoggedIn()) {
+      try {
+        const raw = localStorage.getItem('libretadigital_last_customer');
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (parsed?.token) {
+            setBackHref(`/portal/${parsed.token}`);
+            setBackLabel('Volver a Mi Libreta');
+          }
+        }
+      } catch {}
+    }
+  }, [queryReturnTo]);
+
+  const privacyHref = queryReturnTo ? `/privacidad?returnTo=${encodeURIComponent(queryReturnTo)}` : '/privacidad';
+
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 font-sans selection:bg-blue-600 selection:text-white">
       {/* HEADER NAVEGACIÓN */}
       <header className="border-b border-slate-900 bg-slate-950/80 backdrop-blur sticky top-0 z-50 px-4 py-3.5">
         <div className="max-w-4xl mx-auto flex items-center justify-between">
-          <Link href="/" className="flex items-center gap-2 hover:opacity-90 transition">
+          <Link href={backHref} className="flex items-center gap-2 hover:opacity-90 transition">
             <BrandLogo size="sm" theme="dark" />
           </Link>
           <div className="flex items-center gap-3">
             <Link
-              href="/privacidad"
+              href={privacyHref}
               className="text-xs text-slate-400 hover:text-white font-medium transition hidden sm:inline"
             >
               Política de Privacidad →
             </Link>
             <Link
-              href="/"
+              href={backHref}
               className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-slate-200 text-xs font-semibold rounded-lg border border-slate-800 transition flex items-center gap-1.5"
             >
-              <ArrowLeft className="w-3.5 h-3.5" /> Volver a la App
+              <ArrowLeft className="w-3.5 h-3.5" /> {backLabel}
             </Link>
           </div>
         </div>
@@ -185,16 +214,16 @@ export default function TerminosPage() {
         {/* ACCIONES INFERIORES */}
         <div className="pt-6 border-t border-slate-900 flex flex-col sm:flex-row items-center justify-between gap-4">
           <Link
-            href="/privacidad"
+            href={privacyHref}
             className="w-full sm:w-auto px-5 py-2.5 bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs rounded-xl shadow-lg transition text-center flex items-center justify-center gap-2"
           >
             Ver Política de Privacidad de Datos <ExternalLink className="w-3.5 h-3.5" />
           </Link>
           <Link
-            href="/"
+            href={backHref}
             className="w-full sm:w-auto px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-slate-300 font-semibold text-xs rounded-xl border border-slate-800 transition text-center"
           >
-            ← Volver a la Pantalla Principal
+            ← {backLabel}
           </Link>
         </div>
       </main>
@@ -204,5 +233,13 @@ export default function TerminosPage() {
         <p>LibretaDigital Pro • FinTech POS & Fiado en Tiempo Real • Términos Oficiales de Servicio SaaS</p>
       </footer>
     </div>
+  );
+}
+
+export default function TerminosPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-slate-950" />}>
+      <TerminosContent />
+    </Suspense>
   );
 }

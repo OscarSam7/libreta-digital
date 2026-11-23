@@ -107,6 +107,22 @@ export function CustomerPortalView({ token }: Props) {
     };
   }, [token]);
 
+  // Recordar última sesión del cliente para reingreso rápido sin perder su libreta
+  useEffect(() => {
+    if (customer?.qr_token && customer?.full_name && tenant?.business_name) {
+      try {
+        localStorage.setItem(
+          'libretadigital_last_customer',
+          JSON.stringify({
+            token: customer.qr_token,
+            name: customer.full_name,
+            businessName: tenant.business_name,
+          })
+        );
+      } catch {}
+    }
+  }, [customer?.qr_token, customer?.full_name, tenant?.business_name]);
+
   if (isLoadingCloud && (!customer || !tenant)) {
     return (
       <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-4">
@@ -596,15 +612,29 @@ export function CustomerPortalView({ token }: Props) {
         />
       )}
       {/* FOOTER LEGAL DEL PORTAL */}
-      <footer className="mt-8 pt-4 border-t border-slate-200 text-center text-[11px] text-slate-400 space-y-1">
-        <p>LibretaDigital Pro • FinTech POS & Fiado en Tiempo Real</p>
-        <div className="flex items-center justify-center gap-2 text-[10px]">
-          <Link href="/terminos" target="_blank" className="hover:text-slate-600 underline transition">
+      <footer className="mt-8 pt-4 border-t border-slate-200 text-center text-[11px] text-slate-400 space-y-2">
+        <p>LibretaDigital Pro • Portal de Cliente</p>
+        <div className="flex flex-wrap items-center justify-center gap-x-2 gap-y-1 text-[11px]">
+          <Link
+            href={`/terminos?returnTo=${encodeURIComponent(`/portal/${customer.qr_token}`)}`}
+            className="hover:text-slate-600 underline transition"
+          >
             Términos de Servicio
           </Link>
           <span>•</span>
-          <Link href="/privacidad" target="_blank" className="hover:text-slate-600 underline transition">
+          <Link
+            href={`/privacidad?returnTo=${encodeURIComponent(`/portal/${customer.qr_token}`)}`}
+            className="hover:text-slate-600 underline transition"
+          >
             Política de Privacidad (Ley 6534/20)
+          </Link>
+        </div>
+        <div className="pt-1">
+          <Link
+            href="/acceso-cliente"
+            className="text-[11px] font-bold text-emerald-600 hover:text-emerald-700 transition"
+          >
+            Cambiar de cuenta o entrar con Cédula y PIN →
           </Link>
         </div>
       </footer>

@@ -249,6 +249,16 @@ function ClientRegisterContent() {
       // 3. Guardar en almacenamiento local deduplicado (sin disparar tormenta de POSTs redundantes)
       saveCustomersLocalOnly(deduplicateCustomers([savedCustomer as any, ...stored.customers]));
       if (typeof window !== 'undefined') {
+        try {
+          localStorage.setItem(
+            'libretadigital_last_customer',
+            JSON.stringify({
+              token: savedCustomer.qr_token || generatedToken,
+              name: fullName.trim(),
+              businessName: activeTenant ? activeTenant.business_name : 'el Almacén',
+            })
+          );
+        } catch {}
         window.dispatchEvent(new Event('libreta_data_updated'));
       }
 
@@ -531,13 +541,21 @@ function ClientRegisterContent() {
           </div>
         )}
 
-        <div className="text-center mt-6 space-y-1.5">
+        <div className="text-center mt-6 space-y-2.5">
+          <div>
+            <Link
+              href="/acceso-cliente"
+              className="text-xs font-bold text-emerald-400 hover:text-emerald-300 transition inline-flex items-center gap-1"
+            >
+              ¿Ya te registraste antes? Ingresá a tu libreta con Cédula y PIN →
+            </Link>
+          </div>
           <div className="flex items-center justify-center gap-2 text-[11px] text-slate-500">
-            <Link href="/terminos" target="_blank" className="hover:text-slate-300 underline transition">
+            <Link href="/terminos?returnTo=/registro-cliente" className="hover:text-slate-300 underline transition">
               Términos del Servicio
             </Link>
             <span>•</span>
-            <Link href="/privacidad" target="_blank" className="hover:text-slate-300 underline transition">
+            <Link href="/privacidad?returnTo=/registro-cliente" className="hover:text-slate-300 underline transition">
               Política de Privacidad
             </Link>
           </div>
