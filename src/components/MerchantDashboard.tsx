@@ -132,6 +132,7 @@ export function MerchantDashboard() {
   const [showWhatsAppModal, setShowWhatsAppModal] = useState(false);
   const [showSuperAdminModal, setShowSuperAdminModal] = useState(false);
   const [showReportsModal, setShowReportsModal] = useState(false);
+  const [showDailyClosingModal, setShowDailyClosingModal] = useState(false);
   const [showHistoricalModal, setShowHistoricalModal] = useState(false);
   const [historicalPreselectedCustomer, setHistoricalPreselectedCustomer] = useState<Customer | null>(null);
   const [showCustomerHistoryModal, setShowCustomerHistoryModal] = useState(false);
@@ -777,10 +778,19 @@ export function MerchantDashboard() {
             {/* Informes */}
             <button
               onClick={() => checkPermissionAndExecute('can_view_financial_reports', 'Ver Reportes Financieros', () => setShowReportsModal(true))}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-200 rounded-xl text-xs font-bold transition whitespace-nowrap shrink-0 shadow-xs"
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-200 rounded-xl text-xs font-bold transition whitespace-nowrap shrink-0 shadow-xs cursor-pointer"
               title="Informes por Fechas y Clientes"
             >
               <FileText className="w-3.5 h-3.5 text-indigo-400" /> Informes
+            </button>
+
+            {/* Cierre Diario / Respaldo General */}
+            <button
+              onClick={() => setShowDailyClosingModal(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-950/80 hover:bg-emerald-900 border border-emerald-800/80 text-emerald-300 rounded-xl text-xs font-black transition whitespace-nowrap shrink-0 shadow-sm shadow-emerald-950/40 cursor-pointer"
+              title="Extraer Relatorio General de Cierre de Actividades en PDF y Respaldo por WhatsApp"
+            >
+              <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" /> Cierre & Respaldo WA
             </button>
 
             {/* Cobranzas WhatsApp */}
@@ -897,9 +907,16 @@ export function MerchantDashboard() {
             </button>
             <button
               onClick={() => setShowReportsModal(true)}
-              className="text-xs font-bold bg-white/10 hover:bg-white/20 px-3.5 py-2 rounded-xl backdrop-blur-md transition flex items-center gap-1.5"
+              className="text-xs font-bold bg-white/10 hover:bg-white/20 px-3.5 py-2 rounded-xl backdrop-blur-md transition flex items-center gap-1.5 cursor-pointer"
             >
               <FileText className="w-4 h-4 text-emerald-400" /> Informes
+            </button>
+            <button
+              onClick={() => setShowDailyClosingModal(true)}
+              className="text-xs font-black bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-400/40 text-emerald-300 px-3.5 py-2 rounded-xl backdrop-blur-md transition flex items-center gap-1.5 active:scale-95 cursor-pointer"
+              title="Relatorio General de Cierre de Actividades y Respaldo por WhatsApp"
+            >
+              <ShieldCheck className="w-4 h-4 text-emerald-400" /> Cierre & Respaldo WA
             </button>
             <div className="flex items-center gap-1.5 text-xs font-bold bg-white/10 px-3.5 py-2 rounded-xl backdrop-blur-md">
               <ShieldCheck className="w-4 h-4 text-emerald-400" /> Libro Inmutable
@@ -2101,6 +2118,17 @@ export function MerchantDashboard() {
           customer={pdfPreviewCustomer}
           transactions={transactions.filter((t) => t.customer_id === pdfPreviewCustomer.id)}
           onClose={() => setPdfPreviewCustomer(null)}
+        />
+      )}
+
+      {/* MODAL RELATORIO GENERAL DE CIERRE DE ACTIVIDADES & RESPALDO POR WHATSAPP */}
+      {showDailyClosingModal && (
+        <PDFReportPreviewModal
+          mode="DAILY_CLOSING_REPORT"
+          tenant={tenant}
+          customers={customers}
+          transactions={transactions}
+          onClose={() => setShowDailyClosingModal(false)}
         />
       )}
 

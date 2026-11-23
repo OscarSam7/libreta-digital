@@ -403,8 +403,20 @@ export function DetailedReportsModal({
 
           <div className="flex items-center gap-2">
             <button
+              onClick={() => {
+                setPdfMode('DAILY_CLOSING_REPORT');
+                setPdfCustomer(null);
+                setShowPDFModal(true);
+              }}
+              className="flex items-center gap-1.5 px-3 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-black shadow-md shadow-emerald-600/30 transition active:scale-95 cursor-pointer"
+              title="Generar Relatorio General de Cierre de Actividades y Respaldo por WhatsApp"
+            >
+              <ShieldCheck className="w-4 h-4 text-emerald-200" /> Cierre & Respaldo WA
+            </button>
+
+            <button
               onClick={handleOpenCurrentTabPDF}
-              className="flex items-center gap-1.5 px-3 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-black shadow-md shadow-indigo-600/30 transition active:scale-95"
+              className="flex items-center gap-1.5 px-3 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-black shadow-md shadow-indigo-600/30 transition active:scale-95 cursor-pointer"
               title="Generar vista previa en PDF con opción de descarga"
             >
               <FileText className="w-4 h-4 text-amber-300" /> Ver PDF & Descargar
@@ -1229,6 +1241,7 @@ export function DetailedReportsModal({
           dateFrom={appliedDateFrom}
           dateTo={appliedDateTo}
           customer={pdfCustomer}
+          customers={customers}
           transactions={pdfCustomer ? transactions.filter((t) => t.customer_id === pdfCustomer.id) : filteredLedgerTransactions}
           portfolio={customerPortfolio}
           salesSummary={salesSummary}

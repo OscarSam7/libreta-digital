@@ -2,7 +2,7 @@
 
 import React, { useRef, useState, useEffect } from 'react';
 import { Customer, Tenant, Transaction, PaymentMethod, PrinterFormat } from '@/types';
-import { CustomerPortfolioSummary, generateWhatsAppReminderUrl } from '@/lib/reports';
+import { CustomerPortfolioSummary, generateWhatsAppReminderUrl, generateDailyClosingWhatsAppUrl } from '@/lib/reports';
 import { getStoredPrinterFormat, setStoredPrinterFormat } from '@/lib/storage';
 import { QRCodeSVG } from 'qrcode.react';
 import { BrandLogo } from '@/components/BrandLogo';
@@ -32,7 +32,8 @@ export type PDFReportMode =
   | 'PORTFOLIO_MORA'
   | 'SALES_REPORT'
   | 'LEDGER_REPORT'
-  | 'TERMS_CONTRACT';
+  | 'TERMS_CONTRACT'
+  | 'DAILY_CLOSING_REPORT';
 
 interface Props {
   mode: PDFReportMode;
@@ -40,6 +41,7 @@ interface Props {
   dateFrom?: string;
   dateTo?: string;
   customer?: Customer | null;
+  customers?: Customer[];
   transactions?: Transaction[];
   portfolio?: CustomerPortfolioSummary[];
   salesSummary?: {
@@ -60,6 +62,7 @@ export function PDFReportPreviewModal({
   dateFrom,
   dateTo,
   customer,
+  customers = [],
   transactions = [],
   portfolio = [],
   salesSummary,
@@ -184,7 +187,19 @@ export function PDFReportPreviewModal({
     ? `${typeof window !== 'undefined' ? window.location.origin : 'https://libretadigital.app'}/portal/${customer.qr_token}`
     : '';
 
-  const waUrl = customer ? generateWhatsAppReminderUrl(customer, tenant) : '';
+  const effectiveCustomers =
+    customers && customers.length > 0
+      ? customers
+      : portfolio.length > 0
+      ? portfolio.map((p) => p.customer)
+      : [];
+
+  const waUrl =
+    mode === 'DAILY_CLOSING_REPORT'
+      ? generateDailyClosingWhatsAppUrl(tenant, effectiveCustomers, transactions, dateTo || dateFrom)
+      : customer
+      ? generateWhatsAppReminderUrl(customer, tenant)
+      : '';
 
   const reportDateFormatted = new Date().toLocaleDateString('es-PY', {
     day: '2-digit',
@@ -261,6 +276,7 @@ export function PDFReportPreviewModal({
                 {mode === 'SALES_REPORT' && `Reporte de Ventas y Cobranzas`}
                 {mode === 'LEDGER_REPORT' && `Libro Mayor General`}
                 {mode === 'TERMS_CONTRACT' && `Contrato de Crédito & Informconf • ${customer?.full_name}`}
+                {mode === 'DAILY_CLOSING_REPORT' && `Cierre de Actividades & Respaldo de Cartera`}
               </h3>
             </div>
           </div>
@@ -309,15 +325,16 @@ export function PDFReportPreviewModal({
               </button>
             </div>
 
-            {customer && (
+            {(customer || mode === 'DAILY_CLOSING_REPORT') && (
               <a
                 href={waUrl}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="flex items-center gap-1.5 px-3 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition shadow-sm"
-                title="Enviar por WhatsApp"
+                title={mode === 'DAILY_CLOSING_REPORT' ? 'Enviar Respaldo General por WhatsApp' : 'Enviar por WhatsApp'}
               >
-                <MessageCircle className="w-4 h-4" /> Enviar por WhatsApp
+                <MessageCircle className="w-4 h-4" />
+                <span>{mode === 'DAILY_CLOSING_REPORT' ? 'Enviar Respaldo por WhatsApp' : 'Enviar por WhatsApp'}</span>
               </a>
             )}
 
@@ -395,6 +412,7 @@ export function PDFReportPreviewModal({
                   {mode === 'SALES_REPORT' && 'Reporte General de Ventas y Cobranzas'}
                   {mode === 'LEDGER_REPORT' && 'Libro Mayor de Asientos Inmutables'}
                   {mode === 'TERMS_CONTRACT' && 'Contrato de Crédito Rotativo ("Fiado") y Consentimiento Informconf'}
+                  {mode === 'DAILY_CLOSING_REPORT' && 'Relatorio General de Cierre de Actividades & Respaldo'}
                 </h2>
                 <p className="text-[11px] text-slate-500 mt-0.5">
                   {mode === 'CUSTOMER_STATEMENT' && `Cliente: ${customer?.full_name} • Certificado de movimientos`}
@@ -402,6 +420,7 @@ export function PDFReportPreviewModal({
                   {mode === 'SALES_REPORT' && `Totales de mercadería fiada, recaudación en caja y medios de pago`}
                   {mode === 'LEDGER_REPORT' && `Historial detallado cronológico`}
                   {mode === 'TERMS_CONTRACT' && `Conforme a la Ley N° 6534/20 de Protección de Datos Crediticios y Ley N° 6822/21`}
+                  {mode === 'DAILY_CLOSING_REPORT' && `Resumen contable de caja y lista compacta de saldos vigentes para resguardo`}
                 </p>
               </div>
 
@@ -433,8 +452,8 @@ export function PDFReportPreviewModal({
                       <span className="font-bold text-slate-800 block text-xs">
                         {customer.credit_limit > 0 ? formatCurrency(customer.credit_limit) : 'Sin límite'}
                       </span>
-                      <span className="text-[10px] text-slate-500">
-                        PIN Mostrador: <b>{customer.security_pin}</b>
+                      <span className="text-[10px] text-emerald-700 font-bold block">
+                        ✓ Cuenta Habilitada
                       </span>
                     </div>
                     <div className="bg-white p-2 rounded-lg border border-slate-300 text-right">
@@ -452,16 +471,16 @@ export function PDFReportPreviewModal({
                   </div>
 
                   {/* Tabla de Movimientos del Cliente */}
-                  <div className="border border-slate-200 rounded-xl overflow-hidden">
-                    <table className="w-full text-left text-xs">
+                  <div className="border border-slate-200 rounded-xl overflow-x-auto">
+                    <table className="w-full text-left text-xs min-w-[500px] sm:min-w-0">
                       <thead className="bg-slate-100 text-[10px] font-black uppercase text-slate-500 border-b border-slate-200">
                         <tr>
-                          <th className="py-2.5 px-3">Fecha</th>
-                          <th className="py-2.5 px-2">Tipo</th>
+                          <th className="py-2.5 px-3 whitespace-nowrap">Fecha</th>
+                          <th className="py-2.5 px-2 whitespace-nowrap">Tipo</th>
                           <th className="py-2.5 px-3">Detalle de Mercaderías / Concepto</th>
-                          <th className="py-2.5 px-2 text-right">Monto</th>
-                          <th className="py-2.5 px-3 text-right">Saldo Posterior</th>
-                          <th className="py-2.5 px-2 text-center">Validación</th>
+                          <th className="py-2.5 px-2 text-right whitespace-nowrap">Monto</th>
+                          <th className="py-2.5 px-3 text-right whitespace-nowrap">Saldo</th>
+                          <th className="py-2.5 px-2 text-center whitespace-nowrap">Validación</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100">
@@ -810,6 +829,168 @@ export function PDFReportPreviewModal({
                   )}
                 </div>
               )}
+
+              {/* ============================================================== */}
+              {/* CASO 6: RELATORIO GENERAL DE CIERRE DE ACTIVIDADES & RESPALDO   */}
+              {/* ============================================================== */}
+              {mode === 'DAILY_CLOSING_REPORT' && (() => {
+                const totalCarteraPendiente = effectiveCustomers.reduce(
+                  (acc, c) => acc + (c.current_balance > 0 ? c.current_balance : 0),
+                  0
+                );
+                const closingTxs = transactions;
+                const totalFiadoPeriodo = closingTxs
+                  .filter((t) => t.type === 'DEBIT_PURCHASE' || t.type === 'ADJUSTMENT_DEBIT')
+                  .reduce((acc, t) => acc + t.amount, 0);
+                const totalCobradoPeriodo = closingTxs
+                  .filter((t) => t.type === 'CREDIT_PAYMENT')
+                  .reduce((acc, t) => acc + t.amount, 0);
+                const clientesConDeuda = effectiveCustomers.filter((c) => c.current_balance > 0);
+                const clientesAlDia = effectiveCustomers.filter((c) => c.current_balance <= 0);
+
+                return (
+                  <div className="space-y-4">
+                    {/* KPI CARDS RESUMEN */}
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                      <div className="bg-rose-50/70 border border-rose-200/80 p-3 rounded-xl">
+                        <span className="text-[9px] font-black uppercase text-rose-600 block">Total Cartera Fiada</span>
+                        <span className="text-base sm:text-lg font-black text-rose-700 block">
+                          {formatCurrency(totalCarteraPendiente)}
+                        </span>
+                        <span className="text-[9.5px] text-rose-500 font-medium">Deuda activa en la calle</span>
+                      </div>
+
+                      <div className="bg-emerald-50/70 border border-emerald-200/80 p-3 rounded-xl">
+                        <span className="text-[9px] font-black uppercase text-emerald-600 block">Total Cobrado (Jornada)</span>
+                        <span className="text-base sm:text-lg font-black text-emerald-700 block">
+                          {formatCurrency(totalCobradoPeriodo)}
+                        </span>
+                        <span className="text-[9.5px] text-emerald-600 font-medium">Ingresos recibidos en caja</span>
+                      </div>
+
+                      <div className="bg-amber-50/70 border border-amber-200/80 p-3 rounded-xl">
+                        <span className="text-[9px] font-black uppercase text-amber-600 block">Total Fiado (Jornada)</span>
+                        <span className="text-base sm:text-lg font-black text-amber-700 block">
+                          {formatCurrency(totalFiadoPeriodo)}
+                        </span>
+                        <span className="text-[9.5px] text-amber-600 font-medium">Nuevas compras fiadas</span>
+                      </div>
+
+                      <div className="bg-slate-50 border border-slate-200 p-3 rounded-xl">
+                        <span className="text-[9px] font-black uppercase text-slate-500 block">Clientes con Saldo</span>
+                        <span className="text-base sm:text-lg font-black text-slate-900 block">
+                          {clientesConDeuda.length} <span className="text-xs font-normal text-slate-400">/ {effectiveCustomers.length}</span>
+                        </span>
+                        <span className="text-[9.5px] text-slate-500 font-medium">{clientesAlDia.length} al día</span>
+                      </div>
+                    </div>
+
+                    {/* LISTA COMPACTA DE SALDOS */}
+                    <div className="border border-slate-200 rounded-xl overflow-x-auto">
+                      <table className="w-full text-left text-xs min-w-[560px] sm:min-w-0">
+                        <thead className="bg-slate-100 text-[10px] font-black uppercase text-slate-600 border-b border-slate-200">
+                          <tr>
+                            <th className="py-2 px-2.5 text-center w-8">#</th>
+                            <th className="py-2 px-2.5">Cliente (Titular)</th>
+                            <th className="py-2 px-2 text-slate-500">Doc / C.I.</th>
+                            <th className="py-2 px-2 text-slate-500">Teléfono</th>
+                            <th className="py-2 px-2 text-right">Límite</th>
+                            <th className="py-2 px-3 text-right">Saldo Deudor Actual</th>
+                            <th className="py-2 px-2 text-center">Estado</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100 text-[11px]">
+                          {effectiveCustomers.length === 0 ? (
+                            <tr>
+                              <td colSpan={7} className="text-center py-6 text-slate-400">
+                                No hay clientes registrados en este comercio.
+                              </td>
+                            </tr>
+                          ) : (
+                            [...effectiveCustomers]
+                              .sort((a, b) => b.current_balance - a.current_balance)
+                              .map((c, idx) => {
+                                const hasDebt = c.current_balance > 0;
+                                return (
+                                  <tr key={c.id} className={hasDebt ? 'hover:bg-rose-50/20' : 'hover:bg-slate-50/50'}>
+                                    <td className="py-1.5 px-2.5 text-center font-mono text-slate-400 text-[10px]">
+                                      {idx + 1}
+                                    </td>
+                                    <td className="py-1.5 px-2.5 font-bold text-slate-900 truncate max-w-[160px]">
+                                      {c.full_name}
+                                      {c.nickname && <span className="text-[10px] font-normal text-slate-400 ml-1">("{c.nickname}")</span>}
+                                    </td>
+                                    <td className="py-1.5 px-2 font-mono text-slate-600 text-[10px]">
+                                      {c.document_id || '-'}
+                                    </td>
+                                    <td className="py-1.5 px-2 text-slate-600 text-[10px]">
+                                      {c.phone || '-'}
+                                    </td>
+                                    <td className="py-1.5 px-2 text-right text-slate-500 font-mono text-[10px]">
+                                      {c.credit_limit > 0 ? formatCurrency(c.credit_limit) : '-'}
+                                    </td>
+                                    <td className="py-1.5 px-3 text-right font-black whitespace-nowrap">
+                                      <span className={hasDebt ? 'text-rose-600' : 'text-emerald-600'}>
+                                        {formatCurrency(c.current_balance)}
+                                      </span>
+                                    </td>
+                                    <td className="py-1.5 px-2 text-center whitespace-nowrap">
+                                      <span
+                                        className={`text-[9px] font-black px-1.5 py-0.5 rounded-md ${
+                                          hasDebt ? 'bg-rose-100 text-rose-700' : 'bg-emerald-100 text-emerald-700'
+                                        }`}
+                                      >
+                                        {hasDebt ? 'CON DEUDA' : 'AL DÍA'}
+                                      </span>
+                                    </td>
+                                  </tr>
+                                );
+                              })
+                          )}
+                        </tbody>
+                        <tfoot className="bg-slate-100 font-bold border-t-2 border-slate-300 text-xs">
+                          <tr>
+                            <td colSpan={5} className="py-2.5 px-3 text-slate-700 uppercase font-black">
+                              Total Cartera Fiada al Cierre:
+                            </td>
+                            <td className="py-2.5 px-3 text-right text-sm font-black text-rose-700 whitespace-nowrap">
+                              {formatCurrency(totalCarteraPendiente)}
+                            </td>
+                            <td className="py-2.5 px-2 text-center text-[10px] text-slate-500">
+                              {clientesConDeuda.length} activos
+                            </td>
+                          </tr>
+                        </tfoot>
+                      </table>
+                    </div>
+
+                    {/* CONSTANCIA LEGAL Y SELLO DE SEGURIDAD INMUTABLE */}
+                    <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 text-[10.5px] text-slate-600 space-y-1.5">
+                      <div className="flex items-center gap-1.5 font-bold text-slate-800">
+                        <ShieldCheck className="w-4 h-4 text-emerald-600" />
+                        <span>Certificación de Respaldo Contable & Contingencia (Ley N° 6822/21)</span>
+                      </div>
+                      <p className="text-[10px] text-slate-500 leading-relaxed">
+                        El presente relatorio general de actividades certifica el saldo total deudor y la liquidación consolidada de todos los clientes fiados a la fecha de corte. Este documento y su copia enviada por WhatsApp constituyen respaldo fehaciente ante cualquier eventualidad o pérdida de datos.
+                      </p>
+                    </div>
+
+                    {/* FIRMAS DE RESPONSABILIDAD */}
+                    <div className="pt-4 grid grid-cols-2 gap-8 text-center text-xs">
+                      <div>
+                        <div className="border-b border-slate-300 pb-8 mb-1"></div>
+                        <p className="font-bold text-slate-800">Responsable de Caja / Operador</p>
+                        <p className="text-[10px] text-slate-400">Certificación de Cierre Diario</p>
+                      </div>
+                      <div>
+                        <div className="border-b border-slate-300 pb-8 mb-1"></div>
+                        <p className="font-bold text-slate-800">Titular / Gerencia del Comercio</p>
+                        <p className="text-[10px] text-slate-400">{tenant.business_name}</p>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
 
             {/* PIE DE PÁGINA Y SELLO DE CERTIFICACIÓN */}

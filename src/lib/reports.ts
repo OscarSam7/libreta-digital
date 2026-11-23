@@ -205,3 +205,68 @@ export function generatePaymentReceiptWhatsAppUrl(
   const cleanPhone = (customer.phone || '').replace(/[^0-9]/g, '');
   return `https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`;
 }
+
+export function generateDailyClosingWhatsAppUrl(
+  tenant: Tenant,
+  customers: Customer[],
+  transactions: Transaction[],
+  dateStr?: string,
+  targetPhone?: string
+): string {
+  const origin = typeof window !== 'undefined' ? window.location.origin : 'https://libretadigital.app';
+  const now = new Date();
+  const closingDate = dateStr || now.toLocaleDateString('es-PY', { day: '2-digit', month: '2-digit', year: 'numeric' });
+  const closingTime = now.toLocaleTimeString('es-PY', { hour: '2-digit', minute: '2-digit' });
+
+  // Calcular movimientos de la jornada
+  const todayYMD = now.toISOString().slice(0, 10);
+  const todayTxs = transactions.filter((t) => t.created_at.startsWith(todayYMD));
+
+  const totalFiadoHoy = todayTxs
+    .filter((t) => t.type === 'DEBIT_PURCHASE' || t.type === 'ADJUSTMENT_DEBIT')
+    .reduce((acc, t) => acc + t.amount, 0);
+
+  const totalCobradoHoy = todayTxs
+    .filter((t) => t.type === 'CREDIT_PAYMENT')
+    .reduce((acc, t) => acc + t.amount, 0);
+
+  const totalCarteraPendiente = customers.reduce(
+    (acc, c) => acc + (c.current_balance > 0 ? c.current_balance : 0),
+    0
+  );
+  const clientesConDeuda = customers.filter((c) => c.current_balance > 0);
+  const clientesAlDia = customers.filter((c) => c.current_balance <= 0);
+
+  // Lista compacta de saldos ordenada descendentemente por deuda
+  let listadoClientes = '';
+  const sortedCustomers = [...customers].sort((a, b) => b.current_balance - a.current_balance);
+  sortedCustomers.forEach((c, idx) => {
+    const balanceFormatted = `${tenant.currency_symbol} ${c.current_balance.toLocaleString('es-PY')}`;
+    const statusIcon = c.current_balance > 0 ? '🔴' : '🟢';
+    listadoClientes += `${idx + 1}. ${statusIcon} *${c.full_name}*${c.nickname ? ` ("${c.nickname}")` : ''}: ${balanceFormatted}\n`;
+  });
+
+  const message =
+    `🔒 *CIERRE GENERAL DE ACTIVIDADES & RESPALDO CONTABLE*\n` +
+    `🏪 *${tenant.business_name.toUpperCase()}*\n` +
+    (tenant.tax_id ? `📋 *RUC / Ident:* ${tenant.tax_id}\n` : '') +
+    (tenant.phone ? `📞 *Tel:* ${tenant.phone}\n` : '') +
+    `📅 *Fecha y Hora de Corte:* ${closingDate} a las ${closingTime}\n` +
+    `━━━━━━━━━━━━━━━━━━━━━━━━━\n\n` +
+    `📊 *RESUMEN GENERAL DE CAJA Y CARTERA:*\n` +
+    `💰 *TOTAL CARTERA FIADA EN LA CALLE:* *${tenant.currency_symbol} ${totalCarteraPendiente.toLocaleString('es-PY')}*\n` +
+    `📥 *Total Cobrado Hoy:* ${tenant.currency_symbol} ${totalCobradoHoy.toLocaleString('es-PY')}\n` +
+    `📤 *Total Fiado Hoy:* ${tenant.currency_symbol} ${totalFiadoHoy.toLocaleString('es-PY')}\n` +
+    `👥 *Clientes con Deuda Activa:* ${clientesConDeuda.length} de ${customers.length}\n` +
+    `✅ *Clientes al Día ($0):* ${clientesAlDia.length}\n\n` +
+    `━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+    `📋 *RELATORIO COMPACTO DE SALDOS AL CIERRE:*\n` +
+    listadoClientes +
+    `━━━━━━━━━━━━━━━━━━━━━━━━━\n\n` +
+    `🛡️ *CONSTANCIA DE RESPALDO Y SEGURIDAD INMUTABLE:*\n` +
+    `Este mensaje contiene el extracto consolidado exacto de saldos al cierre de actividades. Guárdelo en su WhatsApp como resguardo contable oficial ante cualquier contingencia, pérdida de dispositivo o falla técnica (Validez Ley N° 6822/21 y Ley N° 6534/20).\n\n` +
+    `📱 *Panel de Gestión LibretaDigital:* ${origin}/admin`;
+
+  const phone = (targetPhone || tenant.phone || '').replace(/[^0-9]/g, '');
+  return phone ? `https://wa.me/${phone}?text=${encodeURIComponent(message)}` : `https://wa.me/?text=${encodeURIComponent(message)}`;
+}
