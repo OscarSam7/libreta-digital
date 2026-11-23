@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import {
   Calendar as CalendarIcon,
   ChevronLeft,
@@ -50,6 +51,11 @@ export function CustomDatePickerModal({
   const [viewYear, setViewYear] = useState(initialDate.getFullYear());
   const [viewMonth, setViewMonth] = useState(initialDate.getMonth());
   const [selectedDate, setSelectedDate] = useState(value || '');
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   useEffect(() => {
     if (value) {
@@ -60,7 +66,7 @@ export function CustomDatePickerModal({
     }
   }, [value, isOpen]);
 
-  if (!isOpen) return null;
+  if (!isOpen || !mounted) return null;
 
   // Calendar calculations
   const firstDayOfMonth = new Date(viewYear, viewMonth, 1).getDay();
@@ -137,9 +143,9 @@ export function CustomDatePickerModal({
 
   const todayYMD = formatYMD(new Date().getFullYear(), new Date().getMonth(), new Date().getDate());
 
-  return (
+  return createPortal(
     <div
-      className="fixed inset-0 z-70 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm animate-in fade-in duration-200"
+      className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in duration-200 font-sans"
       onClick={(e) => {
         if (e.target === e.currentTarget) {
           onClose();
@@ -296,7 +302,8 @@ export function CustomDatePickerModal({
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 
