@@ -73,6 +73,7 @@ import {
   SlidersHorizontal,
   RotateCcw,
   FileText,
+  Download,
   Sliders,
   Banknote,
   Building,
@@ -176,6 +177,29 @@ export function MerchantDashboard() {
     phone?: string;
   } | null>(null);
   const [receiptData, setReceiptData] = useState<{ transaction: Transaction; customer: Customer } | null>(null);
+
+  // Filtros del Libro Mayor (Asientos Inmutables) por fecha, tipo y cliente
+  const [ledgerDateFrom, setLedgerDateFrom] = useState('');
+  const [ledgerDateTo, setLedgerDateTo] = useState('');
+  const [ledgerDatePreset, setLedgerDatePreset] = useState<'ALL' | 'TODAY' | '7D' | '30D' | 'CUSTOM'>('ALL');
+  const [ledgerTypeFilter, setLedgerTypeFilter] = useState<'ALL' | 'DEBIT' | 'CREDIT'>('ALL');
+  const [ledgerCustomerFilter, setLedgerCustomerFilter] = useState<string>('ALL');
+
+  const applyLedgerDatePreset = (preset: 'ALL' | 'TODAY' | '7D' | '30D') => {
+    setLedgerDatePreset(preset);
+    if (preset === 'ALL') {
+      setLedgerDateFrom('');
+      setLedgerDateTo('');
+      return;
+    }
+    const now = new Date();
+    const toStr = now.toISOString().slice(0, 10);
+    const fromDate = new Date(now);
+    if (preset === '7D') fromDate.setDate(now.getDate() - 7);
+    if (preset === '30D') fromDate.setDate(now.getDate() - 30);
+    setLedgerDateFrom(fromDate.toISOString().slice(0, 10));
+    setLedgerDateTo(toStr);
+  };
 
   const loadData = () => {
     const data = getStoredData();
@@ -1222,122 +1246,292 @@ export function MerchantDashboard() {
           </div>
         </section>
 
-        {/* LIBRO MAYOR EN VIVO */}
-        <section className="bg-white rounded-3xl p-5 shadow-sm border border-slate-200/80 space-y-4">
-          <div className="flex justify-between items-center">
-            <div>
-              <h2 className="text-lg font-black text-slate-900 flex items-center gap-2">
-                <ReceiptText className="w-5 h-5 text-indigo-600" /> Libro Mayor (Asientos Inmutables)
-              </h2>
-              <p className="text-xs text-slate-500">Últimos movimientos con certificación anti-disputas</p>
-            </div>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => checkPermissionAndExecute('can_view_financial_reports', 'Ver Reportes Financieros', () => setShowReportsModal(true))}
-                className="text-xs font-bold text-indigo-600 hover:text-indigo-800 flex items-center gap-1"
-              >
-                <FileText className="w-4 h-4" /> Ver Informe con Fechas
-              </button>
-            </div>
-          </div>
+        {/* LIBRO MAYOR EN VIVO (ASIENTOS INMUTABLES CON FILTRO POR FECHA) */}
+        {(() => {
+          const filteredLedgerTxs = transactions.filter((tx) => {
+            if (ledgerCustomerFilter !== 'ALL' && tx.customer_id !== ledgerCustomerFilter) return false;
+            const isPurchase = tx.type === 'DEBIT_PURCHASE' || tx.type === 'ADJUSTMENT_DEBIT';
+            if (ledgerTypeFilter === 'DEBIT' && !isPurchase) return false;
+            if (ledgerTypeFilter === 'CREDIT' && isPurchase) return false;
+            const txDateStr = new Date(tx.created_at).toISOString().slice(0, 10);
+            if (ledgerDateFrom && txDateStr < ledgerDateFrom) return false;
+            if (ledgerDateTo && txDateStr > ledgerDateTo) return false;
+            return true;
+          });
 
-          <div className="space-y-2.5">
-            {transactions.slice(0, 10).map((tx) => {
-              const isPurchase =
-                tx.type === 'DEBIT_PURCHASE' || tx.type === 'ADJUSTMENT_DEBIT';
-              const isAdjustment =
-                tx.type === 'ADJUSTMENT_CREDIT' || tx.type === 'ADJUSTMENT_DEBIT';
-              const customer = customers.find((c) => c.id === tx.customer_id);
+          const totalLedgerDebits = filteredLedgerTxs
+            .filter((t) => t.type === 'DEBIT_PURCHASE' || t.type === 'ADJUSTMENT_DEBIT')
+            .reduce((acc, t) => acc + t.amount, 0);
+          const totalLedgerCredits = filteredLedgerTxs
+            .filter((t) => t.type === 'CREDIT_PAYMENT' || t.type === 'ADJUSTMENT_CREDIT')
+            .reduce((acc, t) => acc + t.amount, 0);
 
-              return (
-                <div
-                  key={tx.id}
-                  className={`p-3.5 rounded-2xl border transition ${
-                    isAdjustment
-                      ? 'bg-amber-50/40 border-amber-300'
-                      : 'bg-slate-50 border-slate-200/80'
-                  }`}
-                >
-                  <div className="flex justify-between items-center">
-                    <div className="flex items-center gap-3">
-                      <div
-                        className={`w-9 h-9 rounded-xl flex items-center justify-center font-black ${
-                          isAdjustment
-                            ? 'bg-amber-100 text-amber-700'
-                            : isPurchase
-                            ? 'bg-rose-100 text-rose-600'
-                            : 'bg-emerald-100 text-emerald-600'
+          return (
+            <section className="bg-white rounded-3xl p-5 shadow-sm border border-slate-200/80 space-y-4">
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                <div>
+                  <h2 className="text-lg font-black text-slate-900 flex items-center gap-2">
+                    <ReceiptText className="w-5 h-5 text-indigo-600" /> Libro Mayor (Asientos Inmutables)
+                  </h2>
+                  <p className="text-xs text-slate-500">
+                    Filtrá deudas y pagos certificados por fecha, tipo de operación o cliente
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => exportTransactionsToCSV(filteredLedgerTxs, tenant, 'Libro_Mayor_Filtrado')}
+                    className="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold flex items-center gap-1.5 transition cursor-pointer"
+                  >
+                    <Download className="w-3.5 h-3.5" /> CSV
+                  </button>
+                  <button
+                    onClick={() => checkPermissionAndExecute('can_view_financial_reports', 'Ver Reportes Financieros', () => setShowReportsModal(true))}
+                    className="px-3 py-1.5 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-bold flex items-center gap-1.5 transition cursor-pointer"
+                  >
+                    <FileText className="w-3.5 h-3.5" /> Informe Completo
+                  </button>
+                </div>
+              </div>
+
+              {/* BARRA DE FILTROS DEL LIBRO MAYOR */}
+              <div className="bg-slate-50 rounded-2xl p-3.5 border border-slate-200/80 space-y-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  {/* Presets de fecha */}
+                  <div className="flex flex-wrap gap-1.5">
+                    {(
+                      [
+                        { id: 'ALL', label: 'Todos' },
+                        { id: 'TODAY', label: 'Hoy' },
+                        { id: '7D', label: '7 días' },
+                        { id: '30D', label: '30 días' },
+                      ] as const
+                    ).map((p) => (
+                      <button
+                        key={p.id}
+                        type="button"
+                        onClick={() => applyLedgerDatePreset(p.id)}
+                        className={`px-2.5 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
+                          ledgerDatePreset === p.id
+                            ? 'bg-indigo-600 text-white shadow-xs'
+                            : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'
                         }`}
                       >
-                        {isAdjustment ? (
-                          <RotateCcw className="w-4 h-4" />
-                        ) : isPurchase ? (
-                          <ShoppingBag className="w-4 h-4" />
-                        ) : (
-                          <ArrowDownLeft className="w-4 h-4" />
-                        )}
-                      </div>
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span className="font-black text-xs text-slate-900">
-                            {customer ? customer.full_name : 'Cliente'}
-                          </span>
-                          {tx.payment_method && (
-                            <span className="text-[9px] bg-slate-200 text-slate-700 font-extrabold px-1.5 py-0.2 rounded">
-                              {tx.payment_method}
-                            </span>
-                          )}
-                          {isAdjustment && (
-                            <span className="text-[9px] bg-amber-200 text-amber-900 font-extrabold px-1.5 py-0.2 rounded">
-                              AJUSTE CONTABLE
-                            </span>
-                          )}
-                        </div>
-                        <p className="text-xs text-slate-600 truncate max-w-[200px] sm:max-w-md">
-                          {tx.description}
-                          {tx.payment_reference ? ` • Ref: ${tx.payment_reference}` : ''}
-                          {tx.operator_name ? ` • 👤 ${tx.operator_name}` : ''}
-                        </p>
-                      </div>
-                    </div>
+                        {p.label}
+                      </button>
+                    ))}
+                  </div>
 
-                    <div className="text-right flex items-center gap-2">
-                      <div>
-                        <div
-                          className={`text-sm font-black ${
-                            isPurchase ? 'text-rose-600' : 'text-emerald-600'
-                          }`}
-                        >
-                          {isPurchase ? '+' : '-'}
-                          {formatCurrency(tx.amount)}
-                        </div>
-                        <span
-                          className={`text-[9px] font-bold px-2 py-0.5 rounded-full inline-block ${
-                            tx.status === 'CERTIFIED_BOTH'
-                              ? 'bg-emerald-100 text-emerald-700'
-                              : 'bg-amber-100 text-amber-700'
-                          }`}
-                        >
-                          {tx.status === 'CERTIFIED_BOTH' ? 'Certificado' : 'Pendiente'}
-                        </span>
-                      </div>
-
-                      {!isAdjustment && (
-                        <button
-                          onClick={() => checkPermissionAndExecute('can_adjust_credit_notes', 'Emitir Nota de Crédito / Ajustar Asiento', () => setTxToAdjust(tx))}
-                          className="p-1.5 rounded-lg text-slate-400 hover:text-amber-600 hover:bg-amber-50 transition ml-1"
-                          title="Emitir Nota de Crédito / Ajustar error"
-                        >
-                          <RotateCcw className="w-3.5 h-3.5" />
-                        </button>
-                      )}
-                    </div>
+                  {/* Filtro de tipo */}
+                  <div className="flex gap-1 sm:ml-auto">
+                    {(
+                      [
+                        { id: 'ALL', label: 'Todo' },
+                        { id: 'DEBIT', label: 'Fiados / Deudas' },
+                        { id: 'CREDIT', label: 'Pagos / Abonos' },
+                      ] as const
+                    ).map((tf) => (
+                      <button
+                        key={tf.id}
+                        type="button"
+                        onClick={() => setLedgerTypeFilter(tf.id)}
+                        className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition cursor-pointer ${
+                          ledgerTypeFilter === tf.id
+                            ? 'bg-slate-900 text-white'
+                            : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'
+                        }`}
+                      >
+                        {tf.label}
+                      </button>
+                    ))}
                   </div>
                 </div>
-              );
-            })}
-          </div>
-        </section>
+
+                {/* Rango personalizado + Selector de cliente */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase text-slate-400 mb-0.5">
+                      Fecha Desde
+                    </label>
+                    <input
+                      type="date"
+                      value={ledgerDateFrom}
+                      onChange={(e) => {
+                        setLedgerDateFrom(e.target.value);
+                        setLedgerDatePreset('CUSTOM');
+                      }}
+                      className="w-full px-3 py-1.5 text-xs font-semibold bg-white border border-slate-200 rounded-xl text-slate-800 focus:outline-none focus:border-indigo-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase text-slate-400 mb-0.5">
+                      Fecha Hasta
+                    </label>
+                    <input
+                      type="date"
+                      value={ledgerDateTo}
+                      onChange={(e) => {
+                        setLedgerDateTo(e.target.value);
+                        setLedgerDatePreset('CUSTOM');
+                      }}
+                      className="w-full px-3 py-1.5 text-xs font-semibold bg-white border border-slate-200 rounded-xl text-slate-800 focus:outline-none focus:border-indigo-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase text-slate-400 mb-0.5">
+                      Cliente
+                    </label>
+                    <select
+                      value={ledgerCustomerFilter}
+                      onChange={(e) => setLedgerCustomerFilter(e.target.value)}
+                      className="w-full px-3 py-1.5 text-xs font-semibold bg-white border border-slate-200 rounded-xl text-slate-800 focus:outline-none focus:border-indigo-500"
+                    >
+                      <option value="ALL">Todos los clientes ({customers.length})</option>
+                      {customers.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.full_name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                {/* Totales del período filtrado */}
+                <div className="grid grid-cols-3 gap-2 pt-2 border-t border-slate-200/70 text-center">
+                  <div className="bg-rose-50 rounded-xl py-1.5 px-2 border border-rose-100">
+                    <span className="text-[10px] font-bold uppercase text-rose-500 block">Total Fiado</span>
+                    <span className="text-xs sm:text-sm font-black text-rose-700">{formatCurrency(totalLedgerDebits)}</span>
+                  </div>
+                  <div className="bg-emerald-50 rounded-xl py-1.5 px-2 border border-emerald-100">
+                    <span className="text-[10px] font-bold uppercase text-emerald-600 block">Total Cobrado</span>
+                    <span className="text-xs sm:text-sm font-black text-emerald-700">{formatCurrency(totalLedgerCredits)}</span>
+                  </div>
+                  <div className="bg-white rounded-xl py-1.5 px-2 border border-slate-200">
+                    <span className="text-[10px] font-bold uppercase text-slate-400 block">Asientos</span>
+                    <span className="text-xs sm:text-sm font-black text-slate-800">{filteredLedgerTxs.length}</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-2.5">
+                {filteredLedgerTxs.length === 0 ? (
+                  <div className="p-8 text-center text-xs text-slate-400 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
+                    No se encontraron asientos inmutables con los filtros seleccionados.
+                  </div>
+                ) : (
+                  filteredLedgerTxs.slice(0, 50).map((tx) => {
+                    const isPurchase =
+                      tx.type === 'DEBIT_PURCHASE' || tx.type === 'ADJUSTMENT_DEBIT';
+                    const isAdjustment =
+                      tx.type === 'ADJUSTMENT_CREDIT' || tx.type === 'ADJUSTMENT_DEBIT';
+                    const customer = customers.find((c) => c.id === tx.customer_id);
+
+                    return (
+                      <div
+                        key={tx.id}
+                        className={`p-3.5 rounded-2xl border transition ${
+                          isAdjustment
+                            ? 'bg-amber-50/40 border-amber-300'
+                            : 'bg-slate-50 border-slate-200/80'
+                        }`}
+                      >
+                        <div className="flex justify-between items-center gap-2">
+                          <div className="flex items-center gap-3 min-w-0">
+                            <div
+                              className={`w-9 h-9 rounded-xl flex items-center justify-center font-black flex-shrink-0 ${
+                                isAdjustment
+                                  ? 'bg-amber-100 text-amber-700'
+                                  : isPurchase
+                                  ? 'bg-rose-100 text-rose-600'
+                                  : 'bg-emerald-100 text-emerald-600'
+                              }`}
+                            >
+                              {isAdjustment ? (
+                                <RotateCcw className="w-4 h-4" />
+                              ) : isPurchase ? (
+                                <ShoppingBag className="w-4 h-4" />
+                              ) : (
+                                <ArrowDownLeft className="w-4 h-4" />
+                              )}
+                            </div>
+                            <div className="min-w-0">
+                              <div className="flex flex-wrap items-center gap-1.5">
+                                <span className="font-black text-xs text-slate-900">
+                                  {customer ? customer.full_name : 'Cliente'}
+                                </span>
+                                <span className="text-[10px] text-slate-400 font-medium">
+                                  •{' '}
+                                  {new Date(tx.created_at).toLocaleDateString('es-PY', {
+                                    day: '2-digit',
+                                    month: 'short',
+                                    year: 'numeric',
+                                    hour: '2-digit',
+                                    minute: '2-digit',
+                                  })}
+                                </span>
+                                {tx.payment_method && (
+                                  <span className="text-[9px] bg-slate-200 text-slate-700 font-extrabold px-1.5 py-0.2 rounded">
+                                    {tx.payment_method}
+                                  </span>
+                                )}
+                                {isAdjustment && (
+                                  <span className="text-[9px] bg-amber-200 text-amber-900 font-extrabold px-1.5 py-0.2 rounded">
+                                    AJUSTE CONTABLE
+                                  </span>
+                                )}
+                              </div>
+                              <p className="text-xs text-slate-600 truncate max-w-[210px] sm:max-w-md">
+                                {tx.description}
+                                {tx.payment_reference ? ` • Ref: ${tx.payment_reference}` : ''}
+                                {tx.operator_name ? ` • 👤 ${tx.operator_name}` : ''}
+                              </p>
+                              <p className="text-[10px] text-slate-400 font-mono mt-0.5">
+                                Saldo: {formatCurrency(tx.previous_balance)} →{' '}
+                                <b className="text-slate-600">{formatCurrency(tx.new_balance)}</b>
+                                {tx.blockchain_hash ? ` • #${tx.blockchain_hash.slice(0, 10)}` : ''}
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="text-right flex items-center gap-2 flex-shrink-0">
+                            <div>
+                              <div
+                                className={`text-sm font-black ${
+                                  isPurchase ? 'text-rose-600' : 'text-emerald-600'
+                                }`}
+                              >
+                                {isPurchase ? '+' : '-'}
+                                {formatCurrency(tx.amount)}
+                              </div>
+                              <span
+                                className={`text-[9px] font-bold px-2 py-0.5 rounded-full inline-block ${
+                                  tx.status === 'CERTIFIED_BOTH'
+                                    ? 'bg-emerald-100 text-emerald-700'
+                                    : 'bg-amber-100 text-amber-700'
+                                }`}
+                              >
+                                {tx.status === 'CERTIFIED_BOTH' ? 'Certificado' : 'Pendiente'}
+                              </span>
+                            </div>
+
+                            {!isAdjustment && (
+                              <button
+                                onClick={() => checkPermissionAndExecute('can_adjust_credit_notes', 'Emitir Nota de Crédito / Ajustar Asiento', () => setTxToAdjust(tx))}
+                                className="p-1.5 rounded-lg text-slate-400 hover:text-amber-600 hover:bg-amber-50 transition ml-1 cursor-pointer"
+                                title="Emitir Nota de Crédito / Ajustar error"
+                              >
+                                <RotateCcw className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </section>
+          );
+        })()}
 
         {/* PIE DE SEGURIDAD & ACCESO SUPER ADMIN */}
         <footer className="pt-6 pb-8 border-t border-slate-200/80 flex flex-col md:flex-row items-center justify-between gap-3 text-xs text-slate-500">

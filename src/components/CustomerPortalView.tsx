@@ -48,6 +48,28 @@ export function CustomerPortalView({ token }: Props) {
   const [isLoadingCloud, setIsLoadingCloud] = useState(true);
   const [viewingReceiptTx, setViewingReceiptTx] = useState<Transaction | null>(null);
 
+  // Filtros de fecha y tipo para asientos inmutables del cliente
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
+  const [datePreset, setDatePreset] = useState<'ALL' | 'TODAY' | '7D' | '30D' | 'CUSTOM'>('ALL');
+  const [txTypeFilter, setTxTypeFilter] = useState<'ALL' | 'DEBIT' | 'CREDIT'>('ALL');
+
+  const applyDatePreset = (preset: 'ALL' | 'TODAY' | '7D' | '30D') => {
+    setDatePreset(preset);
+    if (preset === 'ALL') {
+      setDateFrom('');
+      setDateTo('');
+      return;
+    }
+    const now = new Date();
+    const toStr = now.toISOString().slice(0, 10);
+    const fromDate = new Date(now);
+    if (preset === '7D') fromDate.setDate(now.getDate() - 7);
+    if (preset === '30D') fromDate.setDate(now.getDate() - 30);
+    setDateFrom(fromDate.toISOString().slice(0, 10));
+    setDateTo(toStr);
+  };
+
   const loadData = async () => {
     // 1. Cargar datos locales de inmediato si existen
     const data = getStoredData();
@@ -220,6 +242,11 @@ export function CustomerPortalView({ token }: Props) {
   const isOverLimit =
     customer.credit_limit > 0 && customer.current_balance > customer.credit_limit;
 
+  const formatCurrency = (val: number) =>
+    `${tenant.currency_symbol || '₲'} ${new Intl.NumberFormat(
+      tenant.currency_code === 'PYG' ? 'es-PY' : tenant.currency_code === 'BRL' ? 'pt-BR' : 'es-PE'
+    ).format(val || 0)}`;
+
   return (
     <main className="min-h-screen bg-slate-100 p-4 max-w-md mx-auto pb-16 font-sans">
       {/* Logotipo Oficial LibretaDigital Pro */}
@@ -363,7 +390,7 @@ export function CustomerPortalView({ token }: Props) {
               </button>
             </div>
             <p className="text-[10px] text-slate-400 text-center">
-              Digita tu PIN de 4 dígitos ({customer.security_pin}) para convalidar electrónicamente.
+              Digita tu PIN secreto de 4 dígitos para convalidar electrónicamente.
             </p>
           </div>
         </div>
@@ -387,69 +414,198 @@ export function CustomerPortalView({ token }: Props) {
         </div>
       )}
 
-      {/* Historial de Transacciones */}
-      <section className="mt-6">
-        <div className="flex justify-between items-center mb-3">
-          <h2 className="text-base font-black text-slate-800">Historial de Operaciones</h2>
-          <button
-            onClick={() => exportTransactionsToCSV(transactions, tenant, customer.full_name)}
-            className="text-xs font-bold text-indigo-600 hover:text-indigo-800 flex items-center gap-1"
-          >
-            <Download className="w-3.5 h-3.5" /> Descargar CSV
-          </button>
-        </div>
+      {/* Libro Mayor Inmutable de Deudas y Pagos con Filtro por Fecha */}
+      {(() => {
+        const filteredTransactions = transactions.filter((tx) => {
+          const isPurchase = tx.type === 'DEBIT_PURCHASE' || tx.type === 'ADJUSTMENT_DEBIT';
+          if (txTypeFilter === 'DEBIT' && !isPurchase) return false;
+          if (txTypeFilter === 'CREDIT' && isPurchase) return false;
+          const txDateStr = new Date(tx.created_at).toISOString().slice(0, 10);
+          if (dateFrom && txDateStr < dateFrom) return false;
+          if (dateTo && txDateStr > dateTo) return false;
+          return true;
+        });
 
-        <div className="space-y-3">
-          {transactions.length === 0 ? (
-            <div className="bg-white rounded-2xl p-8 text-center text-slate-400 text-xs border border-slate-200">
-              No registra compras ni pagos hasta el momento.
+        const totalDebitsFiltered = filteredTransactions
+          .filter((t) => t.type === 'DEBIT_PURCHASE' || t.type === 'ADJUSTMENT_DEBIT')
+          .reduce((acc, t) => acc + t.amount, 0);
+        const totalCreditsFiltered = filteredTransactions
+          .filter((t) => t.type === 'CREDIT_PAYMENT' || t.type === 'ADJUSTMENT_CREDIT')
+          .reduce((acc, t) => acc + t.amount, 0);
+
+        return (
+          <section className="mt-6 space-y-3">
+            <div className="flex justify-between items-center">
+              <div>
+                <h2 className="text-base font-black text-slate-800 flex items-center gap-1.5">
+                  <ShieldCheck className="w-4 h-4 text-indigo-600" /> Asientos Inmutables
+                </h2>
+                <p className="text-[10px] text-slate-500">
+                  Registro inalterable de tus deudas y pagos
+                </p>
+              </div>
+              <button
+                onClick={() => exportTransactionsToCSV(filteredTransactions, tenant, customer.full_name)}
+                className="text-xs font-bold text-indigo-600 hover:text-indigo-800 flex items-center gap-1 cursor-pointer"
+              >
+                <Download className="w-3.5 h-3.5" /> CSV
+              </button>
             </div>
-          ) : (
-            transactions.map((tx) => {
-              const isPurchase =
-                tx.type === 'DEBIT_PURCHASE' || tx.type === 'ADJUSTMENT_DEBIT';
-              const isOpen = expandedTxId === tx.id;
-              const isPending = tx.status === 'PENDING_CUSTOMER';
 
-              return (
-                <div
-                  key={tx.id}
-                  className={`bg-white rounded-2xl p-4 shadow-sm border transition ${
-                    isPending ? 'border-amber-300 bg-amber-50/20' : 'border-slate-200/80'
-                  }`}
-                >
-                  <div
-                    className="flex justify-between items-center cursor-pointer select-none"
-                    onClick={() => setExpandedTxId(isOpen ? null : tx.id)}
+            {/* BARRA DE FILTROS POR FECHA Y TIPO */}
+            <div className="bg-white rounded-2xl p-3 border border-slate-200 shadow-xs space-y-2.5">
+              {/* Accesos rápidos de fecha */}
+              <div className="flex flex-wrap gap-1.5">
+                {(
+                  [
+                    { id: 'ALL', label: 'Todos' },
+                    { id: 'TODAY', label: 'Hoy' },
+                    { id: '7D', label: '7 días' },
+                    { id: '30D', label: '30 días' },
+                  ] as const
+                ).map((p) => (
+                  <button
+                    key={p.id}
+                    type="button"
+                    onClick={() => applyDatePreset(p.id)}
+                    className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition cursor-pointer ${
+                      datePreset === p.id
+                        ? 'bg-indigo-600 text-white shadow-xs'
+                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                    }`}
                   >
-                    <div className="flex items-center gap-3">
+                    {p.label}
+                  </button>
+                ))}
+                <div className="ml-auto flex gap-1">
+                  {(
+                    [
+                      { id: 'ALL', label: 'Todo' },
+                      { id: 'DEBIT', label: 'Deudas' },
+                      { id: 'CREDIT', label: 'Pagos' },
+                    ] as const
+                  ).map((tf) => (
+                    <button
+                      key={tf.id}
+                      type="button"
+                      onClick={() => setTxTypeFilter(tf.id)}
+                      className={`px-2 py-1 rounded-lg text-[10px] font-bold transition cursor-pointer ${
+                        txTypeFilter === tf.id
+                          ? 'bg-slate-900 text-white'
+                          : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+                      }`}
+                    >
+                      {tf.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Rango de fechas personalizado */}
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-[9px] font-bold uppercase text-slate-400 mb-0.5">
+                    Desde
+                  </label>
+                  <input
+                    type="date"
+                    value={dateFrom}
+                    onChange={(e) => {
+                      setDateFrom(e.target.value);
+                      setDatePreset('CUSTOM');
+                    }}
+                    className="w-full px-2.5 py-1.5 text-xs font-semibold bg-slate-50 border border-slate-200 rounded-xl text-slate-800 focus:outline-none focus:border-indigo-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[9px] font-bold uppercase text-slate-400 mb-0.5">
+                    Hasta
+                  </label>
+                  <input
+                    type="date"
+                    value={dateTo}
+                    onChange={(e) => {
+                      setDateTo(e.target.value);
+                      setDatePreset('CUSTOM');
+                    }}
+                    className="w-full px-2.5 py-1.5 text-xs font-semibold bg-slate-50 border border-slate-200 rounded-xl text-slate-800 focus:outline-none focus:border-indigo-500"
+                  />
+                </div>
+              </div>
+
+              {/* Resumen del período filtrado */}
+              <div className="grid grid-cols-3 gap-2 pt-1.5 border-t border-slate-100 text-center">
+                <div className="bg-rose-50/70 rounded-xl py-1.5 px-1">
+                  <span className="text-[9px] font-bold uppercase text-rose-500 block">Deudas</span>
+                  <span className="text-xs font-black text-rose-700">{formatCurrency(totalDebitsFiltered)}</span>
+                </div>
+                <div className="bg-emerald-50/70 rounded-xl py-1.5 px-1">
+                  <span className="text-[9px] font-bold uppercase text-emerald-600 block">Pagos</span>
+                  <span className="text-xs font-black text-emerald-700">{formatCurrency(totalCreditsFiltered)}</span>
+                </div>
+                <div className="bg-slate-50 rounded-xl py-1.5 px-1">
+                  <span className="text-[9px] font-bold uppercase text-slate-400 block">Asientos</span>
+                  <span className="text-xs font-black text-slate-800">{filteredTransactions.length}</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              {filteredTransactions.length === 0 ? (
+                <div className="bg-white rounded-2xl p-8 text-center text-slate-400 text-xs border border-slate-200">
+                  No se encontraron asientos en el rango de fechas seleccionado.
+                </div>
+              ) : (
+                filteredTransactions.map((tx) => {
+                  const isPurchase =
+                    tx.type === 'DEBIT_PURCHASE' || tx.type === 'ADJUSTMENT_DEBIT';
+                  const isOpen = expandedTxId === tx.id;
+                  const isPending = tx.status === 'PENDING_CUSTOMER';
+
+                  return (
+                    <div
+                      key={tx.id}
+                      className={`bg-white rounded-2xl p-4 shadow-sm border transition ${
+                        isPending ? 'border-amber-300 bg-amber-50/20' : 'border-slate-200/80'
+                      }`}
+                    >
                       <div
-                        className={`w-9 h-9 rounded-xl flex items-center justify-center font-black ${
-                          isPurchase
-                            ? 'bg-rose-100 text-rose-600'
-                            : 'bg-emerald-100 text-emerald-600'
-                        }`}
+                        className="flex justify-between items-center cursor-pointer select-none"
+                        onClick={() => setExpandedTxId(isOpen ? null : tx.id)}
                       >
-                        {isPurchase ? (
-                          <ShoppingBag className="w-4 h-4" />
-                        ) : (
-                          <ArrowDownLeft className="w-4 h-4" />
-                        )}
-                      </div>
-                      <div>
-                        <p className="font-bold text-xs text-slate-900 leading-snug">
-                          {tx.description}
-                        </p>
-                        <p className="text-[10px] text-slate-400">
-                          {new Date(tx.created_at).toLocaleDateString('es-PY', {
-                            day: '2-digit',
-                            month: 'short',
-                            hour: '2-digit',
-                            minute: '2-digit',
-                          })}
-                        </p>
-                      </div>
-                    </div>
+                        <div className="flex items-center gap-3">
+                          <div
+                            className={`w-9 h-9 rounded-xl flex items-center justify-center font-black ${
+                              isPurchase
+                                ? 'bg-rose-100 text-rose-600'
+                                : 'bg-emerald-100 text-emerald-600'
+                            }`}
+                          >
+                            {isPurchase ? (
+                              <ShoppingBag className="w-4 h-4" />
+                            ) : (
+                              <ArrowDownLeft className="w-4 h-4" />
+                            )}
+                          </div>
+                          <div>
+                            <p className="font-bold text-xs text-slate-900 leading-snug">
+                              {tx.description}
+                            </p>
+                            <p className="text-[10px] text-slate-400">
+                              {new Date(tx.created_at).toLocaleDateString('es-PY', {
+                                day: '2-digit',
+                                month: 'short',
+                                year: 'numeric',
+                                hour: '2-digit',
+                                minute: '2-digit',
+                              })}
+                            </p>
+                            <p className="text-[9px] text-slate-400 font-mono mt-0.5">
+                              Saldo: {formatCurrency(tx.previous_balance)} → <b className="text-slate-600">{formatCurrency(tx.new_balance)}</b>
+                              {tx.blockchain_hash ? ` • #${tx.blockchain_hash.slice(0, 10)}` : ''}
+                            </p>
+                          </div>
+                        </div>
 
                     <div className="text-right flex items-center gap-2">
                       <div>
@@ -589,8 +745,10 @@ export function CustomerPortalView({ token }: Props) {
               );
             })
           )}
-        </div>
-      </section>
+          </div>
+        </section>
+        );
+      })()}
 
       {/* MODAL CONTRATO EN PDF */}
       {showContractModal && (
