@@ -10,6 +10,14 @@
 -- 5. Clave pública anónima segura (Anon Key segura con permisos mínimos necesarios)
 -- ============================================================================
 
+-- 0. OTORGAR PRIVILEGIOS DE TABLA A LOS ROLES DE SUPABASE (PREVIENE ERROR 42501 permission denied)
+GRANT USAGE ON SCHEMA public TO anon, authenticated, service_role;
+GRANT SELECT, INSERT, UPDATE ON TABLE public.tenants TO anon, authenticated, service_role;
+GRANT SELECT, INSERT, UPDATE ON TABLE public.customers TO anon, authenticated, service_role;
+GRANT SELECT, INSERT ON TABLE public.transactions TO anon, authenticated, service_role;
+GRANT SELECT, INSERT, UPDATE ON TABLE public.staff_members TO anon, authenticated, service_role;
+GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO anon, authenticated, service_role;
+
 -- A. HABILITAR ROW LEVEL SECURITY EN TODAS LAS TABLAS
 ALTER TABLE tenants ENABLE ROW LEVEL SECURITY;
 ALTER TABLE customers ENABLE ROW LEVEL SECURITY;
