@@ -4,7 +4,9 @@ import React, { useState } from 'react';
 import { Customer, Tenant } from '@/types';
 import { getStoredData, saveCustomers } from '@/lib/storage';
 import { validateAmount } from '@/lib/validation';
-import { CreditCard, ShieldAlert, Check, X, AlertTriangle } from 'lucide-react';
+import { computeSuggestedDueDate, getCustomerDueStatus } from '@/lib/overdue';
+import { CustomDateInput } from '@/components/ui/CustomDatePickerModal';
+import { CreditCard, ShieldAlert, Check, X, AlertTriangle, Calendar, Clock } from 'lucide-react';
 
 interface Props {
   customer: Customer;
@@ -15,6 +17,7 @@ interface Props {
 
 export function EditCreditLimitModal({ customer, tenant, onClose, onSuccess }: Props) {
   const [creditLimit, setCreditLimit] = useState(customer.credit_limit.toString());
+  const [paymentDueDate, setPaymentDueDate] = useState(customer.payment_due_date || '');
   const [isBlocked, setIsBlocked] = useState(customer.is_blocked);
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
@@ -48,6 +51,11 @@ export function EditCreditLimitModal({ customer, tenant, onClose, onSuccess }: P
     const updatedCustomer: Customer = {
       ...customers[custIndex],
       credit_limit: parsedLimit,
+      payment_due_date: paymentDueDate || undefined,
+      terms_acceptance_metadata: {
+        ...(customers[custIndex].terms_acceptance_metadata || {}),
+        payment_due_date: paymentDueDate || null,
+      },
       is_blocked: isBlocked,
       updated_at: new Date().toISOString(),
     };
@@ -63,9 +71,14 @@ export function EditCreditLimitModal({ customer, tenant, onClose, onSuccess }: P
   const isOverWithNewLimit =
     parseFloat(creditLimit) > 0 && customer.current_balance > parseFloat(creditLimit);
 
+  const duePreview = getCustomerDueStatus({
+    current_balance: customer.current_balance,
+    payment_due_date: paymentDueDate || undefined,
+  });
+
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/70 backdrop-blur-sm p-0 sm:p-4">
-      <div className="w-full max-w-md bg-white rounded-t-3xl sm:rounded-3xl p-6 shadow-2xl relative border border-slate-100 animate-in fade-in slide-in-from-bottom font-sans">
+      <div className="w-full max-w-md bg-white rounded-t-3xl sm:rounded-3xl p-6 shadow-2xl relative border border-slate-100 max-h-[92vh] overflow-y-auto animate-in fade-in slide-in-from-bottom font-sans">
         <button
           onClick={onClose}
           className="absolute top-5 right-5 p-2 rounded-full text-slate-400 hover:text-slate-700 hover:bg-slate-100"
@@ -141,6 +154,71 @@ export function EditCreditLimitModal({ customer, tenant, onClose, onSuccess }: P
             <span className="text-[10px] text-slate-400 mt-1 block">
               Ingresa 0 para crédito sin límite tope.
             </span>
+          </div>
+
+          {/* Fecha de Vencimiento de Pago & Mora */}
+          <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-200 space-y-2.5">
+            <div className="flex items-center justify-between gap-2">
+              <label className="text-[11px] font-bold uppercase tracking-wider text-slate-600 flex items-center gap-1.5">
+                <Calendar className="w-3.5 h-3.5 text-blue-600" />
+                <span>Fecha de Vencimiento de Pago</span>
+              </label>
+              {paymentDueDate && (
+                <button
+                  type="button"
+                  onClick={() => setPaymentDueDate('')}
+                  className="text-[10px] font-bold text-rose-600 hover:underline cursor-pointer"
+                >
+                  Quitar
+                </button>
+              )}
+            </div>
+
+            <CustomDateInput
+              value={paymentDueDate}
+              onChange={(val) => setPaymentDueDate(val)}
+              label="Vencimiento de Pago"
+              className="w-full"
+            />
+
+            <div className="flex flex-wrap gap-1.5">
+              {(
+                [
+                  { id: '7D', label: '+7 días' },
+                  { id: '15D', label: '+15 días' },
+                  { id: '30D', label: '+30 días' },
+                  { id: 'END_OF_MONTH', label: 'Fin de mes' },
+                ] as const
+              ).map((preset) => (
+                <button
+                  key={preset.id}
+                  type="button"
+                  onClick={() => setPaymentDueDate(computeSuggestedDueDate(preset.id))}
+                  className="px-2.5 py-1 bg-white hover:bg-blue-50 text-slate-700 hover:text-blue-700 border border-slate-200 rounded-lg text-[10px] font-bold transition cursor-pointer"
+                >
+                  {preset.label}
+                </button>
+              ))}
+            </div>
+
+            {paymentDueDate && (
+              <div
+                className={`text-[11px] font-bold px-2.5 py-1.5 rounded-xl border flex items-center gap-1.5 ${
+                  duePreview.state === 'OVERDUE'
+                    ? 'bg-rose-50 border-rose-200 text-rose-700'
+                    : duePreview.state === 'DUE_TODAY'
+                    ? 'bg-amber-50 border-amber-200 text-amber-800'
+                    : duePreview.state === 'UPCOMING'
+                    ? 'bg-indigo-50 border-indigo-200 text-indigo-700'
+                    : 'bg-emerald-50 border-emerald-200 text-emerald-700'
+                }`}
+              >
+                <Clock className="w-3.5 h-3.5 shrink-0" />
+                <span>
+                  Vencimiento {duePreview.dueDateFormatted} • {duePreview.label}
+                </span>
+              </div>
+            )}
           </div>
 
           {/* Advertencia si la deuda actual supera el nuevo límite */}

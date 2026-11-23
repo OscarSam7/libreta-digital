@@ -23,6 +23,7 @@ import {
 } from '@/lib/storage';
 import { executeLedgerTransaction, certifyTransactionWithPin } from '@/lib/ledger';
 import { exportTransactionsToCSV, generateWhatsAppReminderUrl } from '@/lib/reports';
+import { getCustomerDueStatus, computeSuggestedDueDate } from '@/lib/overdue';
 import { CustomerQRModal } from '@/components/CustomerQRModal';
 import { SubscriptionPlansModal } from '@/components/SubscriptionPlansModal';
 import { MerchantAuthModal } from '@/components/MerchantAuthModal';
@@ -121,7 +122,7 @@ export function MerchantDashboard() {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
-  const [filterType, setFilterType] = useState<'ALL' | 'OVERLIMIT' | 'WITH_DEBT'>('ALL');
+  const [filterType, setFilterType] = useState<'ALL' | 'WITH_DEBT' | 'OVERDUE' | 'OVERLIMIT'>('ALL');
   const [expandedTxId, setExpandedTxId] = useState<string | null>(null);
 
   // Estados de Modales
@@ -179,6 +180,7 @@ export function MerchantDashboard() {
   const [newCustDoc, setNewCustDoc] = useState('');
   const [newCustPhone, setNewCustPhone] = useState('');
   const [newCustLimit, setNewCustLimit] = useState('');
+  const [newCustDueDate, setNewCustDueDate] = useState('');
   const [newCustError, setNewCustError] = useState('');
   const [isNoPhoneException, setIsNoPhoneException] = useState(false);
   const [newCustomerAlert, setNewCustomerAlert] = useState<{
@@ -289,7 +291,8 @@ export function MerchantDashboard() {
                     p &&
                     (p.current_balance !== m.current_balance ||
                       p.credit_limit !== m.credit_limit ||
-                      p.full_name !== m.full_name)
+                      p.full_name !== m.full_name ||
+                      p.payment_due_date !== m.payment_due_date)
                   ) {
                     hasDiff = true;
                     break;
@@ -668,6 +671,7 @@ export function MerchantDashboard() {
   const clientesExcedidos = customers.filter(
     (c) => c.credit_limit > 0 && c.current_balance > c.credit_limit
   );
+  const clientesEnMora = customers.filter((c) => getCustomerDueStatus(c).state === 'OVERDUE');
 
   const filteredCustomers = customers.filter((c) => {
     const q = searchQuery.toLowerCase();
@@ -678,6 +682,7 @@ export function MerchantDashboard() {
       (c.document_id && c.document_id.includes(q));
 
     if (!matchesSearch) return false;
+    if (filterType === 'OVERDUE') return getCustomerDueStatus(c).state === 'OVERDUE';
     if (filterType === 'OVERLIMIT') return c.credit_limit > 0 && c.current_balance > c.credit_limit;
     if (filterType === 'WITH_DEBT') return c.current_balance > 0;
     return true;
@@ -729,6 +734,10 @@ export function MerchantDashboard() {
       phone: finalPhone,
       credit_limit: validateAmount(newCustLimit, 0).value,
       current_balance: 0,
+      payment_due_date: newCustDueDate || undefined,
+      ...(newCustDueDate
+        ? { terms_acceptance_metadata: { payment_due_date: newCustDueDate } }
+        : {}),
       qr_token: token,
       security_pin: pin,
       pin_hash: `$2a$06$hash_${pin}`,
@@ -764,6 +773,7 @@ export function MerchantDashboard() {
     setNewCustDoc('');
     setNewCustPhone('');
     setNewCustLimit('');
+    setNewCustDueDate('');
     setNewCustError('');
     setIsNoPhoneException(false);
     setActiveQRCustomer(newCustomer);
@@ -1274,7 +1284,7 @@ export function MerchantDashboard() {
             </div>
 
             {/* Filtros */}
-            <div className="flex items-center gap-1.5 bg-slate-100 p-1 rounded-2xl text-xs font-bold w-full sm:w-auto">
+            <div className="flex flex-wrap items-center gap-1.5 bg-slate-100 p-1 rounded-2xl text-xs font-bold w-full sm:w-auto">
               <button
                 onClick={() => setFilterType('ALL')}
                 className={`px-3 py-1.5 rounded-xl transition flex-1 sm:flex-initial ${
@@ -1290,6 +1300,27 @@ export function MerchantDashboard() {
                 }`}
               >
                 Con Deuda
+              </button>
+              <button
+                onClick={() => setFilterType('OVERDUE')}
+                className={`px-3 py-1.5 rounded-xl transition flex-1 sm:flex-initial flex items-center justify-center gap-1 whitespace-nowrap ${
+                  filterType === 'OVERDUE'
+                    ? 'bg-rose-600 shadow-sm text-white'
+                    : clientesEnMora.length > 0
+                    ? 'text-rose-600 hover:bg-rose-50'
+                    : 'text-slate-500'
+                }`}
+              >
+                <span>En Mora</span>
+                {clientesEnMora.length > 0 && (
+                  <span
+                    className={`text-[10px] font-black px-1.5 py-0.2 rounded-full ${
+                      filterType === 'OVERDUE' ? 'bg-white/20 text-white' : 'bg-rose-100 text-rose-700'
+                    }`}
+                  >
+                    {clientesEnMora.length}
+                  </span>
+                )}
               </button>
               <button
                 onClick={() => setFilterType('OVERLIMIT')}
@@ -1319,13 +1350,17 @@ export function MerchantDashboard() {
             {filteredCustomers.map((cust) => {
               const isOver = cust.credit_limit > 0 && cust.current_balance > cust.credit_limit;
               const hasDebt = cust.current_balance > 0;
+              const dueStatus = getCustomerDueStatus(cust);
+              const isOverdue = dueStatus.state === 'OVERDUE';
               const waUrl = generateWhatsAppReminderUrl(cust, tenant);
 
               return (
                 <div
                   key={cust.id}
                   className={`rounded-2xl p-4 border transition hover:shadow-md flex flex-col justify-between ${
-                    isOver
+                    isOverdue
+                      ? 'bg-rose-50/40 border-rose-300'
+                      : isOver
                       ? 'bg-amber-50/50 border-amber-300'
                       : hasDebt
                       ? 'bg-white border-slate-200'
@@ -1345,6 +1380,14 @@ export function MerchantDashboard() {
                             <span>{cust.full_name}</span>
                             <Pencil className="w-3.5 h-3.5 text-slate-400 group-hover:text-blue-600 opacity-60 group-hover:opacity-100 transition shrink-0" />
                           </button>
+                          {isOverdue && (
+                            <span
+                              className="text-[9px] bg-rose-600 text-white font-black px-1.5 py-0.5 rounded flex items-center gap-1 shadow-xs"
+                              title={`Venció el ${dueStatus.dueDateFormatted}`}
+                            >
+                              <Clock className="w-2.5 h-2.5" /> {dueStatus.daysOverdue}d MORA
+                            </span>
+                          )}
                           {cust.is_blocked && (
                             <span className="text-[9px] bg-rose-100 text-rose-700 font-extrabold px-1.5 py-0.5 rounded">
                               BLOQUEADO
@@ -1476,6 +1519,74 @@ export function MerchantDashboard() {
                       <div className="mt-2 text-[11px] font-bold text-amber-700 bg-amber-100/90 px-2.5 py-1 rounded-xl flex items-center gap-1.5">
                         <AlertTriangle className="w-3.5 h-3.5 shrink-0" /> Límite pactado superado
                       </div>
+                    )}
+
+                    {/* Indicador de Vencimiento & Días de Mora */}
+                    {dueStatus.state === 'OVERDUE' && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          checkPermissionAndExecute('can_edit_credit_limits', 'Modificar Vencimiento', () =>
+                            setActiveLimitCustomer(cust)
+                          )
+                        }
+                        className="mt-2 w-full text-left text-[11px] font-bold text-rose-800 bg-rose-100/90 hover:bg-rose-200/80 border border-rose-200 px-2.5 py-1.5 rounded-xl flex items-center gap-1.5 transition cursor-pointer"
+                        title="Clic para ajustar fecha de vencimiento"
+                      >
+                        <Clock className="w-3.5 h-3.5 text-rose-600 shrink-0" />
+                        <span>
+                          Cuenta vencida el {dueStatus.dueDateFormatted} • <b>{dueStatus.label}</b>
+                        </span>
+                      </button>
+                    )}
+
+                    {dueStatus.state === 'DUE_TODAY' && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          checkPermissionAndExecute('can_edit_credit_limits', 'Modificar Vencimiento', () =>
+                            setActiveLimitCustomer(cust)
+                          )
+                        }
+                        className="mt-2 w-full text-left text-[11px] font-bold text-amber-800 bg-amber-50 hover:bg-amber-100 border border-amber-200 px-2.5 py-1.5 rounded-xl flex items-center gap-1.5 transition cursor-pointer"
+                        title="Clic para ajustar fecha de vencimiento"
+                      >
+                        <Calendar className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                        <span>Vence hoy ({dueStatus.dueDateFormatted})</span>
+                      </button>
+                    )}
+
+                    {dueStatus.state === 'UPCOMING' && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          checkPermissionAndExecute('can_edit_credit_limits', 'Modificar Vencimiento', () =>
+                            setActiveLimitCustomer(cust)
+                          )
+                        }
+                        className="mt-2 w-full text-left text-[11px] font-semibold text-indigo-700 bg-indigo-50/80 hover:bg-indigo-100 border border-indigo-200/70 px-2.5 py-1 rounded-xl flex items-center gap-1.5 transition cursor-pointer"
+                        title="Clic para ajustar fecha de vencimiento"
+                      >
+                        <Calendar className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                        <span>
+                          Vence el {dueStatus.dueDateFormatted} • {dueStatus.label}
+                        </span>
+                      </button>
+                    )}
+
+                    {dueStatus.state === 'NO_DUE_DATE' && hasDebt && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          checkPermissionAndExecute('can_edit_credit_limits', 'Fijar Fecha de Vencimiento', () =>
+                            setActiveLimitCustomer(cust)
+                          )
+                        }
+                        className="mt-2 w-full text-left text-[10px] font-bold text-slate-500 hover:text-blue-700 bg-slate-50 hover:bg-blue-50 border border-dashed border-slate-300 hover:border-blue-300 px-2.5 py-1 rounded-xl flex items-center gap-1.5 transition cursor-pointer"
+                      >
+                        <Calendar className="w-3 h-3 shrink-0" />
+                        <span>+ Fijar fecha de vencimiento para calcular mora</span>
+                      </button>
                     )}
                   </div>
 
@@ -1854,9 +1965,13 @@ export function MerchantDashboard() {
       {/* MODAL ALTA DE CLIENTE */}
       {showNewCustomerModal && (
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm p-0 sm:p-4">
-          <div className="w-full max-w-md bg-white rounded-t-3xl sm:rounded-3xl p-6 shadow-2xl relative border border-slate-100 animate-in fade-in slide-in-from-bottom">
+          <div className="w-full max-w-md bg-white rounded-t-3xl sm:rounded-3xl p-6 shadow-2xl relative border border-slate-100 max-h-[92vh] overflow-y-auto animate-in fade-in slide-in-from-bottom">
             <button
-              onClick={() => setShowNewCustomerModal(false)}
+              type="button"
+              onClick={() => {
+                setShowNewCustomerModal(false);
+                setNewCustDueDate('');
+              }}
               className="absolute top-5 right-5 p-2 rounded-full text-slate-400 hover:text-slate-700 hover:bg-slate-100"
             >
               <X className="w-5 h-5" />
@@ -1975,6 +2090,47 @@ export function MerchantDashboard() {
                     onChange={(e) => setNewCustLimit(e.target.value)}
                     className="w-full p-3 bg-slate-50 border-2 border-slate-200 rounded-xl text-sm font-bold focus:border-blue-600 focus:bg-white focus:outline-none"
                   />
+                </div>
+              </div>
+
+              <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200 space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <label className="text-[11px] font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1">
+                    <Calendar className="w-3.5 h-3.5 text-blue-600" /> Vencimiento de Pago (Opcional)
+                  </label>
+                  {newCustDueDate && (
+                    <button
+                      type="button"
+                      onClick={() => setNewCustDueDate('')}
+                      className="text-[10px] font-bold text-rose-600 hover:underline cursor-pointer"
+                    >
+                      Quitar
+                    </button>
+                  )}
+                </div>
+                <CustomDateInput
+                  value={newCustDueDate}
+                  onChange={(val) => setNewCustDueDate(val)}
+                  label="Fecha de Vencimiento"
+                  className="w-full"
+                />
+                <div className="flex flex-wrap gap-1.5">
+                  {(
+                    [
+                      { id: '7D', label: '+7 días' },
+                      { id: '15D', label: '+15 días' },
+                      { id: '30D', label: '+30 días' },
+                    ] as const
+                  ).map((preset) => (
+                    <button
+                      key={preset.id}
+                      type="button"
+                      onClick={() => setNewCustDueDate(computeSuggestedDueDate(preset.id))}
+                      className="px-2.5 py-1 bg-white hover:bg-blue-50 text-slate-600 hover:text-blue-700 border border-slate-200 rounded-lg text-[10px] font-bold transition cursor-pointer"
+                    >
+                      {preset.label}
+                    </button>
+                  ))}
                 </div>
               </div>
 

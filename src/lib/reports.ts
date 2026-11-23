@@ -1,5 +1,6 @@
 import { Transaction, Customer, Tenant } from '@/types';
 import { sanitizeCSVCell } from '@/lib/validation';
+import { getCustomerDueStatus } from '@/lib/overdue';
 
 export function exportTransactionsToCSV(
   transactions: Transaction[],
@@ -63,6 +64,8 @@ export interface CustomerPortfolioSummary {
   lastPaymentDate: string | null;
   lastPurchaseDate: string | null;
   daysWithoutPayment: number | null;
+  paymentDueDate?: string | null;
+  daysOverdue?: number;
 }
 
 export function exportCustomersPortfolioToCSV(
@@ -84,11 +87,16 @@ export function exportCustomersPortfolioToCSV(
     `Pagos_Periodo_${tenant.currency_code}`,
     'Fecha_Ultimo_Pago',
     'Dias_Sin_Pagar_Mora',
+    'Fecha_Vencimiento',
+    'Dias_Mora',
     'Fecha_Ultima_Compra',
   ];
 
   const rows = portfolio.map((item) => {
     const c = item.customer;
+    const dueInfo = getCustomerDueStatus(c);
+    const effectiveDueDate = item.paymentDueDate ?? dueInfo.dueDate ?? 'SIN_VENCIMIENTO';
+    const effectiveDaysOverdue = item.daysOverdue ?? dueInfo.daysOverdue;
     const statusLabel =
       item.statusCategory === 'MORA'
         ? 'EN MORA (Atrasado)'
@@ -113,6 +121,8 @@ export function exportCustomersPortfolioToCSV(
       item.paymentsInPeriod.toFixed(2),
       sanitizeCSVCell(item.lastPaymentDate ? item.lastPaymentDate.slice(0, 10) : 'SIN PAGOS'),
       item.daysWithoutPayment !== null ? item.daysWithoutPayment.toString() : 'N/A',
+      sanitizeCSVCell(effectiveDueDate),
+      effectiveDaysOverdue.toString(),
       sanitizeCSVCell(item.lastPurchaseDate ? item.lastPurchaseDate.slice(0, 10) : 'SIN COMPRAS'),
     ];
   });
@@ -135,12 +145,21 @@ export function exportCustomersPortfolioToCSV(
 export function generateWhatsAppReminderUrl(customer: Customer, tenant: Tenant) {
   const origin = typeof window !== 'undefined' ? window.location.origin : 'https://libretadigital.app';
   const portalUrl = `${origin}/portal/${customer.qr_token}`;
+  const dueStatus = getCustomerDueStatus(customer);
+
+  const dueLine = dueStatus.dueDateFormatted
+    ? `📅 *Vencimiento:* ${dueStatus.dueDateFormatted}\n`
+    : '';
+  const moraLine =
+    dueStatus.state === 'OVERDUE' ? `⚠️ *Mora:* *${dueStatus.label}*\n` : '';
 
   const message =
     `Hola *${customer.full_name}*! Te compartimos tu estado de cuenta al día en *${tenant.business_name}*.\n\n` +
     `💳 *Saldo Deudor Actual:* ${tenant.currency_symbol} ${customer.current_balance.toLocaleString('es-PY')}\n` +
-    `🔒 *Límite de Crédito:* ${tenant.currency_symbol} ${customer.credit_limit.toLocaleString('es-PY')}\n\n` +
-    `Accedé a tu estado de cuenta oficial y convalidá operaciones desde tu móvil aquí:\n` +
+    `🔒 *Límite de Crédito:* ${tenant.currency_symbol} ${customer.credit_limit.toLocaleString('es-PY')}\n` +
+    dueLine +
+    moraLine +
+    `\nAccedé a tu estado de cuenta oficial y convalidá operaciones desde tu móvil aquí:\n` +
     `${portalUrl}\n\n` +
     `_Tu PIN de seguridad para autorizar en mostrador:_ *${customer.security_pin}*`;
 

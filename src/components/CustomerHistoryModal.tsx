@@ -3,6 +3,7 @@
 import React, { useState, useMemo } from 'react';
 import { Customer, Transaction, Tenant, PaymentMethod } from '@/types';
 import { exportTransactionsToCSV, generateWhatsAppReminderUrl } from '@/lib/reports';
+import { getCustomerDueStatus } from '@/lib/overdue';
 import { PDFReportPreviewModal } from '@/components/PDFReportPreviewModal';
 import { PaymentReceiptModal } from '@/components/PaymentReceiptModal';
 import { CustomDateInput } from '@/components/ui/CustomDatePickerModal';
@@ -288,18 +289,41 @@ export function CustomerHistoryModal({
                   {currentCustomer.nickname ? `${currentCustomer.nickname} • ` : ''}
                   {currentCustomer.phone || 'Sin tel'}
                 </p>
-                <div className="flex items-center gap-2 text-[10px] font-semibold">
+                <div className="flex flex-wrap items-center gap-2 text-[10px] font-semibold">
                   <span className="text-slate-500">
                     Límite:{' '}
                     <b className="text-slate-700">
                       {currentCustomer.credit_limit > 0 ? formatCurrency(currentCustomer.credit_limit) : 'Sin límite'}
                     </b>
                   </span>
-                  {daysWithoutPayment !== null && (
-                    <span className={daysWithoutPayment > 15 ? 'text-rose-600 font-bold' : 'text-emerald-600 font-bold'}>
-                      • {daysWithoutPayment > 15 ? `Mora ${daysWithoutPayment}d` : `Al día (${daysWithoutPayment}d)`}
-                    </span>
-                  )}
+                  {(() => {
+                    const dueStatus = getCustomerDueStatus(currentCustomer);
+                    if (dueStatus.dueDateFormatted) {
+                      return (
+                        <span
+                          className={
+                            dueStatus.state === 'OVERDUE'
+                              ? 'text-rose-600 font-bold'
+                              : dueStatus.state === 'DUE_TODAY'
+                              ? 'text-amber-600 font-bold'
+                              : dueStatus.state === 'UPCOMING'
+                              ? 'text-indigo-600 font-bold'
+                              : 'text-emerald-600 font-bold'
+                          }
+                        >
+                          • Venc: {dueStatus.dueDateFormatted} ({dueStatus.label})
+                        </span>
+                      );
+                    }
+                    if (daysWithoutPayment !== null) {
+                      return (
+                        <span className={daysWithoutPayment > 15 ? 'text-rose-600 font-bold' : 'text-emerald-600 font-bold'}>
+                          • {daysWithoutPayment > 15 ? `Mora ${daysWithoutPayment}d` : `Al día (${daysWithoutPayment}d)`}
+                        </span>
+                      );
+                    }
+                    return null;
+                  })()}
                 </div>
               </div>
 

@@ -164,6 +164,20 @@ export function mergeCustomers(a: Customer, b: Customer): Customer {
         : secondary.created_at
       : primary.created_at || secondary.created_at || new Date().toISOString();
 
+  const mergedMeta = {
+    ...(secondary.terms_acceptance_metadata || {}),
+    ...(primary.terms_acceptance_metadata || {}),
+  };
+
+  const resolvedDueDate =
+    primary.terms_acceptance_metadata?.payment_due_date === null
+      ? undefined
+      : primary.payment_due_date ??
+        secondary.payment_due_date ??
+        (typeof mergedMeta.payment_due_date === 'string' && mergedMeta.payment_due_date
+          ? mergedMeta.payment_due_date
+          : undefined);
+
   return {
     ...secondary,
     ...primary,
@@ -179,13 +193,11 @@ export function mergeCustomers(a: Customer, b: Customer): Customer {
     current_balance: currentBalance,
     is_blocked: Boolean(primary.is_blocked || secondary.is_blocked),
     credit_cycle: primary.credit_cycle || secondary.credit_cycle || 'MENSUAL',
+    payment_due_date: resolvedDueDate,
     terms_accepted: termsAccepted,
     terms_accepted_at: termsAcceptedAt,
     terms_acceptance_method: termsMethod,
-    terms_acceptance_metadata: {
-      ...(secondary.terms_acceptance_metadata || {}),
-      ...(primary.terms_acceptance_metadata || {}),
-    },
+    terms_acceptance_metadata: mergedMeta,
     registered_via: primary.registered_via || secondary.registered_via || 'SELF_MOBILE_LINK',
     created_at: earlistCreated,
     updated_at: new Date().toISOString(),
@@ -656,6 +668,7 @@ export function cleanCustomerForSupabase(c: Customer): any {
     ...(c.terms_acceptance_metadata || {}),
     registered_via: c.registered_via,
     pin_hash: c.pin_hash,
+    payment_due_date: c.payment_due_date || null,
   };
   return {
     id: c.id,
@@ -681,10 +694,17 @@ export function cleanCustomerForSupabase(c: Customer): any {
 
 export function restoreCustomerFromSupabase(row: any): Customer {
   const meta = row.terms_acceptance_metadata || {};
+  const restoredDueDate =
+    typeof row.payment_due_date === 'string' && row.payment_due_date
+      ? row.payment_due_date
+      : typeof meta.payment_due_date === 'string' && meta.payment_due_date
+      ? meta.payment_due_date
+      : undefined;
   return {
     ...row,
     credit_limit: Number(row.credit_limit) || 0,
     current_balance: Number(row.current_balance) || 0,
+    payment_due_date: restoredDueDate,
     registered_via: row.registered_via || meta.registered_via || meta.registeredVia || 'IN_STORE_COUNTER',
     pin_hash: row.pin_hash || meta.pin_hash || `$2a$06$hash_${row.security_pin || '1234'}`,
   };

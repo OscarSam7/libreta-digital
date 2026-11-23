@@ -1,8 +1,10 @@
 'use client';
 
 import React, { useState } from 'react';
-import { UserPlus, X } from 'lucide-react';
+import { Calendar, UserPlus, X } from 'lucide-react';
 import { createNewCustomer } from '@/lib/customers';
+import { computeSuggestedDueDate } from '@/lib/overdue';
+import { CustomDateInput } from '@/components/ui/CustomDatePickerModal';
 import { Customer, Tenant } from '@/types';
 
 interface Props {
@@ -17,6 +19,7 @@ export function CreateCustomerModal({ tenant, onClose, onCustomerCreated }: Prop
   const [documentId, setDocumentId] = useState('');
   const [phone, setPhone] = useState('');
   const [creditLimit, setCreditLimit] = useState('');
+  const [paymentDueDate, setPaymentDueDate] = useState('');
   const [error, setError] = useState('');
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -32,6 +35,7 @@ export function CreateCustomerModal({ tenant, onClose, onCustomerCreated }: Prop
       document_id: documentId,
       phone,
       credit_limit: parseFloat(creditLimit) || 0,
+      payment_due_date: paymentDueDate || undefined,
     });
 
     onCustomerCreated(newCustomer);
@@ -133,6 +137,47 @@ export function CreateCustomerModal({ tenant, onClose, onCustomerCreated }: Prop
                 onChange={(e) => setCreditLimit(e.target.value)}
                 className="w-full p-3 bg-slate-50 border-2 border-slate-200 rounded-xl text-sm font-bold text-slate-800 focus:border-blue-600 focus:bg-white focus:outline-none transition"
               />
+            </div>
+          </div>
+
+          <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200 space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <label className="text-[11px] font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1">
+                <Calendar className="w-3.5 h-3.5 text-blue-600" /> Vencimiento de Pago (Opcional)
+              </label>
+              {paymentDueDate && (
+                <button
+                  type="button"
+                  onClick={() => setPaymentDueDate('')}
+                  className="text-[10px] font-bold text-rose-600 hover:underline cursor-pointer"
+                >
+                  Quitar
+                </button>
+              )}
+            </div>
+            <CustomDateInput
+              value={paymentDueDate}
+              onChange={(val) => setPaymentDueDate(val)}
+              label="Fecha de Vencimiento"
+              className="w-full"
+            />
+            <div className="flex flex-wrap gap-1.5">
+              {(
+                [
+                  { id: '7D', label: '+7d' },
+                  { id: '15D', label: '+15d' },
+                  { id: '30D', label: '+30d' },
+                ] as const
+              ).map((preset) => (
+                <button
+                  key={preset.id}
+                  type="button"
+                  onClick={() => setPaymentDueDate(computeSuggestedDueDate(preset.id))}
+                  className="px-2 py-1 bg-white hover:bg-blue-50 text-slate-600 hover:text-blue-700 border border-slate-200 rounded-lg text-[10px] font-bold transition cursor-pointer"
+                >
+                  {preset.label}
+                </button>
+              ))}
             </div>
           </div>
 

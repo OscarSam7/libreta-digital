@@ -8,6 +8,7 @@ import {
   CustomerPortfolioSummary,
   generateWhatsAppReminderUrl,
 } from '@/lib/reports';
+import { getCustomerDueStatus } from '@/lib/overdue';
 import { PDFReportPreviewModal, PDFReportMode } from '@/components/PDFReportPreviewModal';
 import { CustomDateInput } from '@/components/ui/CustomDatePickerModal';
 import { CustomSelect } from '@/components/ui/CustomSelectModal';
@@ -192,11 +193,14 @@ export function DetailedReportsModal({
 
       let statusCategory: CustomerPortfolioSummary['statusCategory'] = 'AL_DIA';
       const isOverLimit = c.credit_limit > 0 && c.current_balance > c.credit_limit;
+      const dueStatus = getCustomerDueStatus(c);
 
       if (c.is_blocked) {
         statusCategory = 'BLOQUEADO';
       } else if (c.current_balance <= 0) {
         statusCategory = 'AL_DIA';
+      } else if (dueStatus.state === 'OVERDUE') {
+        statusCategory = 'MORA';
       } else if (isOverLimit) {
         statusCategory = 'EXCEDIDO';
       } else if (daysWithoutPayment !== null && daysWithoutPayment >= moraDaysThreshold) {
@@ -219,6 +223,8 @@ export function DetailedReportsModal({
         lastPaymentDate: lastPayment ? lastPayment.created_at : null,
         lastPurchaseDate: lastPurchase ? lastPurchase.created_at : null,
         daysWithoutPayment,
+        paymentDueDate: dueStatus.dueDate,
+        daysOverdue: dueStatus.daysOverdue,
       };
     });
   }, [customers, transactions, periodTransactions, moraDaysThreshold]);
@@ -663,7 +669,7 @@ export function DetailedReportsModal({
                   </div>
                   <span className="text-xl font-black mt-1 block">{portfolioCounts.mora}</span>
                   <span className="text-[10px]">
-                    Sin pagar &gt; {moraDaysThreshold} días
+                    Vencidos o sin pago &gt; {moraDaysThreshold}d
                   </span>
                 </button>
 
@@ -792,11 +798,25 @@ export function DetailedReportsModal({
                               </td>
 
                               <td className="py-3 px-3">
-                                {item.statusCategory === 'MORA' && (
-                                  <span className="inline-flex items-center gap-1 text-[10px] font-black px-2 py-0.5 rounded-full bg-rose-100 text-rose-700">
-                                    <AlertTriangle className="w-3 h-3" /> EN MORA ({item.daysWithoutPayment}d)
-                                  </span>
-                                )}
+                                {item.statusCategory === 'MORA' && (() => {
+                                  const dueInfo = getCustomerDueStatus(c);
+                                  const moraCount =
+                                    item.daysOverdue && item.daysOverdue > 0
+                                      ? item.daysOverdue
+                                      : item.daysWithoutPayment;
+                                  return (
+                                    <div>
+                                      <span className="inline-flex items-center gap-1 text-[10px] font-black px-2 py-0.5 rounded-full bg-rose-100 text-rose-700">
+                                        <AlertTriangle className="w-3 h-3" /> EN MORA ({moraCount ?? 0}d)
+                                      </span>
+                                      {dueInfo.dueDateFormatted && (
+                                        <span className="text-[9px] text-rose-600 font-semibold block mt-0.5">
+                                          Venc: {dueInfo.dueDateFormatted}
+                                        </span>
+                                      )}
+                                    </div>
+                                  );
+                                })()}
                                 {item.statusCategory === 'EXCEDIDO' && (
                                   <span className="inline-flex items-center gap-1 text-[10px] font-black px-2 py-0.5 rounded-full bg-purple-100 text-purple-700">
                                     <AlertTriangle className="w-3 h-3" /> EXCEDIDO

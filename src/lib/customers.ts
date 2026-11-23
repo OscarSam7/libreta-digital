@@ -10,6 +10,7 @@ export interface CreateCustomerInput {
   phone?: string;
   credit_limit: number;
   credit_cycle?: CreditCycle;
+  payment_due_date?: string;
   terms_accepted?: boolean;
 }
 
@@ -41,9 +42,13 @@ export function createNewCustomer(input: CreateCustomerInput): Customer {
     credit_limit: validateAmount(input.credit_limit, 0).value,
     current_balance: 0,
     credit_cycle: input.credit_cycle || 'MENSUAL',
+    payment_due_date: input.payment_due_date || undefined,
     terms_accepted: Boolean(input.terms_accepted),
     terms_accepted_at: input.terms_accepted ? new Date().toISOString() : undefined,
     terms_acceptance_method: input.terms_accepted ? 'IN_STORE_PIN' : undefined,
+    ...(input.payment_due_date
+      ? { terms_acceptance_metadata: { payment_due_date: input.payment_due_date } }
+      : {}),
     qr_token: token,
     security_pin: pin,
     pin_hash: `$2a$06$fakehash_${pin}`,

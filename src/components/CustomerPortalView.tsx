@@ -13,6 +13,7 @@ import {
 import { certifyTransactionWithPin } from '@/lib/ledger';
 import { acceptCustomerTerms } from '@/lib/customers';
 import { exportTransactionsToCSV } from '@/lib/reports';
+import { getCustomerDueStatus } from '@/lib/overdue';
 import { PDFReportPreviewModal } from '@/components/PDFReportPreviewModal';
 import { PaymentReceiptModal } from '@/components/PaymentReceiptModal';
 import { CustomDateInput } from '@/components/ui/CustomDatePickerModal';
@@ -573,6 +574,7 @@ export function CustomerPortalView({ token }: Props) {
 
   const isOverLimit =
     customer.credit_limit > 0 && customer.current_balance > customer.credit_limit;
+  const dueStatus = getCustomerDueStatus(customer);
 
   const formatCurrency = (val: number) => {
     const sym = tenant?.currency_symbol === '₲' || !tenant?.currency_symbol ? 'Gs.' : tenant.currency_symbol;
@@ -647,6 +649,39 @@ export function CustomerPortalView({ token }: Props) {
             </span>
           </div>
         </div>
+
+        {/* VENCIMIENTO DE PAGO Y DÍAS DE MORA */}
+        {dueStatus.dueDateFormatted && (
+          <div className="mt-3 pt-3 border-t border-white/10 flex items-center justify-between gap-2 text-xs">
+            <span className="text-slate-300 font-semibold">
+              Vencimiento de Pago: <b className="text-white">{dueStatus.dueDateFormatted}</b>
+            </span>
+            <span
+              className={`px-2.5 py-0.5 rounded-full text-[11px] font-black ${
+                dueStatus.state === 'OVERDUE'
+                  ? 'bg-rose-500 text-white shadow-xs'
+                  : dueStatus.state === 'DUE_TODAY'
+                  ? 'bg-amber-400 text-slate-950'
+                  : dueStatus.state === 'UPCOMING'
+                  ? 'bg-indigo-500/40 text-indigo-100 border border-indigo-400/30'
+                  : 'bg-emerald-500/25 text-emerald-200 border border-emerald-400/30'
+              }`}
+            >
+              {dueStatus.state === 'OVERDUE'
+                ? `${dueStatus.daysOverdue} ${dueStatus.daysOverdue === 1 ? 'día' : 'días'} de mora`
+                : dueStatus.shortBadge || dueStatus.label}
+            </span>
+          </div>
+        )}
+
+        {dueStatus.state === 'OVERDUE' && (
+          <div className="mt-3 bg-rose-500/25 border border-rose-400/50 text-rose-100 text-xs p-2.5 rounded-xl font-semibold flex items-start gap-2">
+            <AlertCircle className="w-4 h-4 text-rose-300 shrink-0 mt-0.5" />
+            <span>
+              Cuenta vencida el {dueStatus.dueDateFormatted} • Tenés <b>{dueStatus.label}</b>. Acercate al comercio para regularizar.
+            </span>
+          </div>
+        )}
 
         {/* OPCIÓN PRINCIPAL EN TARJETA: LECTOR DE QR PARA CERTIFICAR AL INSTANTE */}
         <div className="mt-4 pt-4 border-t border-white/10 space-y-1.5">

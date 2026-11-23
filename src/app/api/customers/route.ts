@@ -322,10 +322,25 @@ export async function POST(req: NextRequest) {
     const creditLimit = validateAmount(body.credit_limit, 0).value;
     const currentBalance = validateAmount(body.current_balance, 0).value;
     const registeredVia = body.registered_via || (body.phone?.includes('Excepción') ? 'EXCEPTION_NO_PHONE' : 'SELF_MOBILE_LINK');
+    const rawDueDate =
+      typeof body.payment_due_date === 'string'
+        ? body.payment_due_date.trim()
+        : typeof body.terms_acceptance_metadata?.payment_due_date === 'string'
+        ? body.terms_acceptance_metadata.payment_due_date.trim()
+        : '';
+    const normalizedDueDate = /^\d{4}-\d{2}-\d{2}$/.test(rawDueDate) ? rawDueDate : undefined;
 
     // Garantizar UUID válido para evitar rechazos en bases de datos relacionales
     const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
     const customerId = body.id && uuidRegex.test(body.id) ? body.id : crypto.randomUUID();
+
+    const baseMeta =
+      body.terms_acceptance_metadata && typeof body.terms_acceptance_metadata === 'object'
+        ? body.terms_acceptance_metadata
+        : {
+            registeredVia,
+            registrationDate: new Date().toISOString(),
+          };
 
     const customer: Customer = {
       id: customerId,
@@ -341,12 +356,13 @@ export async function POST(req: NextRequest) {
       current_balance: currentBalance,
       is_blocked: Boolean(body.is_blocked),
       credit_cycle: body.credit_cycle || 'MENSUAL',
+      payment_due_date: normalizedDueDate,
       terms_accepted: Boolean(body.terms_accepted),
       terms_accepted_at: body.terms_accepted_at || new Date().toISOString(),
       terms_acceptance_method: body.terms_acceptance_method || 'PORTAL_PIN',
-      terms_acceptance_metadata: body.terms_acceptance_metadata || {
-        registeredVia,
-        registrationDate: new Date().toISOString(),
+      terms_acceptance_metadata: {
+        ...baseMeta,
+        payment_due_date: normalizedDueDate || null,
       },
       registered_via: registeredVia,
       created_at: body.created_at || new Date().toISOString(),

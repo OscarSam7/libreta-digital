@@ -63,9 +63,11 @@ export interface Customer {
     acceptedVersion?: string;
     informconf_status?: string;
     registeredVia?: string;
+    payment_due_date?: string | null;
     [key: string]: any;
   };
   credit_cycle?: CreditCycle;
+  payment_due_date?: string; // Fecha límite de pago YYYY-MM-DD para cómputo de días de mora
   registered_via?: 'SELF_MOBILE_LINK' | 'IN_STORE_COUNTER' | 'EXCEPTION_NO_PHONE';
   created_at: string;
   updated_at: string;
