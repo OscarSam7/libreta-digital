@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import { QRCodeSVG } from 'qrcode.react';
 import { Customer, Transaction, Tenant, TransactionType, PaymentMethod, StaffMember, StaffRole, StaffPermissions } from '@/types';
@@ -89,7 +90,8 @@ import {
   UserCog,
   Pencil,
   ScanLine,
-  Loader2
+  Loader2,
+  Maximize2
 } from 'lucide-react';
 
 const REGIONAL_CURRENCIES = [
@@ -169,6 +171,7 @@ export function MerchantDashboard() {
   const [txError, setTxError] = useState('');
   const [certifiedViaMethod, setCertifiedViaMethod] = useState<string | null>(null);
   const [verifyingPin, setVerifyingPin] = useState(false);
+  const [isQrFullscreen, setIsQrFullscreen] = useState(false);
 
   // Formulario Alta de Cliente
   const [newCustName, setNewCustName] = useState('');
@@ -539,6 +542,7 @@ export function MerchantDashboard() {
 
       saveTransactionsLocalOnly(updatedList);
       setTransactions(updatedList);
+      setIsQrFullscreen(false);
       setCertifiedViaMethod(/QR_SCAN/i.test(validationMethod) ? 'QR' : 'PIN');
       setTxStep('SUCCESS');
 
@@ -840,6 +844,7 @@ export function MerchantDashboard() {
         autoCloseTimerRef.current = null;
       }
       liveConfirmedTxIdRef.current = null;
+      setIsQrFullscreen(false);
       setCertifiedViaMethod(null);
       setEnteredPin('');
       setCreatedTx(res.transaction);
@@ -871,6 +876,7 @@ export function MerchantDashboard() {
       } catch {}
 
       setVerifyingPin(false);
+      setIsQrFullscreen(false);
       setCertifiedViaMethod('PIN');
       setTxStep('SUCCESS');
       if (autoCloseTimerRef.current !== null) {
@@ -1994,6 +2000,7 @@ export function MerchantDashboard() {
                   window.clearTimeout(autoCloseTimerRef.current);
                   autoCloseTimerRef.current = null;
                 }
+                setIsQrFullscreen(false);
                 setActiveTxCustomer(null);
                 setCreatedTx(null);
                 setTxStep('INPUT');
@@ -2204,9 +2211,80 @@ export function MerchantDashboard() {
                       Pedí a <b>{activeTxCustomer.full_name}</b> que toque <b>"Escanear QR y Certificar Compra"</b> en su tarjeta y apunte a este QR:
                     </p>
 
-                    <div className="inline-block bg-white p-3.5 rounded-3xl border-2 border-emerald-500 shadow-lg shadow-emerald-500/10 mx-auto">
+                    <button
+                      type="button"
+                      onClick={() => setIsQrFullscreen(true)}
+                      className="group inline-flex flex-col items-center bg-white p-3.5 rounded-3xl border-2 border-emerald-500 shadow-lg shadow-emerald-500/10 mx-auto hover:border-emerald-400 hover:shadow-emerald-500/20 active:scale-[0.98] transition cursor-pointer"
+                      title="Tocar para agrandar el QR en pantalla completa"
+                    >
                       <QRCodeSVG value={certifyQrUrl} size={172} level="M" />
-                    </div>
+                      <span className="mt-2 inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-full group-hover:bg-emerald-100 transition">
+                        <Maximize2 className="w-3 h-3" />
+                        <span>Tocar para agrandar en pantalla</span>
+                      </span>
+                    </button>
+
+                    {isQrFullscreen &&
+                      typeof document !== 'undefined' &&
+                      createPortal(
+                        <div
+                          onClick={() => setIsQrFullscreen(false)}
+                          className="fixed inset-0 z-[9999] bg-slate-950/95 backdrop-blur-md flex flex-col items-center justify-between p-5 text-white animate-in fade-in duration-150"
+                        >
+                          {/* Cabecera superior con titular, monto y cerrar */}
+                          <div
+                            onClick={(e) => e.stopPropagation()}
+                            className="w-full max-w-md flex items-center justify-between gap-3 pt-1"
+                          >
+                            <div className="min-w-0 text-left">
+                              <span className="text-[10px] font-black uppercase tracking-wider text-emerald-400 block">
+                                Escaneo QR en Caja
+                              </span>
+                              <h3 className="text-base font-black text-white truncate">
+                                {activeTxCustomer.full_name}
+                              </h3>
+                              <p className="text-sm font-black text-emerald-300">
+                                {formatCurrency(createdTx.amount)}
+                              </p>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => setIsQrFullscreen(false)}
+                              className="w-10 h-10 rounded-full bg-white/15 hover:bg-white/25 text-white flex items-center justify-center transition cursor-pointer shrink-0"
+                              aria-label="Cerrar QR ampliado"
+                            >
+                              <X className="w-5 h-5" />
+                            </button>
+                          </div>
+
+                          {/* Tarjeta QR blanca de máximo contraste */}
+                          <div
+                            onClick={(e) => e.stopPropagation()}
+                            className="bg-white p-5 rounded-3xl shadow-2xl w-full max-w-[340px] aspect-square flex items-center justify-center border-4 border-emerald-400"
+                          >
+                            <QRCodeSVG value={certifyQrUrl} size={300} level="M" className="w-full h-auto" />
+                          </div>
+
+                          {/* Estado en vivo + botón volver */}
+                          <div
+                            onClick={(e) => e.stopPropagation()}
+                            className="w-full max-w-md space-y-2.5 pb-2 text-center"
+                          >
+                            <div className="inline-flex items-center justify-center gap-2 text-xs font-bold text-emerald-300 bg-emerald-500/15 py-2 px-4 rounded-full border border-emerald-400/30">
+                              <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping shrink-0" />
+                              <span>Esperando escaneo QR en vivo...</span>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => setIsQrFullscreen(false)}
+                              className="w-full py-3 px-4 bg-white/10 hover:bg-white/20 border border-white/15 text-white font-bold rounded-2xl text-xs transition cursor-pointer"
+                            >
+                              Volver a opciones (PIN / WhatsApp)
+                            </button>
+                          </div>
+                        </div>,
+                        document.body
+                      )}
 
                     <div className="flex items-center justify-center gap-2 text-[11px] font-bold text-emerald-700 bg-emerald-50/90 py-1.5 px-3 rounded-xl border border-emerald-200 max-w-xs mx-auto">
                       <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping shrink-0" />
@@ -2281,6 +2359,7 @@ export function MerchantDashboard() {
                         window.clearTimeout(autoCloseTimerRef.current);
                         autoCloseTimerRef.current = null;
                       }
+                      setIsQrFullscreen(false);
                       setActiveTxCustomer(null);
                       setCreatedTx(null);
                       setTxStep('INPUT');
