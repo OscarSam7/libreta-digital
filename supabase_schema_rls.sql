@@ -15,6 +15,7 @@ GRANT USAGE ON SCHEMA public TO anon, authenticated, service_role;
 GRANT SELECT, INSERT, UPDATE ON TABLE public.tenants TO anon, authenticated, service_role;
 GRANT SELECT, INSERT, UPDATE ON TABLE public.customers TO anon, authenticated, service_role;
 GRANT SELECT, INSERT ON TABLE public.transactions TO anon, authenticated, service_role;
+GRANT UPDATE (status, validated_at, validation_method, validation_metadata) ON TABLE public.transactions TO anon, authenticated, service_role;
 GRANT SELECT, INSERT, UPDATE ON TABLE public.staff_members TO anon, authenticated, service_role;
 GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO anon, authenticated, service_role;
 
@@ -120,10 +121,14 @@ CREATE POLICY "transactions_tenant_isolation_insert" ON transactions
   );
 
 -- INMUTABILIDAD CONTABLE (CRÍTICO):
--- NINGUNA política para UPDATE ni DELETE es creada.
--- En PostgreSQL/Supabase con RLS habilitado, la ausencia de política UPDATE/DELETE
--- bloquea por completo la alteración o borrado de asientos contables.
--- Cualquier corrección debe realizarse mediante Nota de Crédito / Ajuste.
+-- No existe política DELETE ni UPDATE general sobre montos, saldos o fechas.
+-- Solo se permite transicionar status de PENDING_CUSTOMER -> CERTIFIED_BOTH al recibir firma QR/PIN del cliente.
+-- Cualquier corrección contable de montos debe realizarse mediante Nota de Crédito / Ajuste.
+CREATE POLICY "transactions_certify_pending_only" ON transactions
+  FOR UPDATE
+  TO anon, authenticated
+  USING (status = 'PENDING_CUSTOMER')
+  WITH CHECK (status = 'CERTIFIED_BOTH');
 
 -- ============================================================================
 -- 4. POLÍTICAS PARA STAFF_MEMBERS (COLABORADORES Y PERMISOS)

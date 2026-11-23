@@ -16,6 +16,8 @@ import { exportTransactionsToCSV } from '@/lib/reports';
 import { PDFReportPreviewModal } from '@/components/PDFReportPreviewModal';
 import { PaymentReceiptModal } from '@/components/PaymentReceiptModal';
 import { CustomDateInput } from '@/components/ui/CustomDatePickerModal';
+import { QRScannerModal } from '@/components/QRScannerModal';
+import { safeCompare } from '@/lib/security';
 import {
   ShieldCheck,
   CheckCircle2,
@@ -30,7 +32,9 @@ import {
   Check,
   HelpCircle,
   Receipt,
-  RotateCcw
+  RotateCcw,
+  ScanLine,
+  Loader2
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { BrandLogo } from '@/components/BrandLogo';
@@ -62,7 +66,11 @@ export function CustomerPortalView({ token }: Props) {
   const [dateTo, setDateTo] = useState('');
   const [datePreset, setDatePreset] = useState<'ALL' | 'TODAY' | '7D' | 'THIS_MONTH' | '30D' | 'CUSTOM'>('ALL');
   const [txTypeFilter, setTxTypeFilter] = useState<'ALL' | 'DEBIT' | 'CREDIT'>('ALL');
+  const [showQRScanner, setShowQRScanner] = useState(false);
+  const [certifyingTxId, setCertifyingTxId] = useState<string | null>(null);
+  const [certifyToast, setCertifyToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const pushedTxIdsRef = useRef<Set<string>>(new Set());
+  const autoCertifiedUrlRef = useRef<string | null>(null);
 
   // Helper de fecha local sin desviación UTC
   const getLocalDateString = (d?: string | Date | null) => {
@@ -134,6 +142,11 @@ export function CustomerPortalView({ token }: Props) {
       .filter((t) => t.type === 'CREDIT_PAYMENT' || t.type === 'ADJUSTMENT_CREDIT')
       .reduce((acc, t) => acc + t.amount, 0);
   }, [filteredTransactions]);
+
+  const pendingTxsCount = useMemo(
+    () => transactions.filter((t) => t.status === 'PENDING_CUSTOMER').length,
+    [transactions]
+  );
 
   const loadData = async () => {
     // 1. Cargar datos locales de inmediato si existen
@@ -272,6 +285,202 @@ export function CustomerPortalView({ token }: Props) {
     }
   }, [customer?.qr_token, customer?.full_name, tenant?.business_name]);
 
+  const certifyOperation = async ({
+    transactionId,
+    method,
+    customerPin,
+    operationCode,
+  }: {
+    transactionId: string;
+    method: 'QR_SCAN_IN_STORE' | 'REMOTE_QR_APPROVAL';
+    customerPin?: string;
+    operationCode?: string;
+  }): Promise<{ success: boolean; message?: string }> => {
+    if (!customer) {
+      return { success: false, message: 'Tu cuenta aún está cargando. Reintentá en un segundo.' };
+    }
+
+    try {
+      const res = await fetch('/api/transactions/certify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        cache: 'no-store',
+        body: JSON.stringify({
+          transactionId,
+          customerId: customer.id,
+          tenantId: customer.tenant_id,
+          qrToken: customer.qr_token,
+          method,
+          customerPin,
+          operationCode,
+        }),
+      });
+
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok || !json?.success) {
+        return {
+          success: false,
+          message: json?.error || 'No se pudo certificar la operación.',
+        };
+      }
+
+      if (json.transaction) {
+        const latestLocal = getStoredData();
+        const updatedList = deduplicateTransactions([json.transaction, ...latestLocal.transactions]).sort(
+          (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+        );
+        saveTransactionsLocalOnly(updatedList);
+        setTransactions((prev) =>
+          deduplicateTransactions([json.transaction, ...prev]).sort(
+            (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+          )
+        );
+      }
+
+      if (json.customer) {
+        const latestLocal = getStoredData();
+        saveCustomersLocalOnly([json.customer, ...latestLocal.customers]);
+        setCustomer(json.customer);
+      }
+
+      try {
+        if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+          const bc = new BroadcastChannel('libretadigital_tx_channel');
+          bc.postMessage({
+            type: 'TX_CERTIFIED',
+            transactionId: json.transaction?.id || transactionId,
+            customerId: customer.id,
+            validatedAt: json.validated_at,
+            validationMethod: json.validation_method || method,
+          });
+          bc.close();
+        }
+      } catch {}
+
+      try {
+        confetti({ particleCount: 70, spread: 60, origin: { y: 0.7 } });
+      } catch {}
+
+      setCertifyToast({
+        type: 'success',
+        message:
+          method === 'QR_SCAN_IN_STORE'
+            ? '¡Compra certificada al instante por QR!'
+            : '¡Compra certificada exitosamente con PIN!',
+      });
+
+      await loadData();
+      return { success: true };
+    } catch {
+      if (customerPin) {
+        const localRes = certifyTransactionWithPin(transactionId, customerPin, method);
+        if (localRes.success) {
+          try {
+            confetti({ particleCount: 70, spread: 60, origin: { y: 0.7 } });
+          } catch {}
+          setCertifyToast({
+            type: 'success',
+            message: '¡Compra certificada con PIN!',
+          });
+          await loadData();
+          return { success: true };
+        }
+        return { success: false, message: localRes.message };
+      }
+      return {
+        success: false,
+        message: 'Error de conexión al validar el QR. Verificá tu internet o usá tu PIN de 4 dígitos.',
+      };
+    }
+  };
+
+  const handleQRScan = async (decodedText: string): Promise<{ success: boolean; message?: string }> => {
+    const raw = (decodedText || '').trim();
+    if (!raw) {
+      return { success: false, message: 'El código QR está vacío.' };
+    }
+
+    let certifyTx = '';
+    let code = '';
+    let scannedToken = '';
+
+    try {
+      const origin = typeof window !== 'undefined' ? window.location.origin : 'https://libretadigital.app';
+      const parsed = raw.startsWith('{') ? null : new URL(raw, origin);
+      if (parsed) {
+        certifyTx = parsed.searchParams.get('certifyTx') || parsed.searchParams.get('txId') || '';
+        code = parsed.searchParams.get('code') || parsed.searchParams.get('opCode') || '';
+        const tokenMatch = parsed.pathname.match(/\/portal\/([^/?#]+)/);
+        if (tokenMatch && tokenMatch[1]) {
+          scannedToken = decodeURIComponent(tokenMatch[1]);
+        }
+      }
+    } catch {}
+
+    if (!certifyTx && raw.startsWith('{')) {
+      try {
+        const json = JSON.parse(raw);
+        certifyTx = String(json.certifyTx || json.txId || '');
+        code = String(json.code || json.opCode || '');
+        scannedToken = String(json.qrToken || '');
+      } catch {}
+    }
+
+    if (!certifyTx || !code) {
+      return {
+        success: false,
+        message: 'Este QR no corresponde a una confirmación de compra. Escaneá el QR que aparece en la caja del comercio.',
+      };
+    }
+
+    if (scannedToken && customer?.qr_token && !safeCompare(scannedToken, customer.qr_token)) {
+      return {
+        success: false,
+        message: 'Este código QR pertenece a otra cuenta de cliente.',
+      };
+    }
+
+    return await certifyOperation({
+      transactionId: certifyTx,
+      method: 'QR_SCAN_IN_STORE',
+      operationCode: code,
+    });
+  };
+
+  // Soporte automático si el cliente abrió un link QR directo (?certifyTx=...&code=...)
+  useEffect(() => {
+    if (!customer || typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    const certifyTx = params.get('certifyTx');
+    const code = params.get('code');
+    if (!certifyTx || !code) return;
+
+    const dedupKey = `${certifyTx}:${code}`;
+    if (autoCertifiedUrlRef.current === dedupKey) return;
+    autoCertifiedUrlRef.current = dedupKey;
+
+    (async () => {
+      const res = await certifyOperation({
+        transactionId: certifyTx,
+        method: 'QR_SCAN_IN_STORE',
+        operationCode: code,
+      });
+      if (!res.success && res.message) {
+        setCertifyToast({ type: 'error', message: res.message });
+      }
+      try {
+        window.history.replaceState({}, '', window.location.pathname);
+      } catch {}
+    })();
+  }, [customer?.id]);
+
+  // Ocultar alerta de certificación automáticamente
+  useEffect(() => {
+    if (!certifyToast) return;
+    const timer = window.setTimeout(() => setCertifyToast(null), 4500);
+    return () => window.clearTimeout(timer);
+  }, [certifyToast]);
+
   if (isLoadingCloud && (!customer || !tenant)) {
     return (
       <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-4">
@@ -297,32 +506,28 @@ export function CustomerPortalView({ token }: Props) {
     );
   }
 
-  const handleSignOperation = (txId: string) => {
+  const handleSignOperation = async (txId: string) => {
     setSignError('');
-    const res = certifyTransactionWithPin(txId, pinInput, 'REMOTE_QR_APPROVAL');
+    const cleanPin = pinInput.trim();
+    const storedPin = String(customer.security_pin || '').trim();
+    if (!cleanPin || !storedPin || !safeCompare(cleanPin, storedPin)) {
+      setSignError('PIN incorrecto. Debe ingresar su PIN secreto de 4 dígitos.');
+      return;
+    }
+
+    setCertifyingTxId(txId);
+    const res = await certifyOperation({
+      transactionId: txId,
+      method: 'REMOTE_QR_APPROVAL',
+      customerPin: cleanPin,
+    });
+    setCertifyingTxId(null);
+
     if (res.success) {
-      confetti({ particleCount: 70, spread: 60, origin: { y: 0.7 } });
       setSigningTxId(null);
       setPinInput('');
-
-      // Sincronizar certificación en la API central
-      const targetTx = transactions.find((t) => t.id === txId);
-      if (targetTx) {
-        fetch('/api/transactions', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            ...targetTx,
-            status: 'CERTIFIED_BOTH',
-            validated_at: new Date().toISOString(),
-            validation_method: 'REMOTE_QR_APPROVAL',
-          }),
-        }).catch(() => {});
-      }
-
-      loadData();
     } else {
-      setSignError(res.message);
+      setSignError(res.message || 'No se pudo certificar con PIN.');
     }
   };
 
@@ -443,6 +648,26 @@ export function CustomerPortalView({ token }: Props) {
           </div>
         </div>
 
+        {/* OPCIÓN PRINCIPAL EN TARJETA: LECTOR DE QR PARA CERTIFICAR AL INSTANTE */}
+        <div className="mt-4 pt-4 border-t border-white/10 space-y-1.5">
+          <button
+            type="button"
+            onClick={() => setShowQRScanner(true)}
+            className="w-full py-3 px-4 bg-emerald-500 hover:bg-emerald-400 active:scale-[0.99] text-slate-950 font-black rounded-2xl text-xs sm:text-sm shadow-lg shadow-emerald-500/25 flex items-center justify-center gap-2 transition cursor-pointer"
+          >
+            <ScanLine className="w-4 h-4 shrink-0" />
+            <span>Escanear QR y Certificar Compra</span>
+            {pendingTxsCount > 0 && (
+              <span className="ml-0.5 bg-slate-950 text-emerald-300 text-[10px] font-black px-2 py-0.5 rounded-full">
+                {pendingTxsCount} {pendingTxsCount === 1 ? 'pendiente' : 'pendientes'}
+              </span>
+            )}
+          </button>
+          <p className="text-[10px] text-slate-400 text-center">
+            2ª opción: también podés confirmar cada compra con tu PIN de 4 dígitos.
+          </p>
+        </div>
+
         {isOverLimit && (
           <div className="mt-4 bg-amber-500/20 border border-amber-400/40 text-amber-200 text-xs p-2.5 rounded-xl font-medium flex items-center gap-2">
             <AlertCircle className="w-4 h-4 text-amber-400 shrink-0" />
@@ -450,6 +675,24 @@ export function CustomerPortalView({ token }: Props) {
           </div>
         )}
       </div>
+
+      {/* BANNER FEEDBACK DE CERTIFICACIÓN INSTANTÁNEA */}
+      {certifyToast && (
+        <div
+          className={`mt-3 p-3.5 rounded-2xl border text-xs font-bold flex items-center gap-2.5 shadow-sm animate-in fade-in duration-200 ${
+            certifyToast.type === 'success'
+              ? 'bg-emerald-50 border-emerald-300 text-emerald-900'
+              : 'bg-rose-50 border-rose-300 text-rose-800'
+          }`}
+        >
+          {certifyToast.type === 'success' ? (
+            <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+          ) : (
+            <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+          )}
+          <span>{certifyToast.message}</span>
+        </div>
+      )}
 
       {/* TARJETA DE ACEPTACIÓN DE TÉRMINOS & INFORMCONF */}
       {!customer.terms_accepted ? (
@@ -854,10 +1097,19 @@ export function CustomerPortalView({ token }: Props) {
                                   className="w-28 text-center text-lg font-mono font-bold tracking-widest bg-white border-2 border-indigo-500 rounded-xl focus:outline-none"
                                 />
                                 <button
+                                  type="button"
+                                  disabled={certifyingTxId === tx.id}
                                   onClick={() => handleSignOperation(tx.id)}
-                                  className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 rounded-xl shadow-md transition text-xs"
+                                  className="flex-1 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 text-white font-bold py-2 rounded-xl shadow-md transition text-xs flex items-center justify-center gap-1.5 cursor-pointer"
                                 >
-                                  Certificar
+                                  {certifyingTxId === tx.id ? (
+                                    <>
+                                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                      <span>Certificando...</span>
+                                    </>
+                                  ) : (
+                                    <span>Certificar</span>
+                                  )}
                                 </button>
                                 <button
                                   onClick={() => setSigningTxId(null)}
@@ -922,6 +1174,13 @@ export function CustomerPortalView({ token }: Props) {
           onClose={() => setViewingReceiptTx(null)}
         />
       )}
+
+      {/* MODAL LECTOR DE QR CON CÁMARA PARA CERTIFICACIÓN INSTANTÁNEA */}
+      <QRScannerModal
+        isOpen={showQRScanner}
+        onClose={() => setShowQRScanner(false)}
+        onScan={handleQRScan}
+      />
       {/* FOOTER LEGAL DEL PORTAL */}
       <footer className="mt-8 pt-4 border-t border-slate-200 text-center text-[11px] text-slate-400 space-y-2">
         <p>LibretaDigital Pro • Portal de Cliente</p>

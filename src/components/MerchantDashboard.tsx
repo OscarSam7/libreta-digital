@@ -42,6 +42,7 @@ import { PaymentReceiptModal } from '@/components/PaymentReceiptModal';
 import { PrinterSettingsModal } from '@/components/PrinterSettingsModal';
 import { CustomDateInput } from '@/components/ui/CustomDatePickerModal';
 import { sanitizeText, validateAmount } from '@/lib/validation';
+import { createClient } from '@/lib/supabase/client';
 import { PrinterFormat } from '@/types';
 import { getStoredPrinterFormat } from '@/lib/storage';
 import {
@@ -86,7 +87,9 @@ import {
   Share2,
   Sparkles,
   UserCog,
-  Pencil
+  Pencil,
+  ScanLine,
+  Loader2
 } from 'lucide-react';
 
 const REGIONAL_CURRENCIES = [
@@ -164,6 +167,8 @@ export function MerchantDashboard() {
   const [createdTx, setCreatedTx] = useState<Transaction | null>(null);
   const [enteredPin, setEnteredPin] = useState('');
   const [txError, setTxError] = useState('');
+  const [certifiedViaMethod, setCertifiedViaMethod] = useState<string | null>(null);
+  const [verifyingPin, setVerifyingPin] = useState(false);
 
   // Formulario Alta de Cliente
   const [newCustName, setNewCustName] = useState('');
@@ -180,6 +185,8 @@ export function MerchantDashboard() {
   } | null>(null);
   const [receiptData, setReceiptData] = useState<{ transaction: Transaction; customer: Customer } | null>(null);
   const pushedLocalTxIdsRef = useRef<Set<string>>(new Set());
+  const liveConfirmedTxIdRef = useRef<string | null>(null);
+  const autoCloseTimerRef = useRef<number | null>(null);
 
   // Filtros del Libro Mayor (Asientos Inmutables) por fecha, tipo y cliente
   const [ledgerDateFrom, setLedgerDateFrom] = useState('');
@@ -372,10 +379,11 @@ export function MerchantDashboard() {
     };
 
     syncCloudData();
-    const interval = setInterval(syncCloudData, 4000);
+    const interval = setInterval(syncCloudData, 2000);
 
     // BroadcastChannel para sincronización instantánea entre pestañas
     let bc: BroadcastChannel | null = null;
+    let txBc: BroadcastChannel | null = null;
     try {
       if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
         bc = new BroadcastChannel('libretadigital_customers_channel');
@@ -395,8 +403,53 @@ export function MerchantDashboard() {
             });
           }
         };
+
+        txBc = new BroadcastChannel('libretadigital_tx_channel');
+        txBc.onmessage = (event) => {
+          if (event.data?.type === 'TX_CERTIFIED' && event.data.transactionId) {
+            const normTxId = ensureValidUuid(event.data.transactionId);
+            setTransactions((prevTx) => {
+              let changed = false;
+              const nextTx = prevTx.map((t) => {
+                if (ensureValidUuid(t.id) !== normTxId || t.status === 'CERTIFIED_BOTH') return t;
+                changed = true;
+                return {
+                  ...t,
+                  status: 'CERTIFIED_BOTH' as const,
+                  validated_at: event.data.validatedAt || new Date().toISOString(),
+                  validation_method: event.data.validationMethod || 'REMOTE_QR_APPROVAL',
+                };
+              });
+              if (changed) {
+                saveTransactionsLocalOnly(nextTx);
+                return nextTx;
+              }
+              return prevTx;
+            });
+            syncCloudData();
+          }
+        };
       }
     } catch (e) {}
+
+    // Suscripción Supabase Realtime cuando las credenciales estén activas
+    let realtimeSupabase: any = null;
+    let realtimeChannel: any = null;
+    try {
+      const sb = createClient();
+      if (sb && tenant?.id) {
+        realtimeSupabase = sb;
+        realtimeChannel = sb
+          .channel(`merchant-live-${tenant.id}`)
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'transactions' }, () => {
+            syncCloudData();
+          })
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'customers' }, () => {
+            syncCloudData();
+          })
+          .subscribe();
+      }
+    } catch {}
 
     const handleVisibility = () => {
       if (document.visibilityState === 'visible') {
@@ -420,8 +473,161 @@ export function MerchantDashboard() {
       window.removeEventListener('storage', handleUpdate);
       window.removeEventListener('libreta_printer_changed', handlePrinterChange);
       if (bc) bc.close();
+      if (txBc) txBc.close();
+      if (realtimeSupabase && realtimeChannel) {
+        try {
+          realtimeSupabase.removeChannel(realtimeChannel);
+        } catch {}
+      }
     };
   }, [tenant?.id]);
+
+  // Limpiar temporizador de cierre automático al desmontar el panel
+  useEffect(() => {
+    return () => {
+      if (autoCloseTimerRef.current !== null) {
+        window.clearTimeout(autoCloseTimerRef.current);
+      }
+    };
+  }, []);
+
+  // Watcher en vivo cuando el comercio espera confirmación QR o PIN del cliente
+  useEffect(() => {
+    if (txStep !== 'PIN_VERIFY' || !createdTx || !activeTxCustomer || !tenant) return;
+
+    const targetNormId = ensureValidUuid(createdTx.id);
+    if (liveConfirmedTxIdRef.current !== targetNormId) {
+      liveConfirmedTxIdRef.current = null;
+    }
+
+    let isActive = true;
+
+    const handleRemoteCertified = (certifiedInfo: Partial<Transaction>) => {
+      if (!isActive || liveConfirmedTxIdRef.current === targetNormId) return;
+      liveConfirmedTxIdRef.current = targetNormId;
+
+      const validatedAt = certifiedInfo.validated_at || new Date().toISOString();
+      const validationMethod = certifiedInfo.validation_method || 'REMOTE_QR_APPROVAL';
+
+      try {
+        const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(587.33, ctx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(880, ctx.currentTime + 0.14);
+        gain.gain.setValueAtTime(0.22, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.32);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start();
+        osc.stop(ctx.currentTime + 0.32);
+      } catch {}
+
+      const currentStored = getStoredData().transactions;
+      const updatedList = deduplicateTransactions([
+        {
+          ...createdTx,
+          ...certifiedInfo,
+          id: createdTx.id,
+          status: 'CERTIFIED_BOTH' as const,
+          validated_at: validatedAt,
+          validation_method: validationMethod,
+        },
+        ...currentStored,
+      ]).sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+
+      saveTransactionsLocalOnly(updatedList);
+      setTransactions(updatedList);
+      setCertifiedViaMethod(/QR_SCAN/i.test(validationMethod) ? 'QR' : 'PIN');
+      setTxStep('SUCCESS');
+
+      if (autoCloseTimerRef.current !== null) {
+        window.clearTimeout(autoCloseTimerRef.current);
+      }
+      autoCloseTimerRef.current = window.setTimeout(() => {
+        setActiveTxCustomer(null);
+        setCreatedTx(null);
+        setTxStep('INPUT');
+        setTxAmount('');
+        setTxDescription('');
+        setEnteredPin('');
+        setCertifiedViaMethod(null);
+        loadData();
+      }, 1600);
+    };
+
+    const checkLiveStatus = async () => {
+      if (!isActive || liveConfirmedTxIdRef.current === targetNormId) return;
+      try {
+        const res = await fetch(
+          `/api/transactions?tenantId=${encodeURIComponent(tenant.id)}&customerId=${encodeURIComponent(activeTxCustomer.id)}&txId=${encodeURIComponent(createdTx.id)}&t=${Date.now()}`,
+          { cache: 'no-store' }
+        );
+        if (!res.ok) return;
+        const json = await res.json();
+        if (json?.success && Array.isArray(json.transactions)) {
+          const match = json.transactions.find(
+            (t: Transaction) => ensureValidUuid(t.id) === targetNormId && t.status === 'CERTIFIED_BOTH'
+          );
+          if (match) {
+            handleRemoteCertified(match);
+          }
+        }
+      } catch {}
+    };
+
+    checkLiveStatus();
+    const pollInterval = window.setInterval(checkLiveStatus, 1000);
+
+    let bcLive: BroadcastChannel | null = null;
+    try {
+      if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+        bcLive = new BroadcastChannel('libretadigital_tx_channel');
+        bcLive.onmessage = (event) => {
+          if (
+            event.data?.type === 'TX_CERTIFIED' &&
+            event.data.transactionId &&
+            ensureValidUuid(event.data.transactionId) === targetNormId
+          ) {
+            handleRemoteCertified({
+              validated_at: event.data.validatedAt,
+              validation_method: event.data.validationMethod,
+            });
+          }
+        };
+      }
+    } catch {}
+
+    let rtSupabase: any = null;
+    let rtChannel: any = null;
+    try {
+      const sb = createClient();
+      if (sb) {
+        rtSupabase = sb;
+        rtChannel = sb
+          .channel(`tx-certify-watch-${targetNormId}`)
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'transactions' }, () => {
+            checkLiveStatus();
+          })
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'customers' }, () => {
+            checkLiveStatus();
+          })
+          .subscribe();
+      }
+    } catch {}
+
+    return () => {
+      isActive = false;
+      window.clearInterval(pollInterval);
+      if (bcLive) bcLive.close();
+      if (rtSupabase && rtChannel) {
+        try {
+          rtSupabase.removeChannel(rtChannel);
+        } catch {}
+      }
+    };
+  }, [txStep, createdTx?.id, activeTxCustomer?.id, tenant?.id]);
 
   if (!tenant) return null;
 
@@ -629,27 +835,59 @@ export function MerchantDashboard() {
         loadData();
       }, 1200);
     } else {
+      if (autoCloseTimerRef.current !== null) {
+        window.clearTimeout(autoCloseTimerRef.current);
+        autoCloseTimerRef.current = null;
+      }
+      liveConfirmedTxIdRef.current = null;
+      setCertifiedViaMethod(null);
+      setEnteredPin('');
       setCreatedTx(res.transaction);
       setTxStep('PIN_VERIFY');
     }
   };
 
-  const handleVerifyPin = () => {
-    if (!createdTx) return;
+  const handleVerifyPin = async () => {
+    if (!createdTx || verifyingPin) return;
     setTxError('');
+    setVerifyingPin(true);
 
     const res = certifyTransactionWithPin(createdTx.id, enteredPin, 'IN_STORE_PIN');
     if (res.success) {
+      liveConfirmedTxIdRef.current = ensureValidUuid(createdTx.id);
+      try {
+        await fetch('/api/transactions/certify', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          cache: 'no-store',
+          body: JSON.stringify({
+            transactionId: createdTx.id,
+            customerId: createdTx.customer_id,
+            tenantId: createdTx.tenant_id,
+            method: 'IN_STORE_PIN',
+            customerPin: enteredPin.trim(),
+          }),
+        });
+      } catch {}
+
+      setVerifyingPin(false);
+      setCertifiedViaMethod('PIN');
       setTxStep('SUCCESS');
-      setTimeout(() => {
+      if (autoCloseTimerRef.current !== null) {
+        window.clearTimeout(autoCloseTimerRef.current);
+      }
+      autoCloseTimerRef.current = window.setTimeout(() => {
         setActiveTxCustomer(null);
+        setCreatedTx(null);
         setTxStep('INPUT');
         setTxAmount('');
         setTxDescription('');
         setEnteredPin('');
+        setCertifiedViaMethod(null);
         loadData();
       }, 1200);
     } else {
+      setVerifyingPin(false);
       setTxError(res.message);
     }
   };
@@ -1750,7 +1988,18 @@ export function MerchantDashboard() {
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm p-0 sm:p-4">
           <div className="w-full max-w-md bg-white rounded-t-3xl sm:rounded-3xl p-6 shadow-2xl relative border border-slate-100 animate-in fade-in slide-in-from-bottom max-h-[92vh] overflow-y-auto">
             <button
-              onClick={() => setActiveTxCustomer(null)}
+              type="button"
+              onClick={() => {
+                if (autoCloseTimerRef.current !== null) {
+                  window.clearTimeout(autoCloseTimerRef.current);
+                  autoCloseTimerRef.current = null;
+                }
+                setActiveTxCustomer(null);
+                setCreatedTx(null);
+                setTxStep('INPUT');
+                setCertifiedViaMethod(null);
+                setEnteredPin('');
+              }}
               className="absolute top-5 right-5 p-2 rounded-full text-slate-400 hover:text-slate-700 hover:bg-slate-100"
             >
               <X className="w-5 h-5" />
@@ -1935,93 +2184,116 @@ export function MerchantDashboard() {
               </form>
             )}
 
-            {txStep === 'PIN_VERIFY' && createdTx && activeTxCustomer && (
-              <div className="text-center space-y-4 py-1 max-h-[80vh] overflow-y-auto">
-                <div className="w-14 h-14 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center mx-auto shadow-inner">
-                  <ShieldCheck className="w-8 h-8" />
-                </div>
+            {txStep === 'PIN_VERIFY' && createdTx && activeTxCustomer && (() => {
+              const baseUrl = typeof window !== 'undefined' ? window.location.origin : 'https://libreta-digital-six.vercel.app';
+              const certifyQrUrl = `${baseUrl}/portal/${activeTxCustomer.qr_token}?certifyTx=${encodeURIComponent(createdTx.id)}&code=${encodeURIComponent(createdTx.validation_pin || '')}`;
 
-                <div>
-                  <h4 className="text-xl font-black text-slate-900">Firma del Cliente</h4>
-                  <p className="text-xs text-slate-500 mt-1 max-w-xs mx-auto">
-                    Pedí a <b>{activeTxCustomer.full_name}</b> que ingrese su <b>PIN secreto de 4 dígitos</b> para
-                    confirmar el fiado por <b className="text-slate-900">{formatCurrency(createdTx.amount)}</b>:
-                  </p>
-                </div>
-
-                {txError && (
-                  <p className="text-xs font-semibold text-rose-600 bg-rose-50 py-2 px-3 rounded-xl border border-rose-200">
-                    {txError}
-                  </p>
-                )}
-
-                <div>
-                  <input
-                    type="password"
-                    inputMode="numeric"
-                    maxLength={4}
-                    placeholder="• • • •"
-                    value={enteredPin}
-                    onChange={(e) => setEnteredPin(e.target.value.replace(/\D/g, '').slice(0, 4))}
-                    className="w-44 text-center text-3xl tracking-widest font-mono py-2.5 border-2 border-blue-500 rounded-2xl focus:outline-none mx-auto bg-white shadow-sm block"
-                  />
-                  <p className="text-[10px] text-slate-400 mt-1.5">
-                    El PIN es privado y solo lo conoce el cliente (no se muestra en caja).
-                  </p>
-                </div>
-
-                <div className="flex gap-2.5 pt-1">
-                  <button
-                    type="button"
-                    onClick={() => setActiveTxCustomer(null)}
-                    className="w-1/2 py-3 bg-slate-100 hover:bg-slate-200 text-slate-600 font-semibold rounded-2xl text-xs cursor-pointer"
-                  >
-                    Dejar Pendiente
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleVerifyPin}
-                    className="w-1/2 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-2xl shadow-md text-xs cursor-pointer"
-                  >
-                    Firmar y Certificar
-                  </button>
-                </div>
-
-                {/* OPCIÓN ALTERNATIVA: ESCANEO DE QR O ENVÍO POR WHATSAPP PARA FIRMA REMOTA */}
-                <div className="pt-3 border-t border-slate-200 space-y-2.5">
-                  <p className="text-[11px] font-bold text-slate-600">
-                    ¿El cliente prefiere aprobar desde su propio celular?
-                  </p>
-                  <div className="flex items-center justify-center gap-4 bg-slate-50 p-3 rounded-2xl border border-slate-200">
-                    <div className="bg-white p-2 rounded-xl border border-slate-200 shadow-xs flex-shrink-0">
-                      <QRCodeSVG
-                        value={`${typeof window !== 'undefined' ? window.location.origin : 'https://libreta-digital-six.vercel.app'}/portal/${activeTxCustomer.qr_token}`}
-                        size={86}
-                        level="M"
-                      />
+              return (
+                <div className="text-center space-y-4 py-1 max-h-[82vh] overflow-y-auto">
+                  {/* OPCIÓN PRINCIPAL: QR GRANDE PARA ESCANEO INSTANTÁNEO DESDE LA TARJETA DEL CLIENTE */}
+                  <div className="space-y-2.5">
+                    <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 text-[11px] font-black uppercase tracking-wider">
+                      <ScanLine className="w-3.5 h-3.5" />
+                      <span>Certificación Instantánea por QR</span>
                     </div>
-                    <div className="text-left space-y-2 flex-1">
-                      <p className="text-[11px] text-slate-500 leading-snug">
-                        Que escanee este QR con su cámara o recibí su firma remota enviándole el enlace:
-                      </p>
-                      {activeTxCustomer.phone && !/sin\s*celular|excepci[oó]n/i.test(activeTxCustomer.phone) && (
+
+                    <h4 className="text-lg font-black text-slate-900 leading-tight">
+                      Confirmar Fiado por {formatCurrency(createdTx.amount)}
+                    </h4>
+                    <p className="text-xs text-slate-500 max-w-xs mx-auto leading-snug">
+                      Pedí a <b>{activeTxCustomer.full_name}</b> que toque <b>"Escanear QR y Certificar Compra"</b> en su tarjeta y apunte a este QR:
+                    </p>
+
+                    <div className="inline-block bg-white p-3.5 rounded-3xl border-2 border-emerald-500 shadow-lg shadow-emerald-500/10 mx-auto">
+                      <QRCodeSVG value={certifyQrUrl} size={172} level="M" />
+                    </div>
+
+                    <div className="flex items-center justify-center gap-2 text-[11px] font-bold text-emerald-700 bg-emerald-50/90 py-1.5 px-3 rounded-xl border border-emerald-200 max-w-xs mx-auto">
+                      <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping shrink-0" />
+                      <span>Esperando escaneo QR o confirmación en vivo...</span>
+                    </div>
+
+                    {activeTxCustomer.phone && !/sin\s*celular|excepci[oó]n/i.test(activeTxCustomer.phone) && (
+                      <div>
                         <a
                           href={`https://wa.me/${activeTxCustomer.phone.replace(/\D/g, '').replace(/^0/, '595')}?text=${encodeURIComponent(
-                            `Hola *${activeTxCustomer.full_name}*! Registramos tu compra fiada en *${tenant.business_name}* por *${formatCurrency(createdTx.amount)}* (${createdTx.description || 'Mercaderías'}). Por favor confirmá la operación con tu PIN aquí:\n${typeof window !== 'undefined' ? window.location.origin : 'https://libreta-digital-six.vercel.app'}/portal/${activeTxCustomer.qr_token}`
+                            `Hola *${activeTxCustomer.full_name}*! Registramos tu compra fiada en *${tenant.business_name}* por *${formatCurrency(createdTx.amount)}* (${createdTx.description || 'Mercaderías'}). Tocá este enlace para certificar al instante:\n${certifyQrUrl}`
                           )}`}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-[11px] transition shadow-xs"
+                          className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs transition shadow-sm"
                         >
                           <MessageCircle className="w-3.5 h-3.5" />
-                          Enviar por WhatsApp
+                          <span>Enviar enlace directo por WhatsApp</span>
                         </a>
-                      )}
-                    </div>
+                      </div>
+                    )}
                   </div>
+
+                  {/* 2ª OPCIÓN: INGRESO MANUAL DE PIN DE 4 DÍGITOS */}
+                  <div className="pt-3 border-t border-slate-200 space-y-2.5 bg-slate-50/80 p-3 rounded-2xl">
+                    <div className="flex items-center justify-center gap-1.5 text-xs font-black text-slate-700">
+                      <KeyRound className="w-3.5 h-3.5 text-blue-600" />
+                      <span>2ª Opción: Confirmar con PIN de 4 dígitos</span>
+                    </div>
+
+                    {txError && (
+                      <p className="text-xs font-semibold text-rose-600 bg-rose-50 py-2 px-3 rounded-xl border border-rose-200">
+                        {txError}
+                      </p>
+                    )}
+
+                    <div className="flex items-center justify-center gap-2">
+                      <input
+                        type="password"
+                        inputMode="numeric"
+                        maxLength={4}
+                        placeholder="• • • •"
+                        value={enteredPin}
+                        onChange={(e) => setEnteredPin(e.target.value.replace(/\D/g, '').slice(0, 4))}
+                        className="w-36 text-center text-2xl tracking-widest font-mono py-2 border-2 border-blue-500 rounded-xl focus:outline-none bg-white shadow-xs"
+                      />
+                      <button
+                        type="button"
+                        disabled={verifyingPin}
+                        onClick={handleVerifyPin}
+                        className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 text-white font-bold rounded-xl shadow-sm text-xs flex items-center gap-1.5 cursor-pointer"
+                      >
+                        {verifyingPin ? (
+                          <>
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            <span>Validando...</span>
+                          </>
+                        ) : (
+                          <span>Firmar con PIN</span>
+                        )}
+                      </button>
+                    </div>
+                    <p className="text-[10px] text-slate-400">
+                      El PIN es privado y solo lo conoce el cliente (no se muestra en caja).
+                    </p>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (autoCloseTimerRef.current !== null) {
+                        window.clearTimeout(autoCloseTimerRef.current);
+                        autoCloseTimerRef.current = null;
+                      }
+                      setActiveTxCustomer(null);
+                      setCreatedTx(null);
+                      setTxStep('INPUT');
+                      setCertifiedViaMethod(null);
+                      setEnteredPin('');
+                    }}
+                    className="w-full py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 font-semibold rounded-2xl text-xs cursor-pointer"
+                  >
+                    Dejar Pendiente
+                  </button>
                 </div>
-              </div>
-            )}
+              );
+            })()}
 
             {txStep === 'SUCCESS' && (
               <div className="text-center py-8 space-y-3">
@@ -2030,7 +2302,11 @@ export function MerchantDashboard() {
                 </div>
                 <h4 className="text-xl font-black text-slate-900">¡Operación Asentada con Éxito!</h4>
                 <p className="text-xs text-slate-500">
-                  Saldo del cliente actualizado y acreditado en el Libro Mayor.
+                  {certifiedViaMethod === 'QR'
+                    ? 'Compra certificada al instante mediante código QR y acreditada en el Libro Mayor.'
+                    : certifiedViaMethod === 'PIN'
+                    ? 'Compra confirmada con PIN del cliente y acreditada en el Libro Mayor.'
+                    : 'Saldo del cliente actualizado y acreditado en el Libro Mayor.'}
                 </p>
               </div>
             )}

@@ -1,5 +1,5 @@
 import { Customer, Transaction, TransactionType, PaymentMethod, ValidationStatus, TransactionItem } from '@/types';
-import { getStoredData, saveCustomers, saveTransactions, ensureValidUuid } from './storage';
+import { getStoredData, saveCustomers, saveTransactions, saveTransactionsLocalOnly, ensureValidUuid } from './storage';
 import { safeCompare } from './security';
 import { validateAmount, sanitizeText } from './validation';
 
@@ -173,14 +173,19 @@ export function certifyTransactionWithPin(
   method: string = 'IN_STORE_PIN'
 ): { success: boolean; message: string } {
   const { transactions, customers } = getStoredData();
-  const txIndex = transactions.findIndex((t) => t.id === transactionId);
+  const targetTxUuid = ensureValidUuid(transactionId);
+  const txIndex = transactions.findIndex(
+    (t) => t.id === transactionId || ensureValidUuid(t.id) === targetTxUuid
+  );
 
   if (txIndex === -1) {
     return { success: false, message: 'Operación no encontrada' };
   }
 
   const tx = transactions[txIndex];
-  const customer = customers.find((c) => c.id === tx.customer_id);
+  const customer = customers.find(
+    (c) => c.id === tx.customer_id || ensureValidUuid(c.id) === ensureValidUuid(tx.customer_id)
+  );
 
   if (!customer) {
     return { success: false, message: 'Cliente no válido' };
@@ -200,12 +205,14 @@ export function certifyTransactionWithPin(
     };
   }
 
+  const validatedAt = new Date().toISOString();
   const certifiedTx: Transaction = {
     ...tx,
     status: 'CERTIFIED_BOTH',
-    validated_at: new Date().toISOString(),
+    validated_at: validatedAt,
     validation_method: method,
     validation_metadata: {
+      ...(tx.validation_metadata || {}),
       ip: '190.128.45.10',
       userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : 'POS-Terminal',
       certified_channel: method,
@@ -213,13 +220,35 @@ export function certifyTransactionWithPin(
   };
 
   transactions[txIndex] = certifiedTx;
-  saveTransactions(transactions);
+  saveTransactionsLocalOnly(transactions);
 
   if (typeof window !== 'undefined') {
-    fetch('/api/transactions', {
+    window.dispatchEvent(new Event('libreta_data_updated'));
+
+    try {
+      if ('BroadcastChannel' in window) {
+        const bc = new BroadcastChannel('libretadigital_tx_channel');
+        bc.postMessage({
+          type: 'TX_CERTIFIED',
+          transactionId: certifiedTx.id,
+          customerId: customer.id,
+          validatedAt,
+          validationMethod: method,
+        });
+        bc.close();
+      }
+    } catch {}
+
+    fetch('/api/transactions/certify', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(certifiedTx),
+      body: JSON.stringify({
+        transactionId: certifiedTx.id,
+        customerId: customer.id,
+        tenantId: certifiedTx.tenant_id,
+        method,
+        customerPin: enteredPin.trim(),
+      }),
     }).catch(() => {});
   }
 

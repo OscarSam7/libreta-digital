@@ -89,6 +89,55 @@ async function ensureCustomerExistsInSupabase(
   }
 }
 
+async function markCertifiedInCustomerMetadata(
+  supabase: any,
+  customerId: string,
+  txId: string,
+  validatedAt: string,
+  validationMethod: string
+): Promise<void> {
+  try {
+    const { data: custRow } = await supabase
+      .from('customers')
+      .select('terms_acceptance_metadata')
+      .eq('id', customerId)
+      .maybeSingle();
+
+    const existingMeta =
+      custRow?.terms_acceptance_metadata && typeof custRow.terms_acceptance_metadata === 'object'
+        ? custRow.terms_acceptance_metadata
+        : {};
+    const nextMeta = {
+      ...existingMeta,
+      certified_txs: {
+        ...(existingMeta.certified_txs || {}),
+        [txId]: {
+          validated_at: validatedAt,
+          validation_method: validationMethod,
+        },
+      },
+    };
+    await supabase
+      .from('customers')
+      .update({ terms_acceptance_metadata: nextMeta })
+      .eq('id', customerId);
+  } catch {}
+}
+
+function getCertifiedMarkersFromMemory(tenantId: string): Map<string, Record<string, { validated_at?: string; validation_method?: string }>> {
+  const map = new Map<string, Record<string, { validated_at?: string; validation_method?: string }>>();
+  const shared = globalThis.__LIBRETA_SHARED_CUSTOMERS__;
+  if (!shared) return map;
+  const custs = shared.get(tenantId) || [];
+  for (const c of custs) {
+    const markers = c?.terms_acceptance_metadata?.certified_txs;
+    if (markers && typeof markers === 'object') {
+      map.set(ensureValidUuid(c.id), markers);
+    }
+  }
+  return map;
+}
+
 // Helper resiliente compatible con inmutabilidad RLS (transactions solo permite SELECT e INSERT)
 async function persistTransactionToSupabase(
   supabase: any,
@@ -103,6 +152,17 @@ async function persistTransactionToSupabase(
     }
 
     const payload: Record<string, any> = { ...cleanTransactionForSupabase(tx) };
+    // Si el cliente ya certificó esta operación antes de que llegara la fila inicial, asentamos directamente certificada
+    if (payload.status === 'PENDING_CUSTOMER') {
+      const memMarkers = getCertifiedMarkersFromMemory(tenantId).get(payload.customer_id);
+      const memCert = memMarkers?.[payload.id];
+      if (memCert) {
+        payload.status = 'CERTIFIED_BOTH';
+        payload.validated_at = memCert.validated_at || new Date().toISOString();
+        payload.validation_method = memCert.validation_method || 'QR_SCAN_IN_STORE';
+      }
+    }
+
     let retriedMissingCustomer = false;
     let lastError: string | undefined;
 
@@ -119,8 +179,37 @@ async function persistTransactionToSupabase(
         return { synced: true };
       }
 
-      // El asiento ya existe en el libro inmutable (clave primaria duplicada): idempotente -> sincronizado
+      // El asiento ya existe en el libro inmutable (clave primaria duplicada)
       if (error.code === '23505') {
+        if (payload.status === 'CERTIFIED_BOTH') {
+          const validatedAt = payload.validated_at || new Date().toISOString();
+          const validationMethod = payload.validation_method || 'REMOTE_QR_APPROVAL';
+          let txUpdated = false;
+          try {
+            const { data: updRows, error: updErr } = await supabase
+              .from('transactions')
+              .update({
+                status: 'CERTIFIED_BOTH',
+                validated_at: validatedAt,
+                validation_method: validationMethod,
+                validation_metadata: payload.validation_metadata || {},
+              })
+              .eq('id', payload.id)
+              .select('id');
+            if (!updErr && Array.isArray(updRows) && updRows.length > 0) {
+              txUpdated = true;
+            }
+          } catch {}
+          if (!txUpdated) {
+            await markCertifiedInCustomerMetadata(
+              supabase,
+              payload.customer_id,
+              payload.id,
+              validatedAt,
+              validationMethod
+            );
+          }
+        }
         return { synced: true };
       }
 
@@ -168,6 +257,7 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const tenantId = searchParams.get('tenantId') || INITIAL_TENANT.id;
     const customerId = searchParams.get('customerId');
+    const txId = searchParams.get('txId');
     const debugMode = searchParams.get('debug') === '1';
 
     if (!txStore.has(tenantId) && tenantId === INITIAL_TENANT.id) {
@@ -205,12 +295,69 @@ export async function GET(req: NextRequest) {
       }
     }
 
+    // Reconciliar asientos pendientes usando marcadores de certificación guardados en metadata de clientes (resiliencia RLS)
+    const pendingCustomerIds = Array.from(
+      new Set(
+        txs
+          .filter((t) => t.status === 'PENDING_CUSTOMER')
+          .map((t) => ensureValidUuid(t.customer_id))
+      )
+    );
+
+    if (pendingCustomerIds.length > 0) {
+      const markerMap = getCertifiedMarkersFromMemory(tenantId);
+
+      if (supabase) {
+        try {
+          const { data: custMetaRows } = await supabase
+            .from('customers')
+            .select('id, terms_acceptance_metadata')
+            .in('id', pendingCustomerIds);
+
+          if (Array.isArray(custMetaRows)) {
+            for (const row of custMetaRows) {
+              const markers = row?.terms_acceptance_metadata?.certified_txs;
+              if (markers && typeof markers === 'object') {
+                const cid = ensureValidUuid(row.id);
+                markerMap.set(cid, { ...(markerMap.get(cid) || {}), ...markers });
+              }
+            }
+          }
+        } catch {}
+      }
+
+      if (markerMap.size > 0) {
+        let anyPromoted = false;
+        txs = txs.map((t) => {
+          if (t.status !== 'PENDING_CUSTOMER') return t;
+          const normCid = ensureValidUuid(t.customer_id);
+          const normId = ensureValidUuid(t.id);
+          const certMarker = markerMap.get(normCid)?.[normId];
+          if (!certMarker) return t;
+          anyPromoted = true;
+          return {
+            ...t,
+            status: 'CERTIFIED_BOTH' as const,
+            validated_at: certMarker.validated_at || t.validated_at || new Date().toISOString(),
+            validation_method: certMarker.validation_method || t.validation_method || 'REMOTE_QR_APPROVAL',
+          };
+        });
+        if (anyPromoted) {
+          txStore.set(tenantId, txs);
+        }
+      }
+    }
+
     let responseTxs = txs;
     if (customerId) {
       const targetCustomerUuid = ensureValidUuid(customerId);
-      responseTxs = txs.filter(
+      responseTxs = responseTxs.filter(
         (t) => t.customer_id === customerId || ensureValidUuid(t.customer_id) === targetCustomerUuid
       );
+    }
+    if (txId) {
+      const targetTxUuid = ensureValidUuid(txId);
+      responseTxs = responseTxs.filter((t) => t.id === txId || ensureValidUuid(t.id) === targetTxUuid);
     }
 
     return NextResponse.json(
