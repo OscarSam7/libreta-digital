@@ -382,229 +382,245 @@ export function DetailedReportsModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-2 sm:p-4 overflow-y-auto font-sans animate-in fade-in">
       <div className="w-full max-w-5xl bg-white rounded-3xl shadow-2xl relative border border-slate-200 my-auto max-h-[94vh] flex flex-col overflow-hidden">
-        {/* ENCABEZADO SUPERIOR */}
-        <div className="p-4 sm:p-5 bg-gradient-to-r from-slate-900 via-indigo-950 to-blue-900 text-white flex justify-between items-center shrink-0">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-white/10 text-emerald-400 flex items-center justify-center backdrop-blur-md">
-              <FileText className="w-5 h-5" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="text-[10px] font-black uppercase tracking-wider bg-emerald-400/20 text-emerald-300 px-2 py-0.5 rounded-full border border-emerald-400/30">
-                  Reportes Oficiales con PDF & Excel
-                </span>
-                <span className="text-xs text-slate-300 font-bold">{tenant.business_name}</span>
+        {/* ENCABEZADO SUPERIOR MODERNO & COMPACTO */}
+        <div className="p-3 sm:p-5 bg-gradient-to-r from-slate-900 via-indigo-950 to-blue-900 text-white shrink-0 space-y-2.5">
+          {/* Fila 1: Título, Almacén y Botón Cerrar */}
+          <div className="flex items-center justify-between gap-2.5">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-white/10 text-emerald-400 flex items-center justify-center backdrop-blur-md shrink-0">
+                <FileText className="w-4 h-4 sm:w-5 sm:h-5" />
               </div>
-              <h2 className="text-lg sm:text-xl font-black mt-0.5">
-                Ventas, Cobranzas & Cartera de Clientes (Mora y Saldos)
-              </h2>
+              <div className="min-w-0">
+                <div className="flex items-center gap-2">
+                  <h2 className="text-sm sm:text-base font-black text-white truncate">
+                    Informes & Cartera
+                  </h2>
+                  <span className="hidden sm:inline-block text-[10px] font-black uppercase tracking-wider bg-emerald-400/20 text-emerald-300 px-2 py-0.5 rounded-full border border-emerald-400/30">
+                    PDF & Excel
+                  </span>
+                </div>
+                <p className="text-[11px] text-slate-300 font-medium truncate">
+                  {tenant.business_name} • Ventas, Cobros & Libro Mayor
+                </p>
+              </div>
             </div>
+
+            {/* Botón Cerrar */}
+            <button
+              onClick={onClose}
+              className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition cursor-pointer shrink-0"
+              title="Cerrar modal"
+            >
+              <X className="w-4 h-4" />
+            </button>
           </div>
 
-          <div className="flex items-center gap-2">
+          {/* Fila 2: Botones de Acción de Reportes */}
+          <div className="flex items-center gap-2 pt-1 border-t border-white/10">
             <button
+              type="button"
+              onClick={handleOpenCurrentTabPDF}
+              className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3 py-1.5 sm:py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-black shadow-md shadow-indigo-600/30 transition active:scale-95 cursor-pointer whitespace-nowrap"
+              title="Generar vista previa en PDF con opción de descarga"
+            >
+              <FileText className="w-3.5 h-3.5 text-amber-300 shrink-0" />
+              <span>Ver PDF & Descargar</span>
+            </button>
+
+            <button
+              type="button"
               onClick={() => {
                 setPdfMode('DAILY_CLOSING_REPORT');
                 setPdfCustomer(null);
                 setShowPDFModal(true);
               }}
-              className="flex items-center gap-1.5 px-3 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-black shadow-md shadow-emerald-600/30 transition active:scale-95 cursor-pointer"
+              className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3 py-1.5 sm:py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-black shadow-md shadow-emerald-600/30 transition active:scale-95 cursor-pointer whitespace-nowrap"
               title="Generar Relatorio General de Cierre de Actividades y Respaldo por WhatsApp"
             >
-              <ShieldCheck className="w-4 h-4 text-emerald-200" /> Cierre & Respaldo WA
-            </button>
-
-            <button
-              onClick={handleOpenCurrentTabPDF}
-              className="flex items-center gap-1.5 px-3 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-black shadow-md shadow-indigo-600/30 transition active:scale-95 cursor-pointer"
-              title="Generar vista previa en PDF con opción de descarga"
-            >
-              <FileText className="w-4 h-4 text-amber-300" /> Ver PDF & Descargar
-            </button>
-
-            <button
-              onClick={onClose}
-              className="p-2 rounded-full text-white/70 hover:text-white hover:bg-white/10 transition"
-            >
-              <X className="w-5 h-5" />
+              <ShieldCheck className="w-3.5 h-3.5 text-emerald-200 shrink-0" />
+              <span>Cierre & Respaldo WA</span>
             </button>
           </div>
         </div>
 
-        {/* BARRA DE FILTRO DE FECHAS CON BOTÓN EXPLÍCITO 'GENERAR REPORTE' */}
-        <div className="p-4 bg-slate-50 border-b border-slate-200 shrink-0 space-y-3">
-          <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-3">
-            {/* Contenedor de Fechas y Botón Generar */}
-            <div className="flex flex-wrap items-end gap-2.5 w-full lg:w-auto">
-              <div>
-                <label className="text-[9px] font-bold uppercase tracking-wider text-slate-400 block mb-0.5">
-                  Fecha Desde
-                </label>
-                <CustomDateInput
-                  value={inputDateFrom}
-                  onChange={(val) => setInputDateFrom(val)}
-                  label="Fecha Desde"
-                  className="min-w-[140px]"
-                />
+        {/* BARRA DE FILTRO DE FECHAS CON PRESETS HORIZONTALES Y BOTÓN GENERAR */}
+        <div className="p-3 sm:p-4 bg-slate-50 border-b border-slate-200 shrink-0 space-y-2.5">
+          <div className="flex flex-col lg:flex-row justify-between items-stretch lg:items-center gap-2.5">
+            {/* Fechas Desde / Hasta y Botón Generar */}
+            <div className="flex flex-col sm:flex-row sm:items-end gap-2 w-full lg:w-auto">
+              <div className="grid grid-cols-2 gap-2 sm:flex sm:items-end sm:gap-2">
+                <div className="min-w-0">
+                  <label className="text-[9px] font-bold uppercase tracking-wider text-slate-400 block mb-0.5">
+                    Desde
+                  </label>
+                  <CustomDateInput
+                    value={inputDateFrom}
+                    onChange={(val) => setInputDateFrom(val)}
+                    label="Fecha Desde"
+                    className="w-full text-xs"
+                  />
+                </div>
+
+                <div className="min-w-0">
+                  <label className="text-[9px] font-bold uppercase tracking-wider text-slate-400 block mb-0.5">
+                    Hasta
+                  </label>
+                  <CustomDateInput
+                    value={inputDateTo}
+                    onChange={(val) => setInputDateTo(val)}
+                    label="Fecha Hasta"
+                    className="w-full text-xs"
+                  />
+                </div>
               </div>
 
-              <span className="text-slate-400 font-bold text-xs pb-2">➔</span>
-
-              <div>
-                <label className="text-[9px] font-bold uppercase tracking-wider text-slate-400 block mb-0.5">
-                  Fecha Hasta
-                </label>
-                <CustomDateInput
-                  value={inputDateTo}
-                  onChange={(val) => setInputDateTo(val)}
-                  label="Fecha Hasta"
-                  className="min-w-[140px]"
-                />
-              </div>
-
-              {/* BOTÓN EXPLÍCITO GENERAR REPORTE */}
+              {/* Botón Generar Reporte */}
               <button
                 type="button"
                 onClick={handleGenerateReport}
-                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-black transition shadow-md active:scale-95 ${
+                className={`w-full sm:w-auto flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl text-xs font-black transition shadow-sm active:scale-95 cursor-pointer whitespace-nowrap ${
                   isFiltersDirty
                     ? 'bg-amber-500 hover:bg-amber-400 text-slate-950 shadow-amber-500/30 animate-pulse'
                     : 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-indigo-600/30'
                 }`}
               >
-                <Sparkles className="w-4 h-4" />
-                {isFiltersDirty ? 'Generar Reporte con Nuevas Fechas' : 'Generar Reporte'}
+                <Sparkles className="w-3.5 h-3.5 shrink-0" />
+                <span>{isFiltersDirty ? 'Actualizar con Nuevas Fechas' : 'Generar Reporte'}</span>
               </button>
             </div>
 
-            {/* Presets de Fecha Rápidos */}
-            <div className="flex flex-wrap items-center gap-1 bg-white p-1 rounded-2xl border border-slate-200 text-[11px] font-bold">
+            {/* Presets de Fecha Rápidos en barra deslizable */}
+            <div className="flex items-center gap-1 overflow-x-auto no-scrollbar py-0.5 bg-white p-1 rounded-2xl border border-slate-200 text-[11px] font-bold shrink-0">
               <button
                 type="button"
                 onClick={() => handleDatePreset('TODAY')}
-                className="px-2.5 py-1 rounded-xl text-slate-600 hover:bg-slate-100 transition"
+                className="px-2.5 py-1 rounded-xl text-slate-600 hover:bg-slate-100 transition whitespace-nowrap cursor-pointer shrink-0"
               >
                 Hoy
               </button>
               <button
                 type="button"
                 onClick={() => handleDatePreset('WEEK')}
-                className="px-2.5 py-1 rounded-xl text-slate-600 hover:bg-slate-100 transition"
+                className="px-2.5 py-1 rounded-xl text-slate-600 hover:bg-slate-100 transition whitespace-nowrap cursor-pointer shrink-0"
               >
                 7 Días
               </button>
               <button
                 type="button"
                 onClick={() => handleDatePreset('THIS_MONTH')}
-                className="px-2.5 py-1 rounded-xl text-slate-600 hover:bg-slate-100 transition"
+                className="px-2.5 py-1 rounded-xl text-slate-600 hover:bg-slate-100 transition whitespace-nowrap cursor-pointer shrink-0"
               >
                 Este Mes
               </button>
               <button
                 type="button"
                 onClick={() => handleDatePreset('30DAYS')}
-                className="px-2.5 py-1 rounded-xl text-slate-600 hover:bg-slate-100 transition"
+                className="px-2.5 py-1 rounded-xl text-slate-600 hover:bg-slate-100 transition whitespace-nowrap cursor-pointer shrink-0"
               >
-                Últimos 30 Días
+                30 Días
               </button>
               <button
                 type="button"
                 onClick={() => handleDatePreset('YEAR')}
-                className="px-2.5 py-1 rounded-xl text-slate-600 hover:bg-slate-100 transition"
+                className="px-2.5 py-1 rounded-xl text-slate-600 hover:bg-slate-100 transition whitespace-nowrap cursor-pointer shrink-0"
               >
-                Año en Curso
+                Año
               </button>
               <button
                 type="button"
                 onClick={() => handleDatePreset('ALL_TIME')}
-                className="px-2.5 py-1 rounded-xl bg-slate-100 text-slate-900 font-black hover:bg-slate-200 transition"
+                className="px-2.5 py-1 rounded-xl bg-slate-100 text-slate-900 font-black hover:bg-slate-200 transition whitespace-nowrap cursor-pointer shrink-0"
               >
                 Histórico
               </button>
             </div>
 
             {/* Botones de Descarga CSV */}
-            <div className="flex items-center gap-1.5 w-full lg:w-auto">
+            <div className="flex items-center gap-2">
               <button
                 onClick={handleExportCustomersCSV}
-                className="flex items-center gap-1.5 px-3 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-xs font-bold transition shadow-sm"
+                className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-xs font-bold transition shadow-xs whitespace-nowrap cursor-pointer"
                 title="Descargar listado de clientes en Mora y Al Día en Excel"
               >
-                <Download className="w-3.5 h-3.5" /> CSV Cartera
+                <Download className="w-3.5 h-3.5 shrink-0" />
+                <span>CSV Cartera</span>
               </button>
               <button
                 onClick={handleExportLedgerCSV}
-                className="flex items-center gap-1.5 px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition shadow-sm"
+                className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3 py-1.5 bg-emerald-700 hover:bg-emerald-600 text-white rounded-xl text-xs font-bold transition shadow-xs whitespace-nowrap cursor-pointer"
                 title="Descargar libro de ventas y movimientos en Excel"
               >
-                <Download className="w-3.5 h-3.5" /> CSV Ventas
+                <Download className="w-3.5 h-3.5 shrink-0" />
+                <span>CSV Ventas</span>
               </button>
             </div>
           </div>
 
           {/* BANNER DE CONFIRMACIÓN DEL REPORTE GENERADO */}
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between text-xs font-bold pt-1 gap-2 border-t border-slate-200/80">
-            <div className="flex items-center gap-2 text-emerald-800 bg-emerald-50 px-3 py-1 rounded-xl border border-emerald-200">
+            <div className="flex items-center gap-1.5 text-emerald-800 bg-emerald-50 px-2.5 py-1 rounded-xl border border-emerald-200 text-[11px] leading-tight">
               <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
               <span>
-                Reporte Activo: <b>{appliedDateFrom}</b> al <b>{appliedDateTo}</b> (
-                {periodTransactions.length} operaciones encontradas • Generado a las {reportGeneratedAt})
+                Período: <b>{appliedDateFrom}</b> al <b>{appliedDateTo}</b> ({periodTransactions.length} operaciones • {reportGeneratedAt})
               </span>
             </div>
 
             {isFiltersDirty && (
-              <span className="text-[11px] font-bold text-amber-700 bg-amber-50 px-2.5 py-0.5 rounded-lg border border-amber-200 flex items-center gap-1">
-                <AlertTriangle className="w-3 h-3 text-amber-600" />
-                Fechas modificadas. Pulsa "Generar Reporte" para actualizar la consulta.
+              <span className="text-[10px] font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-lg border border-amber-200 flex items-center gap-1">
+                <AlertTriangle className="w-3 h-3 text-amber-600 shrink-0" />
+                <span>Fechas modificadas. Pulsa "Actualizar".</span>
               </span>
             )}
           </div>
         </div>
 
-        {/* SELECTOR DE PESTAÑAS */}
-        <div className="flex border-b border-slate-200 bg-white px-4 shrink-0 text-xs font-bold">
+        {/* SELECTOR DE PESTAÑAS RESPONSIVO CON DESPLAZAMIENTO HORIZONTAL */}
+        <div className="flex items-center border-b border-slate-200 bg-white px-2 sm:px-4 shrink-0 text-xs font-bold overflow-x-auto no-scrollbar gap-1">
           <button
             onClick={() => setActiveTab('CUSTOMERS_PORTFOLIO')}
-            className={`py-3 px-4 border-b-2 flex items-center gap-2 transition ${
+            className={`py-2.5 px-3 sm:px-4 border-b-2 flex items-center gap-1.5 transition whitespace-nowrap cursor-pointer shrink-0 ${
               activeTab === 'CUSTOMERS_PORTFOLIO'
                 ? 'border-indigo-600 text-indigo-700 font-black'
                 : 'border-transparent text-slate-500 hover:text-slate-800'
             }`}
           >
-            <Users className="w-4 h-4" />
-            Cartera de Clientes & Estados (Mora, Al Día, Deudas)
-            <span className="bg-slate-100 text-slate-700 px-2 py-0.5 rounded-full text-[10px]">
+            <Users className="w-3.5 h-3.5" />
+            <span>Cartera & Saldos</span>
+            <span className="bg-slate-100 text-slate-700 px-1.5 py-0.2 rounded-full text-[10px]">
               {customerPortfolio.length}
             </span>
           </button>
 
           <button
             onClick={() => setActiveTab('SALES_SUMMARY')}
-            className={`py-3 px-4 border-b-2 flex items-center gap-2 transition ${
+            className={`py-2.5 px-3 sm:px-4 border-b-2 flex items-center gap-1.5 transition whitespace-nowrap cursor-pointer shrink-0 ${
               activeTab === 'SALES_SUMMARY'
                 ? 'border-indigo-600 text-indigo-700 font-black'
                 : 'border-transparent text-slate-500 hover:text-slate-800'
             }`}
           >
-            <TrendingUp className="w-4 h-4" />
-            Reporte de Ventas & Medios de Pago
+            <TrendingUp className="w-3.5 h-3.5" />
+            <span>Ventas & Cobros</span>
           </button>
 
           <button
             onClick={() => setActiveTab('TRANSACTIONS_LEDGER')}
-            className={`py-3 px-4 border-b-2 flex items-center gap-2 transition ${
+            className={`py-2.5 px-3 sm:px-4 border-b-2 flex items-center gap-1.5 transition whitespace-nowrap cursor-pointer shrink-0 ${
               activeTab === 'TRANSACTIONS_LEDGER'
                 ? 'border-indigo-600 text-indigo-700 font-black'
                 : 'border-transparent text-slate-500 hover:text-slate-800'
             }`}
           >
-            <Receipt className="w-4 h-4" />
-            Libro Mayor de Movimientos ({filteredLedgerTransactions.length})
+            <Receipt className="w-3.5 h-3.5" />
+            <span>Libro Mayor</span>
+            <span className="bg-slate-100 text-slate-700 px-1.5 py-0.2 rounded-full text-[10px]">
+              {filteredLedgerTransactions.length}
+            </span>
           </button>
         </div>
 
         {/* CONTENIDO PRINCIPAL SCROLLABLE */}
-        <div className="p-4 sm:p-6 overflow-y-auto space-y-6 flex-1">
+        <div className="p-3 sm:p-5 overflow-y-auto space-y-4 sm:space-y-6 flex-1">
           {/* ========================================================= */}
           {/* PESTAÑA 1: CARTERA DE CLIENTES, MORA, AL DÍA Y DEUDAS     */}
           {/* ========================================================= */}
