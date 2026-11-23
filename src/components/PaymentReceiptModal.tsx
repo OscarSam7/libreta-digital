@@ -54,7 +54,8 @@ export function PaymentReceiptModal({ transaction, customer, tenant, onClose }: 
     ).format(val)}`;
   };
 
-  const receiptNumber = `REC-${new Date(transaction.created_at).getFullYear()}-${transaction.id.slice(-6).toUpperCase()}`;
+  const cleanId = transaction.id.replace(/[^a-zA-Z0-9]/g, '').slice(-6).toUpperCase();
+  const receiptNumber = `REC-${new Date(transaction.created_at).getFullYear()}-${cleanId}`;
   const dateFormatted = new Date(transaction.created_at).toLocaleString('es-PY', {
     day: '2-digit',
     month: '2-digit',
@@ -66,7 +67,86 @@ export function PaymentReceiptModal({ transaction, customer, tenant, onClose }: 
   const whatsappUrl = generatePaymentReceiptWhatsAppUrl(customer, tenant, transaction);
 
   const handlePrint = () => {
-    window.print();
+    const printableElement = document.getElementById('printable-receipt-container');
+    if (!printableElement) {
+      window.print();
+      return;
+    }
+
+    const iframe = document.createElement('iframe');
+    iframe.style.position = 'fixed';
+    iframe.style.right = '0';
+    iframe.style.bottom = '0';
+    iframe.style.width = '0';
+    iframe.style.height = '0';
+    iframe.style.border = '0';
+    iframe.style.visibility = 'hidden';
+    document.body.appendChild(iframe);
+
+    const doc = iframe.contentWindow?.document;
+    if (!doc) {
+      document.body.removeChild(iframe);
+      window.print();
+      return;
+    }
+
+    const styles = Array.from(document.querySelectorAll('style, link[rel="stylesheet"]'))
+      .map((el) => el.outerHTML)
+      .join('\n');
+
+    doc.open();
+    doc.write(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <meta charset="utf-8" />
+          <title>Recibo_${receiptNumber}</title>
+          ${styles}
+          <style>
+            @page {
+              size: ${format === 'TICKET_58MM' ? '58mm auto' : format === 'TICKET_80MM' ? '80mm auto' : 'A4 portrait'};
+              margin: ${format === 'TICKET_58MM' ? '2mm' : format === 'TICKET_80MM' ? '3mm' : '10mm'};
+            }
+            body {
+              margin: 0 !important;
+              padding: 0 !important;
+              background: white !important;
+              font-family: ${format === 'PAGE_A4' ? 'system-ui, -apple-system, sans-serif' : 'monospace'} !important;
+              -webkit-print-color-adjust: exact !important;
+              print-color-adjust: exact !important;
+            }
+            #printable-receipt-container {
+              width: 100% !important;
+              max-width: 100% !important;
+              box-shadow: none !important;
+              border: none !important;
+              margin: 0 auto !important;
+            }
+          </style>
+        </head>
+        <body>
+          <div id="printable-receipt-container">
+            ${printableElement.innerHTML}
+          </div>
+        </body>
+      </html>
+    `);
+    doc.close();
+
+    setTimeout(() => {
+      try {
+        iframe.contentWindow?.focus();
+        iframe.contentWindow?.print();
+      } catch (err) {
+        console.error('Print iframe error:', err);
+      } finally {
+        setTimeout(() => {
+          if (iframe.parentNode) {
+            iframe.parentNode.removeChild(iframe);
+          }
+        }, 3000);
+      }
+    }, 350);
   };
 
   return (

@@ -169,7 +169,8 @@ export function generatePaymentReceiptWhatsAppUrl(
     minute: '2-digit',
   });
 
-  const receiptNum = `REC-${new Date(transaction.created_at).getFullYear()}-${transaction.id.slice(-6).toUpperCase()}`;
+  const cleanId = transaction.id.replace(/[^a-zA-Z0-9]/g, '').slice(-6).toUpperCase();
+  const receiptNum = `REC-${new Date(transaction.created_at).getFullYear()}-${cleanId}`;
 
   const message =
     `🧾 *COMPROBANTE OFICIAL DE PAGO EN PDF*\n` +

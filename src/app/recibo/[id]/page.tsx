@@ -122,7 +122,8 @@ function ReceiptDetail({ id }: { id: string }) {
   }
 
   const isFullPayment = transaction.new_balance <= 0;
-  const receiptNum = `REC-${new Date(transaction.created_at).getFullYear()}-${transaction.id.slice(-6).toUpperCase()}`;
+  const cleanId = transaction.id.replace(/[^a-zA-Z0-9]/g, '').slice(-6).toUpperCase();
+  const receiptNum = `REC-${new Date(transaction.created_at).getFullYear()}-${cleanId}`;
   const dateFormatted = new Date(transaction.created_at).toLocaleString('es-PY', {
     day: '2-digit',
     month: '2-digit',
