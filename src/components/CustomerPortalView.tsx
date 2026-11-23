@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import { Customer, Transaction, Tenant } from '@/types';
 import { getStoredData, syncFromSupabase, saveCustomers } from '@/lib/storage';
@@ -9,6 +9,7 @@ import { acceptCustomerTerms } from '@/lib/customers';
 import { exportTransactionsToCSV } from '@/lib/reports';
 import { PDFReportPreviewModal } from '@/components/PDFReportPreviewModal';
 import { PaymentReceiptModal } from '@/components/PaymentReceiptModal';
+import { CustomDateInput } from '@/components/ui/CustomDatePickerModal';
 import {
   ShieldCheck,
   CheckCircle2,
@@ -22,7 +23,8 @@ import {
   FileText,
   Check,
   HelpCircle,
-  Receipt
+  Receipt,
+  RotateCcw
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { BrandLogo } from '@/components/BrandLogo';
@@ -45,16 +47,25 @@ export function CustomerPortalView({ token }: Props) {
   const [termsAcceptedCheckbox, setTermsAcceptedCheckbox] = useState(false);
   const [termsError, setTermsError] = useState('');
   const [showContractModal, setShowContractModal] = useState(false);
+  const [showStatementPDF, setShowStatementPDF] = useState(false);
   const [isLoadingCloud, setIsLoadingCloud] = useState(true);
   const [viewingReceiptTx, setViewingReceiptTx] = useState<Transaction | null>(null);
 
   // Filtros de fecha y tipo para asientos inmutables del cliente
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
-  const [datePreset, setDatePreset] = useState<'ALL' | 'TODAY' | '7D' | '30D' | 'CUSTOM'>('ALL');
+  const [datePreset, setDatePreset] = useState<'ALL' | 'TODAY' | '7D' | 'THIS_MONTH' | '30D' | 'CUSTOM'>('ALL');
   const [txTypeFilter, setTxTypeFilter] = useState<'ALL' | 'DEBIT' | 'CREDIT'>('ALL');
 
-  const applyDatePreset = (preset: 'ALL' | 'TODAY' | '7D' | '30D') => {
+  // Helper de fecha local sin desviación UTC
+  const getLocalDateString = (d: Date = new Date()) => {
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
+  const applyDatePreset = (preset: 'ALL' | 'TODAY' | '7D' | 'THIS_MONTH' | '30D') => {
     setDatePreset(preset);
     if (preset === 'ALL') {
       setDateFrom('');
@@ -62,12 +73,24 @@ export function CustomerPortalView({ token }: Props) {
       return;
     }
     const now = new Date();
-    const toStr = now.toISOString().slice(0, 10);
-    const fromDate = new Date(now);
-    if (preset === '7D') fromDate.setDate(now.getDate() - 7);
-    if (preset === '30D') fromDate.setDate(now.getDate() - 30);
-    setDateFrom(fromDate.toISOString().slice(0, 10));
-    setDateTo(toStr);
+    const todayStr = getLocalDateString(now);
+
+    if (preset === 'TODAY') {
+      setDateFrom(todayStr);
+      setDateTo(todayStr);
+    } else if (preset === '7D') {
+      const fromD = new Date(now.getTime() - 7 * 24 * 3600 * 1000);
+      setDateFrom(getLocalDateString(fromD));
+      setDateTo(todayStr);
+    } else if (preset === 'THIS_MONTH') {
+      const firstOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+      setDateFrom(getLocalDateString(firstOfMonth));
+      setDateTo(todayStr);
+    } else if (preset === '30D') {
+      const fromD = new Date(now.getTime() - 30 * 24 * 3600 * 1000);
+      setDateFrom(getLocalDateString(fromD));
+      setDateTo(todayStr);
+    }
   };
 
   const loadData = async () => {
@@ -242,10 +265,44 @@ export function CustomerPortalView({ token }: Props) {
   const isOverLimit =
     customer.credit_limit > 0 && customer.current_balance > customer.credit_limit;
 
-  const formatCurrency = (val: number) =>
-    `${tenant.currency_symbol || '₲'} ${new Intl.NumberFormat(
-      tenant.currency_code === 'PYG' ? 'es-PY' : tenant.currency_code === 'BRL' ? 'pt-BR' : 'es-PE'
+  const formatCurrency = (val: number) => {
+    const sym = tenant?.currency_symbol === '₲' || !tenant?.currency_symbol ? 'Gs.' : tenant.currency_symbol;
+    return `${sym} ${new Intl.NumberFormat(
+      tenant?.currency_code === 'PYG' ? 'es-PY' : tenant?.currency_code === 'BRL' ? 'pt-BR' : 'es-PE'
     ).format(val || 0)}`;
+  };
+
+  // Transacciones filtradas con fecha local precisa y sin distorsión UTC
+  const filteredTransactions = useMemo(() => {
+    return transactions.filter((tx) => {
+      const isPurchase = tx.type === 'DEBIT_PURCHASE' || tx.type === 'ADJUSTMENT_DEBIT';
+      if (txTypeFilter === 'DEBIT' && !isPurchase) return false;
+      if (txTypeFilter === 'CREDIT' && isPurchase) return false;
+
+      const txLocalDate = getLocalDateString(new Date(tx.created_at));
+      let effectiveFrom = dateFrom;
+      let effectiveTo = dateTo;
+      if (effectiveFrom && effectiveTo && effectiveFrom > effectiveTo) {
+        [effectiveFrom, effectiveTo] = [effectiveTo, effectiveFrom];
+      }
+
+      if (effectiveFrom && txLocalDate < effectiveFrom) return false;
+      if (effectiveTo && txLocalDate > effectiveTo) return false;
+      return true;
+    });
+  }, [transactions, txTypeFilter, dateFrom, dateTo]);
+
+  const totalDebitsFiltered = useMemo(() => {
+    return filteredTransactions
+      .filter((t) => t.type === 'DEBIT_PURCHASE' || t.type === 'ADJUSTMENT_DEBIT')
+      .reduce((acc, t) => acc + t.amount, 0);
+  }, [filteredTransactions]);
+
+  const totalCreditsFiltered = useMemo(() => {
+    return filteredTransactions
+      .filter((t) => t.type === 'CREDIT_PAYMENT' || t.type === 'ADJUSTMENT_CREDIT')
+      .reduce((acc, t) => acc + t.amount, 0);
+  }, [filteredTransactions]);
 
   return (
     <main className="min-h-screen bg-slate-100 p-4 max-w-md mx-auto pb-16 font-sans">
@@ -290,7 +347,7 @@ export function CustomerPortalView({ token }: Props) {
             Saldo Deudor al Momento
           </span>
           <div className="text-4xl font-black tracking-tight text-white mt-1">
-            {tenant.currency_symbol} {customer.current_balance.toLocaleString('es-PY')}
+            {formatCurrency(customer.current_balance)}
           </div>
         </div>
 
@@ -300,9 +357,7 @@ export function CustomerPortalView({ token }: Props) {
               Límite Autorizado
             </span>
             <span className="font-bold text-white">
-              {customer.credit_limit > 0
-                ? `${tenant.currency_symbol} ${customer.credit_limit.toLocaleString('es-PY')}`
-                : 'Sin límite'}
+              {customer.credit_limit > 0 ? formatCurrency(customer.credit_limit) : 'Sin límite'}
             </span>
           </div>
 
@@ -415,147 +470,162 @@ export function CustomerPortalView({ token }: Props) {
       )}
 
       {/* Libro Mayor Inmutable de Deudas y Pagos con Filtro por Fecha */}
-      {(() => {
-        const filteredTransactions = transactions.filter((tx) => {
-          const isPurchase = tx.type === 'DEBIT_PURCHASE' || tx.type === 'ADJUSTMENT_DEBIT';
-          if (txTypeFilter === 'DEBIT' && !isPurchase) return false;
-          if (txTypeFilter === 'CREDIT' && isPurchase) return false;
-          const txDateStr = new Date(tx.created_at).toISOString().slice(0, 10);
-          if (dateFrom && txDateStr < dateFrom) return false;
-          if (dateTo && txDateStr > dateTo) return false;
-          return true;
-        });
+      <section className="mt-6 space-y-3">
+        <div className="flex justify-between items-center gap-2">
+          <div>
+            <h2 className="text-base font-black text-slate-800 flex items-center gap-1.5">
+              <ShieldCheck className="w-4 h-4 text-indigo-600" /> Asientos Inmutables
+            </h2>
+            <p className="text-[10px] text-slate-500">
+              Registro inalterable de tus deudas y pagos
+            </p>
+          </div>
+          <div className="flex items-center gap-1.5 shrink-0">
+            <button
+              type="button"
+              onClick={() => setShowStatementPDF(true)}
+              className="text-xs font-bold text-indigo-700 hover:text-indigo-900 bg-indigo-50 hover:bg-indigo-100 px-2.5 py-1.5 rounded-xl flex items-center gap-1 transition shadow-xs cursor-pointer"
+              title="Previsualizar y descargar Extracto de Cuenta en PDF"
+            >
+              <FileText className="w-3.5 h-3.5 text-indigo-600" />
+              <span>Extracto PDF</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => exportTransactionsToCSV(filteredTransactions, tenant, customer.full_name)}
+              className="text-xs font-bold text-slate-700 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 px-2 py-1.5 rounded-xl flex items-center gap-1 transition cursor-pointer"
+              title="Exportar movimientos a Excel / CSV"
+            >
+              <Download className="w-3.5 h-3.5" />
+              <span>CSV</span>
+            </button>
+          </div>
+        </div>
 
-        const totalDebitsFiltered = filteredTransactions
-          .filter((t) => t.type === 'DEBIT_PURCHASE' || t.type === 'ADJUSTMENT_DEBIT')
-          .reduce((acc, t) => acc + t.amount, 0);
-        const totalCreditsFiltered = filteredTransactions
-          .filter((t) => t.type === 'CREDIT_PAYMENT' || t.type === 'ADJUSTMENT_CREDIT')
-          .reduce((acc, t) => acc + t.amount, 0);
-
-        return (
-          <section className="mt-6 space-y-3">
-            <div className="flex justify-between items-center">
-              <div>
-                <h2 className="text-base font-black text-slate-800 flex items-center gap-1.5">
-                  <ShieldCheck className="w-4 h-4 text-indigo-600" /> Asientos Inmutables
-                </h2>
-                <p className="text-[10px] text-slate-500">
-                  Registro inalterable de tus deudas y pagos
-                </p>
-              </div>
+        {/* BARRA DE FILTROS POR FECHA Y TIPO CON DIÁLOGOS ERGONÓMICOS */}
+        <div className="bg-white rounded-2xl p-3 border border-slate-200 shadow-xs space-y-2.5">
+          {/* Accesos rápidos de fecha */}
+          <div className="flex flex-wrap items-center gap-1.5">
+            {(
+              [
+                { id: 'ALL', label: 'Todos' },
+                { id: 'TODAY', label: 'Hoy' },
+                { id: '7D', label: '7 días' },
+                { id: 'THIS_MONTH', label: 'Este Mes' },
+                { id: '30D', label: '30 días' },
+              ] as const
+            ).map((p) => (
               <button
-                onClick={() => exportTransactionsToCSV(filteredTransactions, tenant, customer.full_name)}
-                className="text-xs font-bold text-indigo-600 hover:text-indigo-800 flex items-center gap-1 cursor-pointer"
+                key={p.id}
+                type="button"
+                onClick={() => applyDatePreset(p.id)}
+                className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition cursor-pointer ${
+                  datePreset === p.id
+                    ? 'bg-indigo-600 text-white shadow-xs'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                }`}
               >
-                <Download className="w-3.5 h-3.5" /> CSV
+                {p.label}
               </button>
+            ))}
+
+            <div className="ml-auto flex gap-1">
+              {(
+                [
+                  { id: 'ALL', label: 'Todo' },
+                  { id: 'DEBIT', label: 'Deudas' },
+                  { id: 'CREDIT', label: 'Pagos' },
+                ] as const
+              ).map((tf) => (
+                <button
+                  key={tf.id}
+                  type="button"
+                  onClick={() => setTxTypeFilter(tf.id)}
+                  className={`px-2 py-1 rounded-lg text-[10px] font-bold transition cursor-pointer ${
+                    txTypeFilter === tf.id
+                      ? 'bg-slate-900 text-white'
+                      : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+                  }`}
+                >
+                  {tf.label}
+                </button>
+              ))}
             </div>
+          </div>
 
-            {/* BARRA DE FILTROS POR FECHA Y TIPO */}
-            <div className="bg-white rounded-2xl p-3 border border-slate-200 shadow-xs space-y-2.5">
-              {/* Accesos rápidos de fecha */}
-              <div className="flex flex-wrap gap-1.5">
-                {(
-                  [
-                    { id: 'ALL', label: 'Todos' },
-                    { id: 'TODAY', label: 'Hoy' },
-                    { id: '7D', label: '7 días' },
-                    { id: '30D', label: '30 días' },
-                  ] as const
-                ).map((p) => (
-                  <button
-                    key={p.id}
-                    type="button"
-                    onClick={() => applyDatePreset(p.id)}
-                    className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition cursor-pointer ${
-                      datePreset === p.id
-                        ? 'bg-indigo-600 text-white shadow-xs'
-                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                    }`}
-                  >
-                    {p.label}
-                  </button>
-                ))}
-                <div className="ml-auto flex gap-1">
-                  {(
-                    [
-                      { id: 'ALL', label: 'Todo' },
-                      { id: 'DEBIT', label: 'Deudas' },
-                      { id: 'CREDIT', label: 'Pagos' },
-                    ] as const
-                  ).map((tf) => (
-                    <button
-                      key={tf.id}
-                      type="button"
-                      onClick={() => setTxTypeFilter(tf.id)}
-                      className={`px-2 py-1 rounded-lg text-[10px] font-bold transition cursor-pointer ${
-                        txTypeFilter === tf.id
-                          ? 'bg-slate-900 text-white'
-                          : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
-                      }`}
-                    >
-                      {tf.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Rango de fechas personalizado */}
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="block text-[9px] font-bold uppercase text-slate-400 mb-0.5">
-                    Desde
-                  </label>
-                  <input
-                    type="date"
-                    value={dateFrom}
-                    onChange={(e) => {
-                      setDateFrom(e.target.value);
-                      setDatePreset('CUSTOM');
-                    }}
-                    className="w-full px-2.5 py-1.5 text-xs font-semibold bg-slate-50 border border-slate-200 rounded-xl text-slate-800 focus:outline-none focus:border-indigo-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[9px] font-bold uppercase text-slate-400 mb-0.5">
-                    Hasta
-                  </label>
-                  <input
-                    type="date"
-                    value={dateTo}
-                    onChange={(e) => {
-                      setDateTo(e.target.value);
-                      setDatePreset('CUSTOM');
-                    }}
-                    className="w-full px-2.5 py-1.5 text-xs font-semibold bg-slate-50 border border-slate-200 rounded-xl text-slate-800 focus:outline-none focus:border-indigo-500"
-                  />
-                </div>
-              </div>
-
-              {/* Resumen del período filtrado */}
-              <div className="grid grid-cols-3 gap-2 pt-1.5 border-t border-slate-100 text-center">
-                <div className="bg-rose-50/70 rounded-xl py-1.5 px-1">
-                  <span className="text-[9px] font-bold uppercase text-rose-500 block">Deudas</span>
-                  <span className="text-xs font-black text-rose-700">{formatCurrency(totalDebitsFiltered)}</span>
-                </div>
-                <div className="bg-emerald-50/70 rounded-xl py-1.5 px-1">
-                  <span className="text-[9px] font-bold uppercase text-emerald-600 block">Pagos</span>
-                  <span className="text-xs font-black text-emerald-700">{formatCurrency(totalCreditsFiltered)}</span>
-                </div>
-                <div className="bg-slate-50 rounded-xl py-1.5 px-1">
-                  <span className="text-[9px] font-bold uppercase text-slate-400 block">Asientos</span>
-                  <span className="text-xs font-black text-slate-800">{filteredTransactions.length}</span>
-                </div>
-              </div>
+          {/* Rango de fechas ergonómico con modal adaptativo */}
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="block text-[9px] font-bold uppercase text-slate-400 mb-0.5">
+                Desde
+              </label>
+              <CustomDateInput
+                value={dateFrom}
+                onChange={(val) => {
+                  setDateFrom(val);
+                  setDatePreset('CUSTOM');
+                }}
+                label="Fecha Desde"
+                className="w-full text-xs"
+              />
             </div>
+            <div>
+              <label className="block text-[9px] font-bold uppercase text-slate-400 mb-0.5">
+                Hasta
+              </label>
+              <CustomDateInput
+                value={dateTo}
+                onChange={(val) => {
+                  setDateTo(val);
+                  setDatePreset('CUSTOM');
+                }}
+                label="Fecha Hasta"
+                className="w-full text-xs"
+              />
+            </div>
+          </div>
 
-            <div className="space-y-3">
-              {filteredTransactions.length === 0 ? (
-                <div className="bg-white rounded-2xl p-8 text-center text-slate-400 text-xs border border-slate-200">
-                  No se encontraron asientos en el rango de fechas seleccionado.
-                </div>
-              ) : (
+          {/* Resumen del período filtrado */}
+          <div className="grid grid-cols-3 gap-2 pt-1.5 border-t border-slate-100 text-center">
+            <div className="bg-rose-50/70 rounded-xl py-1.5 px-1">
+              <span className="text-[9px] font-bold uppercase text-rose-500 block">Deudas</span>
+              <span className="text-xs font-black text-rose-700">{formatCurrency(totalDebitsFiltered)}</span>
+            </div>
+            <div className="bg-emerald-50/70 rounded-xl py-1.5 px-1">
+              <span className="text-[9px] font-bold uppercase text-emerald-600 block">Pagos</span>
+              <span className="text-xs font-black text-emerald-700">{formatCurrency(totalCreditsFiltered)}</span>
+            </div>
+            <div className="bg-slate-50 rounded-xl py-1.5 px-1">
+              <span className="text-[9px] font-bold uppercase text-slate-400 block">Asientos</span>
+              <span className="text-xs font-black text-slate-800">{filteredTransactions.length}</span>
+            </div>
+          </div>
+        </div>
+
+        <div className="space-y-3">
+          {filteredTransactions.length === 0 ? (
+            <div className="bg-white rounded-2xl p-6 text-center text-slate-500 text-xs border border-slate-200 space-y-2.5">
+              <p className="font-bold text-slate-700">
+                No se encontraron asientos en el rango de fechas seleccionado.
+              </p>
+              <p className="text-[11px] text-slate-400">
+                Prueba seleccionando otro rango de fechas o restablece los filtros.
+              </p>
+              {(dateFrom || dateTo || txTypeFilter !== 'ALL' || datePreset !== 'ALL') && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    applyDatePreset('ALL');
+                    setTxTypeFilter('ALL');
+                  }}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold rounded-xl text-xs transition cursor-pointer"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  <span>Ver todo el historial ({transactions.length})</span>
+                </button>
+              )}
+            </div>
+          ) : (
                 filteredTransactions.map((tx) => {
                   const isPurchase =
                     tx.type === 'DEBIT_PURCHASE' || tx.type === 'ADJUSTMENT_DEBIT';
@@ -747,8 +817,16 @@ export function CustomerPortalView({ token }: Props) {
           )}
           </div>
         </section>
-        );
-      })()}
+
+      {/* MODAL EXTRACTO DE CUENTA EN PDF */}
+      {showStatementPDF && customer && tenant && (
+        <PDFReportPreviewModal
+          mode="CUSTOMER_STATEMENT"
+          tenant={tenant}
+          customer={customer}
+          onClose={() => setShowStatementPDF(false)}
+        />
+      )}
 
       {/* MODAL CONTRATO EN PDF */}
       {showContractModal && (
