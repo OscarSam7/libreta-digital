@@ -1,4 +1,4 @@
-const CACHE_NAME = 'libretadigital-v1';
+const CACHE_NAME = 'libretadigital-v2';
 const STATIC_ASSETS = [
   '/',
   '/manifest.json',

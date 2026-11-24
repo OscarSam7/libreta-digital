@@ -7,6 +7,7 @@ import {
   Camera,
   Flashlight,
   FlashlightOff,
+  ImagePlus,
   Loader2,
   RotateCcw,
   ScanLine,
@@ -40,14 +41,18 @@ export function QRScannerModal({
   const [scanFeedbackError, setScanFeedbackError] = useState('');
   const [torchSupported, setTorchSupported] = useState(false);
   const [torchOn, setTorchOn] = useState(false);
+  const [retryTick, setRetryTick] = useState(0);
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const intervalRef = useRef<number | null>(null);
   const processingRef = useRef(false);
   const onScanRef = useRef(onScan);
   onScanRef.current = onScan;
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
 
   useEffect(() => {
     setMounted(true);
@@ -78,8 +83,8 @@ export function QRScannerModal({
   const handleClose = useCallback(() => {
     stopCamera();
     processingRef.current = false;
-    onClose();
-  }, [stopCamera, onClose]);
+    onCloseRef.current();
+  }, [stopCamera]);
 
   const handleDetectedCode = useCallback(
     async (decodedText: string) => {
@@ -99,35 +104,78 @@ export function QRScannerModal({
         if (res.success) {
           stopCamera();
           processingRef.current = false;
-          onClose();
+          onCloseRef.current();
         } else {
           setScanFeedbackError(res.message || 'El código QR escaneado no es válido.');
-          setCameraState('SCANNING');
+          setCameraState(streamRef.current ? 'SCANNING' : 'ERROR');
           processingRef.current = false;
         }
       } catch (err: any) {
         setScanFeedbackError(err?.message || 'No se pudo procesar el código QR.');
-        setCameraState('SCANNING');
+        setCameraState(streamRef.current ? 'SCANNING' : 'ERROR');
         processingRef.current = false;
       }
     },
-    [onClose, stopCamera]
+    [stopCamera]
   );
 
   useEffect(() => {
     if (!isOpen || !mounted) return;
 
     let cancelled = false;
+    let loadedMetadataCleanup: (() => void) | null = null;
     processingRef.current = false;
     setErrorMsg('');
     setScanFeedbackError('');
     setCameraState('STARTING');
 
+    async function openCameraWithFallback(): Promise<MediaStream> {
+      const constraintAttempts: MediaStreamConstraints[] = [
+        {
+          video: {
+            facingMode: { ideal: 'environment' },
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
+          },
+          audio: false,
+        },
+        {
+          video: {
+            facingMode: { ideal: 'environment' },
+          },
+          audio: false,
+        },
+        {
+          video: true,
+          audio: false,
+        },
+      ];
+
+      let lastError: unknown;
+      for (const constraints of constraintAttempts) {
+        try {
+          return await navigator.mediaDevices.getUserMedia(constraints);
+        } catch (err: any) {
+          lastError = err;
+          const name = err?.name || '';
+          if (
+            name === 'NotAllowedError' ||
+            name === 'PermissionDeniedError' ||
+            name === 'NotFoundError' ||
+            name === 'DevicesNotFoundError'
+          ) {
+            throw err;
+          }
+        }
+      }
+      throw lastError;
+    }
+
     async function initCamera() {
       if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
         if (!cancelled) {
           setErrorMsg(
-            'Tu navegador no permite acceso directo a la cámara (o requiere conexión HTTPS). Podés usar tu PIN de 4 dígitos como 2ª opción.'
+            'Tu navegador no permite abrir la cámara en vivo (por ejemplo dentro de WhatsApp o sin HTTPS). Podés sacar una foto del QR o usar tu PIN de 4 dígitos.'
           );
           setCameraState('ERROR');
         }
@@ -135,26 +183,46 @@ export function QRScannerModal({
       }
 
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: {
-            facingMode: { ideal: 'environment' },
-            width: { ideal: 1280 },
-            height: { ideal: 720 },
-          },
-          audio: false,
-        });
+        const stream = await openCameraWithFallback();
 
         if (cancelled) {
           stream.getTracks().forEach((t) => t.stop());
           return;
         }
 
+        let videoEl = videoRef.current;
+        if (!videoEl) {
+          await new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()));
+          videoEl = videoRef.current;
+        }
+
+        if (cancelled || !videoEl) {
+          stream.getTracks().forEach((t) => t.stop());
+          return;
+        }
+
         streamRef.current = stream;
 
-        const videoEl = videoRef.current;
-        if (!videoEl) return;
+        videoEl.setAttribute('playsinline', 'true');
+        videoEl.muted = true;
         videoEl.srcObject = stream;
+
+        const onLoadedMetadata = () => {
+          if (!cancelled && videoEl && videoEl.paused) {
+            videoEl.play().catch(() => {});
+          }
+        };
+        videoEl.addEventListener('loadedmetadata', onLoadedMetadata, { once: true });
+        loadedMetadataCleanup = () => {
+          videoEl?.removeEventListener('loadedmetadata', onLoadedMetadata);
+        };
+
         await videoEl.play().catch(() => {});
+
+        if (cancelled) {
+          stopCamera();
+          return;
+        }
 
         // Detectar soporte de linterna (torch)
         try {
@@ -193,7 +261,7 @@ export function QRScannerModal({
 
           const canvas = canvasRef.current;
           if (!canvas) return;
-          const targetWidth = Math.min(640, v.videoWidth);
+          const targetWidth = Math.min(512, v.videoWidth);
           const scale = targetWidth / v.videoWidth;
           const targetHeight = Math.round(v.videoHeight * scale);
           if (canvas.width !== targetWidth || canvas.height !== targetHeight) {
@@ -206,24 +274,26 @@ export function QRScannerModal({
           ctx.drawImage(v, 0, 0, targetWidth, targetHeight);
           const imageData = ctx.getImageData(0, 0, targetWidth, targetHeight);
           const code = jsQR(imageData.data, targetWidth, targetHeight, {
-            inversionAttempts: 'dontInvert',
+            inversionAttempts: 'attemptBoth',
           });
           if (code && code.data) {
             await handleDetectedCode(code.data);
           }
-        }, 120);
+        }, 150);
       } catch (err: any) {
         if (cancelled) return;
         const name = err?.name || '';
         if (name === 'NotAllowedError' || name === 'PermissionDeniedError') {
           setErrorMsg(
-            'Permiso de cámara denegado. Habilitá el acceso a la cámara en tu navegador o usá tu PIN de 4 dígitos.'
+            'Permiso de cámara denegado. Habilitá la cámara en tu navegador, sacá una foto del QR o usá tu PIN de 4 dígitos.'
           );
         } else if (name === 'NotFoundError' || name === 'DevicesNotFoundError') {
-          setErrorMsg('No detectamos cámara disponible en este dispositivo. Usá tu PIN de 4 dígitos.');
+          setErrorMsg(
+            'No detectamos cámara disponible en este dispositivo. Podés subir una foto del QR o usar tu PIN de 4 dígitos.'
+          );
         } else {
           setErrorMsg(
-            'No se pudo iniciar la cámara para leer el QR. Podés confirmar la compra con tu PIN de 4 dígitos.'
+            'No se pudo iniciar la cámara en vivo. Podés sacar una foto del QR o confirmar con tu PIN de 4 dígitos.'
           );
         }
         setCameraState('ERROR');
@@ -234,9 +304,91 @@ export function QRScannerModal({
 
     return () => {
       cancelled = true;
+      loadedMetadataCleanup?.();
       stopCamera();
     };
-  }, [isOpen, mounted, stopCamera, handleDetectedCode]);
+  }, [isOpen, mounted, retryTick, stopCamera, handleDetectedCode]);
+
+  const handlePhotoFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file || processingRef.current) return;
+
+    setScanFeedbackError('');
+    setCameraState('PROCESSING');
+
+    let objectUrl = '';
+    try {
+      objectUrl = URL.createObjectURL(file);
+      const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+        const image = new Image();
+        image.onload = () => resolve(image);
+        image.onerror = () => reject(new Error('No se pudo leer la foto seleccionada.'));
+        image.src = objectUrl;
+      });
+
+      const naturalWidth = img.naturalWidth || img.width;
+      const naturalHeight = img.naturalHeight || img.height;
+      if (!naturalWidth || !naturalHeight) {
+        throw new Error('La imagen seleccionada no es válida.');
+      }
+
+      const maxSide = 1200;
+      const scale = Math.min(1, maxSide / Math.max(naturalWidth, naturalHeight));
+      const targetWidth = Math.max(1, Math.round(naturalWidth * scale));
+      const targetHeight = Math.max(1, Math.round(naturalHeight * scale));
+
+      const offscreenCanvas = document.createElement('canvas');
+      offscreenCanvas.width = targetWidth;
+      offscreenCanvas.height = targetHeight;
+      const ctx = offscreenCanvas.getContext('2d', { willReadFrequently: true });
+      if (!ctx) {
+        throw new Error('No se pudo procesar la foto en este dispositivo.');
+      }
+
+      ctx.drawImage(img, 0, 0, targetWidth, targetHeight);
+
+      let decodedText = '';
+      try {
+        const BD = (window as any).BarcodeDetector;
+        if (typeof BD === 'function') {
+          const detector = new BD({ formats: ['qr_code'] });
+          const detected = await detector.detect(offscreenCanvas);
+          if (Array.isArray(detected) && detected.length > 0 && detected[0]?.rawValue) {
+            decodedText = String(detected[0].rawValue);
+          }
+        }
+      } catch {}
+
+      if (!decodedText) {
+        const imageData = ctx.getImageData(0, 0, targetWidth, targetHeight);
+        const code = jsQR(imageData.data, targetWidth, targetHeight, {
+          inversionAttempts: 'attemptBoth',
+        });
+        if (code && code.data) {
+          decodedText = code.data;
+        }
+      }
+
+      if (decodedText) {
+        await handleDetectedCode(decodedText);
+      } else {
+        setScanFeedbackError(
+          'No se encontró un código QR legible en la foto. Intentá acercarte un poco más o usá tu PIN de 4 dígitos.'
+        );
+        setCameraState(streamRef.current ? 'SCANNING' : 'ERROR');
+      }
+    } catch (err: any) {
+      setScanFeedbackError(
+        err?.message || 'No se encontró un código QR legible en la foto. Intentá acercarte un poco más o usá tu PIN de 4 dígitos.'
+      );
+      setCameraState(streamRef.current ? 'SCANNING' : 'ERROR');
+    } finally {
+      if (objectUrl) {
+        URL.revokeObjectURL(objectUrl);
+      }
+    }
+  };
 
   const toggleTorch = async () => {
     const stream = streamRef.current;
@@ -256,7 +408,7 @@ export function QRScannerModal({
 
   const modalContent = (
     <div className="fixed inset-0 z-[9999] bg-slate-950/95 backdrop-blur-md flex flex-col justify-between p-4 text-white font-sans animate-in fade-in duration-150">
-      <style jsx>{`
+      <style>{`
         @keyframes qr-scan-line {
           0% {
             top: 10%;
@@ -272,6 +424,15 @@ export function QRScannerModal({
           animation: qr-scan-line 2.1s ease-in-out infinite;
         }
       `}</style>
+
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        className="hidden"
+        onChange={handlePhotoFileChange}
+      />
 
       {/* Cabecera */}
       <div className="flex items-start justify-between gap-3 max-w-md w-full mx-auto pt-1">
@@ -306,14 +467,32 @@ export function QRScannerModal({
               <h4 className="text-sm font-black text-white">Cámara no disponible</h4>
               <p className="text-xs text-slate-300 leading-relaxed">{errorMsg}</p>
             </div>
-            <button
-              type="button"
-              onClick={handleClose}
-              className="w-full py-3 px-4 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-2xl text-xs flex items-center justify-center gap-2 transition cursor-pointer shadow-lg"
-            >
-              <KeyRound className="w-4 h-4" />
-              <span>Usar PIN de 4 dígitos (2ª opción)</span>
-            </button>
+            <div className="space-y-2.5 pt-1">
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className="w-full py-3 px-4 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black rounded-2xl text-xs flex items-center justify-center gap-2 transition cursor-pointer shadow-lg shadow-emerald-500/20"
+              >
+                <ImagePlus className="w-4 h-4" />
+                <span>Tomar foto del QR</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setRetryTick((t) => t + 1)}
+                className="w-full py-2.5 px-4 bg-white/10 hover:bg-white/15 border border-white/15 text-white font-bold rounded-2xl text-xs flex items-center justify-center gap-2 transition cursor-pointer"
+              >
+                <RotateCcw className="w-4 h-4" />
+                <span>Reintentar cámara</span>
+              </button>
+              <button
+                type="button"
+                onClick={handleClose}
+                className="w-full py-3 px-4 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-2xl text-xs flex items-center justify-center gap-2 transition cursor-pointer shadow-lg"
+              >
+                <KeyRound className="w-4 h-4" />
+                <span>Usar PIN de 4 dígitos (2ª opción)</span>
+              </button>
+            </div>
           </div>
         ) : (
           <div className="relative w-full aspect-square max-w-[340px] rounded-3xl overflow-hidden bg-black border-2 border-white/15 shadow-2xl">
@@ -349,7 +528,7 @@ export function QRScannerModal({
             {cameraState === 'PROCESSING' && (
               <div className="absolute inset-0 bg-slate-950/85 flex flex-col items-center justify-center gap-2.5 text-sm font-black text-emerald-300">
                 <Loader2 className="w-9 h-9 animate-spin text-emerald-400" />
-                <span>Certificando compra...</span>
+                <span>Procesando código QR...</span>
               </div>
             )}
 
@@ -374,19 +553,33 @@ export function QRScannerModal({
               onClick={() => {
                 setScanFeedbackError('');
                 processingRef.current = false;
-                setCameraState('SCANNING');
+                if (streamRef.current) {
+                  setCameraState('SCANNING');
+                } else {
+                  fileInputRef.current?.click();
+                }
               }}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white/15 hover:bg-white/25 text-white font-bold rounded-xl text-[11px] transition cursor-pointer"
             >
               <RotateCcw className="w-3.5 h-3.5" />
-              <span>Escanear otro QR</span>
+              <span>{streamRef.current ? 'Escanear otro QR' : 'Sacar otra foto'}</span>
             </button>
           </div>
         )}
       </div>
 
-      {/* Pie / 2da Opción PIN */}
+      {/* Pie / Respaldo foto y 2da Opción PIN */}
       <div className="max-w-md w-full mx-auto pb-2 text-center space-y-2">
+        {cameraState !== 'ERROR' && (
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            className="w-full py-2.5 px-4 bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-400/30 text-emerald-200 font-bold rounded-2xl text-xs flex items-center justify-center gap-2 transition cursor-pointer"
+          >
+            <ImagePlus className="w-4 h-4" />
+            <span>¿Problemas con la cámara? Tomar foto del QR</span>
+          </button>
+        )}
         <button
           type="button"
           onClick={handleClose}
@@ -397,4 +590,6 @@ export function QRScannerModal({
       </div>
     </div>
   );
+
+  return createPortal(modalContent, document.body);
 }
