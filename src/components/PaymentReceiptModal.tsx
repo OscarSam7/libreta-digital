@@ -265,7 +265,15 @@ export function PaymentReceiptModal({ transaction, customer, tenant, onClose }: 
             {/* CABECERA CON DATOS DEL ALMACÉN */}
             <div className="text-center border-b border-dashed border-slate-200 pb-3">
               <div className="flex justify-center mb-1.5">
-                <BrandLogo size="sm" theme="light" />
+                {tenant.logo_url ? (
+                  <img
+                    src={tenant.logo_url}
+                    alt={tenant.business_name}
+                    className="w-12 h-12 rounded-xl object-contain bg-white border border-slate-200 p-0.5"
+                  />
+                ) : (
+                  <BrandLogo size="sm" theme="light" />
+                )}
               </div>
               <h2 className={`font-black text-slate-900 uppercase tracking-tight ${format === 'TICKET_58MM' ? 'text-sm' : format === 'TICKET_80MM' ? 'text-base' : 'text-lg'}`}>
                 {tenant.business_name}
@@ -274,11 +282,14 @@ export function PaymentReceiptModal({ transaction, customer, tenant, onClose }: 
                 {tenant.tax_id && (
                   <p className="font-semibold text-slate-700">RUC / Registro: {tenant.tax_id}</p>
                 )}
-                {tenant.address && (
-                  <p className="truncate">📍 {tenant.address}</p>
+                {(tenant.address || tenant.city) && (
+                  <p className="truncate">📍 {[tenant.address, tenant.city].filter(Boolean).join(' • ')}</p>
                 )}
                 {tenant.phone && (
                   <p>📞 Tel / WhatsApp: {tenant.phone}</p>
+                )}
+                {tenant.opening_hours && (
+                  <p>🕒 {tenant.opening_hours}</p>
                 )}
               </div>
               {format === 'TICKET_58MM' && (

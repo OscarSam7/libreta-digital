@@ -372,7 +372,15 @@ export function PDFReportPreviewModal({
               <div className="flex justify-between items-start pb-5 border-b-2 border-slate-900">
                 <div className="flex items-start gap-4">
                   <div className="w-12 h-12 shrink-0">
-                    <BrandLogo size="icon-only" />
+                    {tenant.logo_url ? (
+                      <img
+                        src={tenant.logo_url}
+                        alt={tenant.business_name}
+                        className="w-12 h-12 rounded-xl object-cover border border-slate-200 bg-white"
+                      />
+                    ) : (
+                      <BrandLogo size="icon-only" />
+                    )}
                   </div>
                   <div className="space-y-1">
                     <h1 className="text-xl sm:text-2xl font-black tracking-tight text-slate-950 uppercase leading-none">
@@ -382,9 +390,10 @@ export function PDFReportPreviewModal({
                       LibretaDigital Pro • Moneda: {tenant.currency_code} ({tenant.currency_symbol})
                     </p>
                     <p className="text-[10px] text-slate-400">
-                      {tenant.address ? `${tenant.address} • ` : ''}
+                      {tenant.address || tenant.city ? `${[tenant.address, tenant.city].filter(Boolean).join(', ')} • ` : ''}
                       {tenant.phone ? `Tel: ${tenant.phone} • ` : ''}
                       {tenant.tax_id ? `RUC/Doc: ${tenant.tax_id}` : ''}
+                      {tenant.opening_hours ? ` • ${tenant.opening_hours}` : ''}
                     </p>
                   </div>
                 </div>

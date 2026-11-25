@@ -19,13 +19,15 @@ import {
   HelpCircle,
   ExternalLink,
   Eye,
-  EyeOff
+  EyeOff,
+  Clock
 } from 'lucide-react';
 import { Tenant } from '@/types';
 import {
   getStoredData,
   saveCustomersLocalOnly,
   cleanCustomerForSupabase,
+  restoreTenantFromSupabase,
   deduplicateCustomers,
   areCustomersSamePerson,
 } from '@/lib/storage';
@@ -75,16 +77,17 @@ function ClientRegisterContent() {
         if (res.ok) {
           const json = await res.json();
           if (json.success && Array.isArray(json.tenants) && json.tenants.length > 0) {
-            setTenants(json.tenants);
+            const restored = json.tenants.map(restoreTenantFromSupabase);
+            setTenants(restored);
             if (preselectedTenantId) {
-              const match = json.tenants.find((t: Tenant) => t.id === preselectedTenantId);
+              const match = restored.find((t: Tenant) => t.id === preselectedTenantId);
               if (match) {
                 setSelectedTenantId(match.id);
               } else {
                 setSelectedTenantId(preselectedTenantId);
               }
             } else {
-              setSelectedTenantId(json.tenants[0].id);
+              setSelectedTenantId(restored[0].id);
             }
             setLoadingTenants(false);
             return;
@@ -97,9 +100,10 @@ function ClientRegisterContent() {
         if (supabase) {
           const { data, error } = await supabase.from('tenants').select('*').order('business_name');
           if (!error && data && data.length > 0) {
-            setTenants(data);
+            const restored = data.map(restoreTenantFromSupabase);
+            setTenants(restored);
             if (!preselectedTenantId) {
-              setSelectedTenantId(data[0].id);
+              setSelectedTenantId(restored[0].id);
             } else {
               setSelectedTenantId(preselectedTenantId);
             }
@@ -364,9 +368,57 @@ function ClientRegisterContent() {
                     options={tenants.map((t) => ({
                       value: t.id,
                       label: t.business_name,
-                      sublabel: t.address || undefined,
+                      sublabel: [t.address, t.city].filter(Boolean).join(' • ') || undefined,
                     }))}
                   />
+                )}
+
+                {activeTenant && (
+                  <div className="mt-3 rounded-2xl border border-slate-700/80 bg-slate-900/80 overflow-hidden">
+                    {activeTenant.cover_url && (
+                      <div className="h-20 w-full relative overflow-hidden">
+                        <img
+                          src={activeTenant.cover_url}
+                          alt={activeTenant.business_name}
+                          className="w-full h-full object-cover"
+                        />
+                        <div className="absolute inset-0 bg-gradient-to-t from-slate-900 via-slate-900/30 to-transparent" />
+                      </div>
+                    )}
+                    <div className={`p-3 flex items-center gap-3 ${activeTenant.cover_url ? '-mt-6 relative z-10' : ''}`}>
+                      <div className="w-11 h-11 rounded-xl border-2 border-slate-800 bg-slate-950 overflow-hidden flex items-center justify-center shrink-0 shadow-md">
+                        {activeTenant.logo_url ? (
+                          <img
+                            src={activeTenant.logo_url}
+                            alt={activeTenant.business_name}
+                            className="w-full h-full object-cover bg-white"
+                          />
+                        ) : (
+                          <Store className="w-5 h-5 text-emerald-400" />
+                        )}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-xs font-black text-white truncate">{activeTenant.business_name}</p>
+                        {activeTenant.description && (
+                          <p className="text-[11px] text-slate-300 truncate">{activeTenant.description}</p>
+                        )}
+                        <div className="flex flex-wrap items-center gap-x-2.5 gap-y-0.5 text-[10px] text-slate-400 mt-0.5">
+                          {(activeTenant.address || activeTenant.city) && (
+                            <span className="inline-flex items-center gap-1">
+                              <MapPin className="w-2.5 h-2.5 text-emerald-400" />
+                              {[activeTenant.address, activeTenant.city].filter(Boolean).join(' • ')}
+                            </span>
+                          )}
+                          {activeTenant.opening_hours && (
+                            <span className="inline-flex items-center gap-1">
+                              <Clock className="w-2.5 h-2.5 text-amber-400" />
+                              {activeTenant.opening_hours}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
                 )}
               </div>
 

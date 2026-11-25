@@ -47,13 +47,32 @@ export function PrintableCustomerCardModal({ customer, tenant, onClose }: Props)
         >
           {/* Logo y Encabezado del Comercio */}
           <div className="border-b-2 border-dashed border-slate-300 pb-3 mb-4">
+            {tenant.logo_url && (
+              <div className="flex justify-center mb-1.5">
+                <img
+                  src={tenant.logo_url}
+                  alt={tenant.business_name}
+                  className="w-11 h-11 rounded-xl object-cover border border-slate-200 bg-white"
+                />
+              </div>
+            )}
             <div className="inline-flex items-center justify-center gap-1.5 font-black text-base uppercase tracking-tight text-slate-900">
-              <Store className="w-4 h-4 text-blue-600 inline" />
+              {!tenant.logo_url && <Store className="w-4 h-4 text-blue-600 inline" />}
               <span>{tenant.business_name}</span>
             </div>
+            {(tenant.address || tenant.city) && (
+              <p className="text-[10px] text-slate-500 font-medium mt-0.5">
+                {[tenant.address, tenant.city].filter(Boolean).join(' • ')}
+              </p>
+            )}
             {tenant.phone && (
               <p className="text-[11px] text-slate-500 font-semibold mt-0.5">
                 WhatsApp: +{tenant.phone}
+              </p>
+            )}
+            {tenant.opening_hours && (
+              <p className="text-[10px] text-slate-400 font-medium mt-0.5">
+                {tenant.opening_hours}
               </p>
             )}
             <p className="text-[10px] text-slate-400 font-mono tracking-widest uppercase mt-0.5">

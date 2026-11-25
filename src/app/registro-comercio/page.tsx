@@ -28,7 +28,17 @@ import {
   EyeOff
 } from 'lucide-react';
 import { Tenant, StaffMember } from '@/types';
-import { saveTenant, saveStaff, setCurrentOperator, getStoredData, setMerchantLoggedIn, loginDemoDonMario, isSuperAdminLoggedIn } from '@/lib/storage';
+import {
+  saveTenant,
+  saveStaff,
+  setCurrentOperator,
+  getStoredData,
+  setMerchantLoggedIn,
+  loginDemoDonMario,
+  isSuperAdminLoggedIn,
+  restoreTenantFromSupabase,
+  cleanTenantForSupabase,
+} from '@/lib/storage';
 import { createClient } from '@/lib/supabase/client';
 import confetti from 'canvas-confetti';
 import { BrandLogo } from '@/components/BrandLogo';
@@ -115,6 +125,8 @@ function MerchantRegisterContent() {
       const newTenant: Tenant = {
         id: tenantId,
         business_name: businessName.trim(),
+        owner_name: ownerName.trim() || undefined,
+        email: email.trim().toLowerCase() || undefined,
         tax_id: taxId.trim() || undefined,
         phone: phone.trim(),
         address: address.trim() || 'Principal',
@@ -176,7 +188,7 @@ function MerchantRegisterContent() {
         }
 
         // B. Insertar Tenant en la base de datos
-        const { error: tenantErr } = await supabase.from('tenants').insert(newTenant);
+        const { error: tenantErr } = await supabase.from('tenants').insert(cleanTenantForSupabase(newTenant));
         if (tenantErr) {
           console.warn('Aviso Supabase Tenants:', tenantErr.message);
         }
@@ -262,7 +274,7 @@ function MerchantRegisterContent() {
           if (tenantId) {
             const { data: tData } = await supabase.from('tenants').select('*').eq('id', tenantId).single();
             if (tData) {
-              saveTenant(tData);
+              saveTenant(restoreTenantFromSupabase(tData));
             }
             const { data: sData } = await supabase.from('staff_members').select('*').eq('tenant_id', tenantId);
             if (sData && sData.length > 0) {

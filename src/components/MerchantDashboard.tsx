@@ -11,6 +11,7 @@ import {
   saveCustomersLocalOnly,
   saveTransactionsLocalOnly,
   saveTenant,
+  restoreTenantFromSupabase,
   syncFromSupabase,
   saveStaff,
   setCurrentOperator,
@@ -33,6 +34,7 @@ import { CreditNoteAdjustmentModal } from '@/components/CreditNoteAdjustmentModa
 import { DetailedReportsModal } from '@/components/DetailedReportsModal';
 import { EditCreditLimitModal } from '@/components/EditCreditLimitModal';
 import { EditCustomerModal } from '@/components/EditCustomerModal';
+import { EditStoreModal } from '@/components/EditStoreModal';
 import { HistoricalBatchImportModal } from '@/components/HistoricalBatchImportModal';
 import { PDFReportPreviewModal } from '@/components/PDFReportPreviewModal';
 import { CustomerHistoryModal } from '@/components/CustomerHistoryModal';
@@ -92,7 +94,9 @@ import {
   Pencil,
   ScanLine,
   Loader2,
-  Maximize2
+  Maximize2,
+  MapPin,
+  Phone
 } from 'lucide-react';
 
 const REGIONAL_CURRENCIES = [
@@ -134,6 +138,7 @@ export function MerchantDashboard() {
   const [showSubscriptionModal, setShowSubscriptionModal] = useState(false);
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [showCurrencyModal, setShowCurrencyModal] = useState(false);
+  const [showEditStoreModal, setShowEditStoreModal] = useState(false);
   const [showPrinterModal, setShowPrinterModal] = useState(false);
   const [printerFormat, setPrinterFormat] = useState<PrinterFormat>('TICKET_80MM');
   const [showWhatsAppModal, setShowWhatsAppModal] = useState(false);
@@ -192,6 +197,8 @@ export function MerchantDashboard() {
   const pushedLocalTxIdsRef = useRef<Set<string>>(new Set());
   const liveConfirmedTxIdRef = useRef<string | null>(null);
   const autoCloseTimerRef = useRef<number | null>(null);
+  const tenantRef = useRef<Tenant | null>(null);
+  tenantRef.current = tenant;
 
   // Filtros del Libro Mayor (Asientos Inmutables) por fecha, tipo y cliente
   const [ledgerDateFrom, setLedgerDateFrom] = useState('');
@@ -258,6 +265,25 @@ export function MerchantDashboard() {
       if (!currentTenantId) return;
 
       try {
+        // 0. Sincronizar perfil del comercio (nombre, logo, portada y datos generales)
+        const tenantRes = await fetch(`/api/tenants?id=${encodeURIComponent(currentTenantId)}&t=${Date.now()}`, {
+          cache: 'no-store',
+        });
+        if (tenantRes.ok) {
+          const tenantJson = await tenantRes.json();
+          if (tenantJson?.success && tenantJson.tenant && isMounted) {
+            const restoredTenant = restoreTenantFromSupabase(tenantJson.tenant);
+            const currentTime = new Date(tenantRef.current?.updated_at || 0).getTime();
+            const remoteTime = new Date(restoredTenant.updated_at || 0).getTime();
+            if (remoteTime > currentTime) {
+              try {
+                localStorage.setItem('libretadigital_tenant_v2', JSON.stringify(restoredTenant));
+              } catch {}
+              setTenant(restoredTenant);
+            }
+          }
+        }
+
         // 1. Sincronizar clientes (nuevos registros y actualización de saldos)
         const res = await fetch(`/api/customers?tenantId=${currentTenantId}&t=${Date.now()}`, {
           cache: 'no-store',
@@ -390,6 +416,7 @@ export function MerchantDashboard() {
     // BroadcastChannel para sincronización instantánea entre pestañas
     let bc: BroadcastChannel | null = null;
     let txBc: BroadcastChannel | null = null;
+    let tenantBc: BroadcastChannel | null = null;
     try {
       if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
         bc = new BroadcastChannel('libretadigital_customers_channel');
@@ -435,6 +462,19 @@ export function MerchantDashboard() {
             syncCloudData();
           }
         };
+
+        tenantBc = new BroadcastChannel('libretadigital_tenant_channel');
+        tenantBc.onmessage = (event) => {
+          if (event.data?.type === 'TENANT_UPDATED' && event.data.tenant) {
+            const updatedT = restoreTenantFromSupabase(event.data.tenant);
+            if (!tenantRef.current || updatedT.id === tenantRef.current.id) {
+              try {
+                localStorage.setItem('libretadigital_tenant_v2', JSON.stringify(updatedT));
+              } catch {}
+              setTenant(updatedT);
+            }
+          }
+        };
       }
     } catch (e) {}
 
@@ -447,6 +487,9 @@ export function MerchantDashboard() {
         realtimeSupabase = sb;
         realtimeChannel = sb
           .channel(`merchant-live-${tenant.id}`)
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'tenants' }, () => {
+            syncCloudData();
+          })
           .on('postgres_changes', { event: '*', schema: 'public', table: 'transactions' }, () => {
             syncCloudData();
           })
@@ -480,6 +523,7 @@ export function MerchantDashboard() {
       window.removeEventListener('libreta_printer_changed', handlePrinterChange);
       if (bc) bc.close();
       if (txBc) txBc.close();
+      if (tenantBc) tenantBc.close();
       if (realtimeSupabase && realtimeChannel) {
         try {
           realtimeSupabase.removeChannel(realtimeChannel);
@@ -981,10 +1025,33 @@ export function MerchantDashboard() {
             <div className="flex items-center gap-2 min-w-0">
               <BrandLogo size="sm" theme="dark" className="shrink-0" />
               <div className="h-6 w-px bg-slate-800 hidden md:block shrink-0" />
-              <div className="hidden md:block truncate">
-                <span className="text-xs font-black tracking-tight text-slate-200 block truncate">{tenant.business_name}</span>
-                <p className="text-[10px] text-slate-400">Terminal POS Activa</p>
-              </div>
+              <button
+                type="button"
+                onClick={() =>
+                  checkPermissionAndExecute('can_manage_staff', 'Editar datos, logo y portada del local', () =>
+                    setShowEditStoreModal(true)
+                  )
+                }
+                className="flex items-center gap-2 min-w-0 px-2 py-1 rounded-xl hover:bg-slate-900/90 border border-transparent hover:border-slate-800 transition text-left cursor-pointer group"
+                title="Editar datos, logo y portada del local"
+              >
+                {tenant.logo_url && (
+                  <img
+                    src={tenant.logo_url}
+                    alt={tenant.business_name}
+                    className="w-7 h-7 rounded-lg object-cover border border-white/20 bg-white shrink-0"
+                  />
+                )}
+                <div className="hidden md:block min-w-0">
+                  <span className="text-xs font-black tracking-tight text-slate-100 flex items-center gap-1 truncate max-w-[170px]">
+                    <span className="truncate">{tenant.business_name}</span>
+                    <Pencil className="w-2.5 h-2.5 text-slate-400 group-hover:text-emerald-400 shrink-0 transition" />
+                  </span>
+                  <p className="text-[10px] text-slate-400 truncate max-w-[170px]">
+                    {tenant.city || tenant.address || 'Terminal POS Activa'}
+                  </p>
+                </div>
+              </button>
             </div>
 
             {/* Controles Principales de la derecha: Operador Activo y Nuevo Cliente */}
@@ -1030,6 +1097,20 @@ export function MerchantDashboard() {
 
           {/* FILA 2: SUB-BARRA DE ACCESOS DIRECTOS (DESPLAZAMIENTO SUAVE EN MÓVIL SIN OVERFLOW) */}
           <div className="flex items-center gap-2 overflow-x-auto no-scrollbar py-0.5 w-full">
+            {/* Editar Local / Logo y Portada */}
+            <button
+              type="button"
+              onClick={() =>
+                checkPermissionAndExecute('can_manage_staff', 'Editar datos, logo y portada del local', () =>
+                  setShowEditStoreModal(true)
+                )
+              }
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600/20 hover:bg-indigo-600/35 border border-indigo-400/40 text-indigo-200 rounded-xl text-xs font-bold transition whitespace-nowrap shrink-0 shadow-xs cursor-pointer"
+              title="Editar nombre, logo, portada y datos generales del comercio"
+            >
+              <Pencil className="w-3.5 h-3.5 text-indigo-300" /> Editar Local
+            </button>
+
             {/* Gestión de Personal y Roles */}
             <button
               onClick={() => checkPermissionAndExecute('can_manage_staff', 'Gestionar Colaboradores y Roles', () => setShowStaffModal(true))}
@@ -1153,20 +1234,102 @@ export function MerchantDashboard() {
       </header>
 
       <main className="max-w-5xl mx-auto px-3 sm:px-4 pt-4 sm:pt-5 space-y-4 sm:space-y-5 w-full">
-        {/* BANNER FINANCIERO */}
-        <div className="bg-gradient-to-r from-blue-900 via-indigo-900 to-slate-900 text-white rounded-3xl p-5 shadow-md flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div className="space-y-1">
-            <div className="flex items-center gap-2">
-              <span className="inline-block w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping" />
-              <span className="text-xs uppercase font-extrabold text-blue-300 tracking-wider">
-                Suscripción Activa en {tenant.currency_code}
-              </span>
+        {/* BANNER FINANCIERO Y PERFIL DEL LOCAL */}
+        <div
+          className={`relative overflow-hidden text-white rounded-3xl p-5 shadow-md ${
+            tenant.cover_url
+              ? 'bg-slate-950'
+              : 'bg-gradient-to-r from-blue-900 via-indigo-900 to-slate-900'
+          }`}
+        >
+          {tenant.cover_url && (
+            <>
+              <img
+                src={tenant.cover_url}
+                alt={`Portada de ${tenant.business_name}`}
+                className="absolute inset-0 w-full h-full object-cover"
+              />
+              <div className="absolute inset-0 bg-gradient-to-r from-slate-950/90 via-indigo-950/85 to-slate-900/75" />
+            </>
+          )}
+
+          <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+            <div className="flex items-start gap-3.5 min-w-0">
+              <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl border-2 border-white/25 bg-white/10 backdrop-blur-md shadow-xl overflow-hidden flex items-center justify-center shrink-0">
+                {tenant.logo_url ? (
+                  <img
+                    src={tenant.logo_url}
+                    alt={`Logo de ${tenant.business_name}`}
+                    className="w-full h-full object-cover bg-white"
+                  />
+                ) : (
+                  <Store className="w-7 h-7 text-blue-200" />
+                )}
+              </div>
+
+              <div className="space-y-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="inline-block w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping" />
+                  <span className="text-xs uppercase font-extrabold text-blue-300 tracking-wider">
+                    Suscripción Activa en {tenant.currency_code}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      checkPermissionAndExecute('can_manage_staff', 'Editar datos, logo y portada del local', () =>
+                        setShowEditStoreModal(true)
+                      )
+                    }
+                    className="inline-flex items-center gap-1 text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-white/15 hover:bg-white/25 border border-white/20 text-white transition cursor-pointer"
+                  >
+                    <Pencil className="w-2.5 h-2.5" />
+                    <span>Editar Local</span>
+                  </button>
+                </div>
+
+                <h1 className="text-lg sm:text-xl font-black tracking-tight text-white leading-tight truncate">
+                  {tenant.business_name}
+                </h1>
+
+                {tenant.description ? (
+                  <p className="text-xs sm:text-sm font-medium text-slate-200 line-clamp-2">
+                    {tenant.description}
+                  </p>
+                ) : (
+                  <p className="text-xs sm:text-sm font-medium text-slate-200">
+                    Acepta Efectivo, Transferencias, Pix, QR y Tarjetas Débito/Crédito al liquidar cuentas.
+                  </p>
+                )}
+
+                {(tenant.address || tenant.city || tenant.phone || tenant.opening_hours || tenant.tax_id) && (
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 pt-1 text-[11px] text-slate-200/90 font-medium">
+                    {(tenant.address || tenant.city) && (
+                      <span className="inline-flex items-center gap-1">
+                        <MapPin className="w-3 h-3 text-emerald-400 shrink-0" />
+                        <span>{[tenant.address, tenant.city].filter(Boolean).join(' • ')}</span>
+                      </span>
+                    )}
+                    {tenant.phone && (
+                      <span className="inline-flex items-center gap-1">
+                        <Phone className="w-3 h-3 text-blue-300 shrink-0" />
+                        <span>{tenant.phone}</span>
+                      </span>
+                    )}
+                    {tenant.opening_hours && (
+                      <span className="inline-flex items-center gap-1">
+                        <Clock className="w-3 h-3 text-amber-300 shrink-0" />
+                        <span>{tenant.opening_hours}</span>
+                      </span>
+                    )}
+                    {tenant.tax_id && (
+                      <span className="text-slate-300">RUC: {tenant.tax_id}</span>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
-            <p className="text-sm font-medium text-slate-200">
-              Acepta Efectivo, Transferencias, Pix, QR y Tarjetas Débito/Crédito al liquidar cuentas.
-            </p>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
+
+            <div className="flex flex-wrap items-center gap-2 shrink-0">
             <button
               onClick={() => {
                 setHistoryCustomer(null);
@@ -1202,6 +1365,7 @@ export function MerchantDashboard() {
             </button>
             <div className="flex items-center gap-1.5 text-xs font-bold bg-white/10 px-3.5 py-2 rounded-xl backdrop-blur-md">
               <ShieldCheck className="w-4 h-4 text-emerald-400" /> Libro Inmutable
+            </div>
             </div>
           </div>
         </div>
@@ -2828,6 +2992,17 @@ export function MerchantDashboard() {
       <PrinterSettingsModal
         isOpen={showPrinterModal}
         onClose={() => setShowPrinterModal(false)}
+      />
+
+      {/* MODAL EDICIÓN INTEGRAL DEL LOCAL (LOGO, PORTADA Y DATOS GENERALES) */}
+      <EditStoreModal
+        isOpen={showEditStoreModal}
+        tenant={tenant}
+        onClose={() => setShowEditStoreModal(false)}
+        onSuccess={(updated) => {
+          setTenant(updated);
+          loadData();
+        }}
       />
     </div>
   );

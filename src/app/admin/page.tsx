@@ -39,7 +39,7 @@ import {
   HardDrive
 } from 'lucide-react';
 import { Tenant } from '@/types';
-import { getStoredData, saveTenant, loginDemoDonMario } from '@/lib/storage';
+import { getStoredData, saveTenant, loginDemoDonMario, restoreTenantFromSupabase, cleanTenantForSupabase } from '@/lib/storage';
 import { createClient } from '@/lib/supabase/client';
 import { BrandLogo } from '@/components/BrandLogo';
 import confetti from 'canvas-confetti';
@@ -324,7 +324,7 @@ export default function SuperAdminPage() {
       if (supabase) {
         const { data, error } = await supabase.from('tenants').select('*').order('created_at', { ascending: false });
         if (!error && data && data.length > 0) {
-          setTenants(data);
+          setTenants(data.map(restoreTenantFromSupabase));
           setLoading(false);
           return;
         }
@@ -482,7 +482,7 @@ export default function SuperAdminPage() {
     try {
       const supabase = createClient();
       if (supabase) {
-        await supabase.from('tenants').insert(newTenant);
+        await supabase.from('tenants').insert(cleanTenantForSupabase(newTenant));
       }
     } catch (e) {
       console.warn(e);

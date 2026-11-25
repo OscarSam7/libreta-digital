@@ -1,6 +1,7 @@
 import { Tenant, Customer, Transaction, StaffMember, PrinterFormat } from '@/types';
 import { createClient } from '@/lib/supabase/client';
 import { setSecureCookie, removeSecureCookie } from './cookies';
+import { isSafeImageUrl } from './imageUtils';
 
 export const PRINTER_STORAGE_KEY = 'libreta_printer_format_v2';
 
@@ -321,7 +322,19 @@ export function isSuperAdminLoggedIn(): boolean {
 export function loginDemoDonMario(): void {
   if (typeof window !== 'undefined') {
     localStorage.setItem(STORAGE_KEYS.IS_LOGGED_IN, 'true');
-    localStorage.setItem(STORAGE_KEYS.TENANT, JSON.stringify(INITIAL_TENANT));
+
+    // Preservar logo, portada y datos editados si ya existen para Don Mario
+    let tenantToStore: Tenant = INITIAL_TENANT;
+    const existingTenantRaw = localStorage.getItem(STORAGE_KEYS.TENANT);
+    if (existingTenantRaw) {
+      try {
+        const parsedExisting = restoreTenantFromSupabase(JSON.parse(existingTenantRaw));
+        if (parsedExisting && parsedExisting.id === INITIAL_TENANT.id) {
+          tenantToStore = parsedExisting;
+        }
+      } catch (e) {}
+    }
+    localStorage.setItem(STORAGE_KEYS.TENANT, JSON.stringify(tenantToStore));
     localStorage.setItem(STORAGE_KEYS.STAFF, JSON.stringify(INITIAL_STAFF));
     localStorage.setItem(STORAGE_KEYS.CURRENT_OPERATOR, JSON.stringify(INITIAL_STAFF[0]));
 
@@ -355,11 +368,20 @@ export function loginDemoDonMario(): void {
     }
     localStorage.setItem(STORAGE_KEYS.TRANSACTIONS, JSON.stringify(finalTxs));
 
-    // Sincronizar Don Mario a Supabase si las credenciales están presentes
+    // Sincronizar Don Mario en Supabase solo si aún no existe (nunca pisar cambios guardados)
     try {
       const supabase = createClient();
       if (supabase) {
-        supabase.from('tenants').upsert(INITIAL_TENANT).catch(() => {});
+        supabase
+          .from('tenants')
+          .upsert(cleanTenantForSupabase(INITIAL_TENANT), {
+            onConflict: 'id',
+            ignoreDuplicates: true,
+          })
+          .then(
+            () => {},
+            () => {}
+          );
       }
     } catch (e) {}
 
@@ -611,7 +633,15 @@ export function getStoredData() {
   const staffRaw = localStorage.getItem(STORAGE_KEYS.STAFF);
   const operatorRaw = localStorage.getItem(STORAGE_KEYS.CURRENT_OPERATOR);
 
-  const tenant: Tenant = tenantRaw ? JSON.parse(tenantRaw) : INITIAL_TENANT;
+  let parsedTenant: any = INITIAL_TENANT;
+  if (tenantRaw) {
+    try {
+      parsedTenant = JSON.parse(tenantRaw);
+    } catch {
+      parsedTenant = INITIAL_TENANT;
+    }
+  }
+  const tenant: Tenant = restoreTenantFromSupabase(parsedTenant);
   let customers: Customer[] = customersRaw ? JSON.parse(customersRaw) : INITIAL_CUSTOMERS;
   let transactions: Transaction[] = txRaw ? JSON.parse(txRaw) : INITIAL_TRANSACTIONS;
   const staff: StaffMember[] = staffRaw ? JSON.parse(staffRaw) : INITIAL_STAFF;
@@ -747,23 +777,138 @@ export function restoreTransactionFromSupabase(row: any): Transaction {
   };
 }
 
-export function cleanTenantForSupabase(tenant: Tenant): any {
-  return {
-    id: tenant.id,
-    business_name: tenant.business_name,
-    tax_id: tenant.tax_id || null,
-    phone: tenant.phone || null,
-    address: tenant.address || null,
-    currency_code: tenant.currency_code || 'PYG',
-    currency_symbol: tenant.currency_symbol || '₲',
-    logo_url: tenant.logo_url || null,
-    subscription_plan: tenant.subscription_plan || 'pro_monthly',
-    sub_status: tenant.sub_status || 'active',
-    trial_ends_at: tenant.trial_ends_at || new Date(Date.now() + 14 * 86400000).toISOString(),
-    subscription_ends_at: tenant.subscription_ends_at || new Date(Date.now() + 30 * 86400000).toISOString(),
-    created_at: tenant.created_at || new Date().toISOString(),
-    updated_at: tenant.updated_at || new Date().toISOString(),
+const TENANT_PROFILE_PREFIX = '__LD_PROFILE_V1__:';
+
+export const isSafeTenantImageUrl = isSafeImageUrl;
+
+/**
+ * Serializa logo, portada y perfil extendido dentro de la columna `logo_url`
+ * cuando existen campos extendidos, permitiendo persistencia cero-migración en Supabase.
+ */
+export function encodeTenantLogoField(tenant: Partial<Tenant>): string | null {
+  const safeLogo = isSafeTenantImageUrl(tenant.logo_url) ? tenant.logo_url!.trim() : undefined;
+  const safeCover = isSafeTenantImageUrl(tenant.cover_url) ? tenant.cover_url!.trim() : undefined;
+  const description = typeof tenant.description === 'string' && tenant.description.trim() ? tenant.description.trim() : undefined;
+  const owner_name = typeof tenant.owner_name === 'string' && tenant.owner_name.trim() ? tenant.owner_name.trim() : undefined;
+  const email = typeof tenant.email === 'string' && tenant.email.trim() ? tenant.email.trim() : undefined;
+  const opening_hours = typeof tenant.opening_hours === 'string' && tenant.opening_hours.trim() ? tenant.opening_hours.trim() : undefined;
+  const city = typeof tenant.city === 'string' && tenant.city.trim() ? tenant.city.trim() : undefined;
+
+  if (safeCover || description || owner_name || email || opening_hours || city) {
+    return (
+      TENANT_PROFILE_PREFIX +
+      JSON.stringify({
+        ...(safeLogo ? { logo_url: safeLogo } : {}),
+        ...(safeCover ? { cover_url: safeCover } : {}),
+        ...(description ? { description } : {}),
+        ...(owner_name ? { owner_name } : {}),
+        ...(email ? { email } : {}),
+        ...(opening_hours ? { opening_hours } : {}),
+        ...(city ? { city } : {}),
+      })
+    );
+  }
+
+  return safeLogo || null;
+}
+
+/**
+ * Restaura un comercio desde fila Supabase o almacenamiento local, decodificando el sobre
+ * `__LD_PROFILE_V1__:` de manera segura y filtrando URLs de imágenes inválidas o inseguras.
+ */
+export function restoreTenantFromSupabase(row: any): Tenant {
+  const safeRow = row && typeof row === 'object' ? row : {};
+  const rawLogoField = typeof safeRow.logo_url === 'string' ? safeRow.logo_url.trim() : '';
+
+  let parsedEnvelope: Record<string, any> = {};
+  let resolvedLogo: string | undefined;
+
+  if (rawLogoField.startsWith(TENANT_PROFILE_PREFIX)) {
+    try {
+      const jsonStr = rawLogoField.slice(TENANT_PROFILE_PREFIX.length);
+      const parsed = JSON.parse(jsonStr);
+      if (parsed && typeof parsed === 'object') {
+        parsedEnvelope = parsed;
+      }
+    } catch {
+      parsedEnvelope = {};
+    }
+    const innerLogo = typeof parsedEnvelope.logo_url === 'string' ? parsedEnvelope.logo_url.trim() : '';
+    resolvedLogo = isSafeTenantImageUrl(innerLogo) ? innerLogo : undefined;
+  } else {
+    resolvedLogo = isSafeTenantImageUrl(rawLogoField) ? rawLogoField : undefined;
+  }
+
+  const pickSafeImg = (primary: any, secondary: any): string | undefined => {
+    if (typeof primary === 'string' && isSafeTenantImageUrl(primary)) return primary.trim();
+    if (typeof secondary === 'string' && isSafeTenantImageUrl(secondary)) return secondary.trim();
+    return undefined;
   };
+
+  const pickOptText = (primary: any, secondary: any): string | undefined => {
+    if (typeof primary === 'string' && primary.trim()) return primary.trim();
+    if (typeof secondary === 'string' && secondary.trim()) return secondary.trim();
+    return undefined;
+  };
+
+  const nowIso = new Date().toISOString();
+  return {
+    ...safeRow,
+    id: safeRow.id || INITIAL_TENANT.id,
+    business_name: safeRow.business_name || INITIAL_TENANT.business_name,
+    tax_id: pickOptText(safeRow.tax_id, parsedEnvelope.tax_id),
+    phone: pickOptText(safeRow.phone, parsedEnvelope.phone),
+    address: pickOptText(safeRow.address, parsedEnvelope.address),
+    currency_code: safeRow.currency_code || INITIAL_TENANT.currency_code || 'PYG',
+    currency_symbol: safeRow.currency_symbol || INITIAL_TENANT.currency_symbol || '₲',
+    logo_url: resolvedLogo,
+    cover_url: pickSafeImg(safeRow.cover_url, parsedEnvelope.cover_url),
+    description: pickOptText(safeRow.description, parsedEnvelope.description),
+    owner_name: pickOptText(safeRow.owner_name, parsedEnvelope.owner_name),
+    email: pickOptText(safeRow.email, parsedEnvelope.email),
+    opening_hours: pickOptText(safeRow.opening_hours, parsedEnvelope.opening_hours),
+    city: pickOptText(safeRow.city, parsedEnvelope.city),
+    subscription_plan: safeRow.subscription_plan || INITIAL_TENANT.subscription_plan || 'pro_monthly',
+    sub_status: safeRow.sub_status || INITIAL_TENANT.sub_status || 'active',
+    trial_ends_at: safeRow.trial_ends_at || INITIAL_TENANT.trial_ends_at || nowIso,
+    subscription_ends_at: safeRow.subscription_ends_at || INITIAL_TENANT.subscription_ends_at || nowIso,
+    created_at: safeRow.created_at || INITIAL_TENANT.created_at || nowIso,
+    updated_at: safeRow.updated_at || nowIso,
+  };
+}
+
+export function cleanTenantForSupabase(tenant: Tenant): any {
+  const restored = restoreTenantFromSupabase(tenant);
+  return {
+    id: restored.id,
+    business_name: restored.business_name,
+    tax_id: restored.tax_id || null,
+    phone: restored.phone || null,
+    address: restored.address || null,
+    currency_code: restored.currency_code || 'PYG',
+    currency_symbol: restored.currency_symbol || '₲',
+    logo_url: encodeTenantLogoField(restored),
+    subscription_plan: restored.subscription_plan || 'pro_monthly',
+    sub_status: restored.sub_status || 'active',
+    trial_ends_at: restored.trial_ends_at || new Date(Date.now() + 14 * 86400000).toISOString(),
+    subscription_ends_at: restored.subscription_ends_at || new Date(Date.now() + 30 * 86400000).toISOString(),
+    created_at: restored.created_at || new Date().toISOString(),
+    updated_at: restored.updated_at || new Date().toISOString(),
+  };
+}
+
+function broadcastTenantUpdate(tenant: Tenant) {
+  try {
+    if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+      const bc = new BroadcastChannel('libretadigital_tenant_channel');
+      bc.postMessage({ type: 'TENANT_UPDATED', tenant });
+      bc.close();
+    }
+  } catch {}
+}
+
+function saveTenantToLocalStorage(tenant: Tenant) {
+  localStorage.setItem(STORAGE_KEYS.TENANT, JSON.stringify(tenant));
 }
 
 export function saveTransactionsLocalOnly(transactions: Transaction[]): Transaction[] {
@@ -831,15 +976,45 @@ export function saveCustomers(customers: Customer[]) {
 
 export function saveTenant(tenant: Tenant) {
   if (typeof window !== 'undefined') {
-    localStorage.setItem(STORAGE_KEYS.TENANT, JSON.stringify(tenant));
+    const clean = restoreTenantFromSupabase({
+      ...tenant,
+      updated_at: tenant.updated_at || new Date().toISOString(),
+    });
+    try {
+      saveTenantToLocalStorage(clean);
+    } catch (e) {
+      console.warn('Error saving tenant locally:', e);
+    }
     window.dispatchEvent(new Event('libreta_data_updated'));
+    broadcastTenantUpdate(clean);
+
+    // Sincronizar con API central
+    fetch('/api/tenants', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(clean),
+    }).catch(() => {});
 
     try {
       const supabase = createClient();
       if (supabase) {
-        supabase.from('tenants').upsert(cleanTenantForSupabase(tenant)).then(({ error }: { error: any }) => {
-          if (error) console.warn('Supabase tenant sync notice:', error.message);
-        });
+        const payload = cleanTenantForSupabase(clean);
+        supabase
+          .from('tenants')
+          .update(payload)
+          .eq('id', clean.id)
+          .select()
+          .then(({ data, error }: { data: any; error: any }) => {
+            if (error || !Array.isArray(data) || data.length === 0) {
+              supabase
+                .from('tenants')
+                .upsert(payload)
+                .then(
+                  () => {},
+                  () => {}
+                );
+            }
+          });
       }
     } catch (e) {
       // Offline fallback
@@ -847,20 +1022,130 @@ export function saveTenant(tenant: Tenant) {
   }
 }
 
+/**
+ * Actualiza el perfil completo del comercio (datos generales, logo y portada)
+ * con persistencia inmediata local, sincronización API y respaldo directo en Supabase.
+ */
+export async function updateTenantProfile(
+  tenant: Tenant
+): Promise<{ success: boolean; tenant: Tenant; cloudSynced: boolean; error?: string }> {
+  const clean = restoreTenantFromSupabase({
+    ...tenant,
+    updated_at: new Date().toISOString(),
+  });
+
+  if (typeof window !== 'undefined') {
+    try {
+      saveTenantToLocalStorage(clean);
+    } catch {
+      return {
+        success: false,
+        tenant: clean,
+        cloudSynced: false,
+        error: 'El espacio local del navegador está lleno. Probá usar una imagen más liviana.',
+      };
+    }
+    window.dispatchEvent(new Event('libreta_data_updated'));
+    broadcastTenantUpdate(clean);
+  }
+
+  let finalTenant = clean;
+  let cloudSynced = false;
+
+  try {
+    const res = await fetch('/api/tenants', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      cache: 'no-store',
+      body: JSON.stringify(clean),
+    });
+    if (res.ok) {
+      const json = await res.json();
+      if (json?.tenant) {
+        finalTenant = restoreTenantFromSupabase(json.tenant);
+        if (typeof window !== 'undefined') {
+          try {
+            saveTenantToLocalStorage(finalTenant);
+            window.dispatchEvent(new Event('libreta_data_updated'));
+            broadcastTenantUpdate(finalTenant);
+          } catch {}
+        }
+      }
+      cloudSynced = Boolean(json?.cloud_synced);
+    }
+  } catch {}
+
+  if (!cloudSynced && typeof window !== 'undefined') {
+    try {
+      const supabase = createClient();
+      if (supabase) {
+        const payload = cleanTenantForSupabase(finalTenant);
+        const { data: updData, error: updErr } = await supabase
+          .from('tenants')
+          .update(payload)
+          .eq('id', finalTenant.id)
+          .select()
+          .maybeSingle();
+
+        if (!updErr && updData) {
+          cloudSynced = true;
+        } else {
+          const { data: upsData, error: upsErr } = await supabase
+            .from('tenants')
+            .upsert(payload)
+            .select()
+            .maybeSingle();
+          if (!upsErr && upsData) {
+            cloudSynced = true;
+          }
+        }
+      }
+    } catch {}
+  }
+
+  return { success: true, tenant: finalTenant, cloudSynced };
+}
+
+function isRemoteTenantNewer(remote: Tenant, local: Tenant | null): boolean {
+  if (!local) return true;
+  const remoteTime = new Date(remote.updated_at || 0).getTime();
+  const localTime = new Date(local.updated_at || 0).getTime();
+  return remoteTime > localTime;
+}
+
 export async function syncFromSupabase() {
   if (typeof window === 'undefined') return;
   try {
+    let localTenant: Tenant | null = null;
+    const localTenantRaw = localStorage.getItem(STORAGE_KEYS.TENANT);
+    if (localTenantRaw) {
+      try {
+        localTenant = restoreTenantFromSupabase(JSON.parse(localTenantRaw));
+      } catch {}
+    }
+    const activeTenantId = localTenant?.id || INITIAL_TENANT.id;
+
     const supabase = createClient();
     if (supabase) {
-      const [tenantsRes, custRes, txRes, staffRes] = await Promise.all([
-        supabase.from('tenants').select('*').limit(1),
+      const tenantQuery = localTenant?.id
+        ? supabase.from('tenants').select('*').eq('id', activeTenantId).maybeSingle()
+        : supabase.from('tenants').select('*').limit(1).maybeSingle();
+
+      const [tenantRes, custRes, txRes, staffRes] = await Promise.all([
+        tenantQuery,
         supabase.from('customers').select('*').order('created_at', { ascending: false }),
         supabase.from('transactions').select('*').order('created_at', { ascending: false }),
         supabase.from('staff_members').select('*').order('created_at', { ascending: false }),
       ]);
 
-      if (tenantsRes.data && tenantsRes.data.length > 0) {
-        localStorage.setItem(STORAGE_KEYS.TENANT, JSON.stringify(tenantsRes.data[0]));
+      if (tenantRes?.data) {
+        const restoredSbTenant = restoreTenantFromSupabase(tenantRes.data);
+        if (isRemoteTenantNewer(restoredSbTenant, localTenant)) {
+          try {
+            saveTenantToLocalStorage(restoredSbTenant);
+            localTenant = restoredSbTenant;
+          } catch {}
+        }
       }
 
       if (custRes.data && custRes.data.length > 0) {
@@ -899,18 +1184,28 @@ export async function syncFromSupabase() {
       }
     }
 
-    // SIEMPRE consultar también la API central compartida /api/customers y /api/transactions
-    const tenantRaw = localStorage.getItem(STORAGE_KEYS.TENANT);
-    const tenantId = tenantRaw ? JSON.parse(tenantRaw).id : INITIAL_TENANT.id;
+    // SIEMPRE consultar también la API central compartida /api/tenants, /api/customers y /api/transactions
     const ts = Date.now();
-    const [apiCustRes, apiTxRes] = await Promise.all([
-      fetch(`/api/customers?tenantId=${tenantId}&t=${ts}`, { cache: 'no-store' })
+    const [apiTenantRes, apiCustRes, apiTxRes] = await Promise.all([
+      fetch(`/api/tenants?id=${encodeURIComponent(activeTenantId)}&t=${ts}`, { cache: 'no-store' })
         .then((r) => r.json())
         .catch(() => null),
-      fetch(`/api/transactions?tenantId=${tenantId}&t=${ts}`, { cache: 'no-store' })
+      fetch(`/api/customers?tenantId=${activeTenantId}&t=${ts}`, { cache: 'no-store' })
+        .then((r) => r.json())
+        .catch(() => null),
+      fetch(`/api/transactions?tenantId=${activeTenantId}&t=${ts}`, { cache: 'no-store' })
         .then((r) => r.json())
         .catch(() => null),
     ]);
+
+    if (apiTenantRes && apiTenantRes.success && apiTenantRes.tenant) {
+      const restoredApiTenant = restoreTenantFromSupabase(apiTenantRes.tenant);
+      if (isRemoteTenantNewer(restoredApiTenant, localTenant)) {
+        try {
+          saveTenantToLocalStorage(restoredApiTenant);
+        } catch {}
+      }
+    }
 
     if (apiCustRes && apiCustRes.success && Array.isArray(apiCustRes.customers)) {
       const currentRaw = localStorage.getItem(STORAGE_KEYS.CUSTOMERS);

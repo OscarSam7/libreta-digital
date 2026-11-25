@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { Customer } from '@/types';
+import { Tenant, Customer } from '@/types';
 import { sanitizeText, validateAmount } from '@/lib/validation';
 import {
   INITIAL_CUSTOMERS,
@@ -7,6 +7,7 @@ import {
   cleanCustomerForSupabase,
   restoreCustomerFromSupabase,
   cleanTenantForSupabase,
+  restoreTenantFromSupabase,
   deduplicateCustomers,
   areCustomersSamePerson,
 } from '@/lib/storage';
@@ -26,6 +27,8 @@ const NO_CACHE_HEADERS = {
 declare global {
   // eslint-disable-next-line no-var
   var __LIBRETA_SHARED_CUSTOMERS__: Map<string, Customer[]> | undefined;
+  // eslint-disable-next-line no-var
+  var __LIBRETA_SHARED_TENANTS__: Map<string, Tenant> | undefined;
 }
 
 if (!globalThis.__LIBRETA_SHARED_CUSTOMERS__) {
@@ -35,6 +38,20 @@ if (!globalThis.__LIBRETA_SHARED_CUSTOMERS__) {
 }
 
 const customerStore = globalThis.__LIBRETA_SHARED_CUSTOMERS__;
+
+function resolveFreshTenant(supabaseTenantRow: any, tenantId: string): Tenant {
+  const sbTenant = supabaseTenantRow ? restoreTenantFromSupabase(supabaseTenantRow) : null;
+  const memRaw = globalThis.__LIBRETA_SHARED_TENANTS__?.get(tenantId);
+  const memTenant = memRaw ? restoreTenantFromSupabase(memRaw) : null;
+
+  if (sbTenant && memTenant) {
+    const sbTime = new Date(sbTenant.updated_at || 0).getTime();
+    const memTime = new Date(memTenant.updated_at || 0).getTime();
+    return memTime > sbTime ? memTenant : sbTenant;
+  }
+
+  return sbTenant || memTenant || INITIAL_TENANT;
+}
 
 // Helper para crear cliente Supabase server-side si las credenciales están configuradas
 function getServerSupabase() {
@@ -151,7 +168,7 @@ export async function GET(req: NextRequest) {
               {
                 success: true,
                 customer: mergedCustomer,
-                tenant: tData || INITIAL_TENANT,
+                tenant: resolveFreshTenant(tData, restoredCustomer.tenant_id),
               },
               { headers: NO_CACHE_HEADERS }
             );
@@ -163,15 +180,15 @@ export async function GET(req: NextRequest) {
       for (const [tId, custList] of customerStore.entries()) {
         const found = custList.find((c) => c.qr_token === token);
         if (found) {
-          let resolvedTenant = tId === INITIAL_TENANT.id ? INITIAL_TENANT : null;
-          if (!resolvedTenant && supabase) {
+          let sbTenantRow: any = null;
+          if (supabase) {
             try {
               const { data: tData } = await supabase
                 .from('tenants')
                 .select('*')
                 .eq('id', tId)
                 .maybeSingle();
-              if (tData) resolvedTenant = tData;
+              if (tData) sbTenantRow = tData;
             } catch (e) {}
           }
 
@@ -179,7 +196,7 @@ export async function GET(req: NextRequest) {
             {
               success: true,
               customer: found,
-              tenant: resolvedTenant || INITIAL_TENANT,
+              tenant: resolveFreshTenant(sbTenantRow, tId),
             },
             { headers: NO_CACHE_HEADERS }
           );
@@ -193,7 +210,7 @@ export async function GET(req: NextRequest) {
           {
             success: true,
             customer: initialMatch,
-            tenant: INITIAL_TENANT,
+            tenant: resolveFreshTenant(null, INITIAL_TENANT.id),
           },
           { headers: NO_CACHE_HEADERS }
         );

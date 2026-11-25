@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { Store, ShieldCheck, Phone, Lock, User, ArrowRight, CheckCircle2, AlertCircle, Building2, MapPin, LogOut } from 'lucide-react';
 import { Tenant } from '@/types';
-import { saveTenant, getStoredData } from '@/lib/storage';
+import { saveTenant, getStoredData, restoreTenantFromSupabase, cleanTenantForSupabase } from '@/lib/storage';
 import { createClient } from '@/lib/supabase/client';
 import { BrandLogo } from '@/components/BrandLogo';
 import { CustomSelect } from '@/components/ui/CustomSelectModal';
@@ -43,8 +43,9 @@ export function MerchantAuthModal({ onSuccess, onCancel }: Props) {
         if (supabase) {
           const { data, error } = await supabase.from('tenants').select('*').order('business_name');
           if (!error && data && data.length > 0) {
-            setExistingTenants(data);
-            setSelectedTenantId(data[0].id);
+            const restored = data.map(restoreTenantFromSupabase);
+            setExistingTenants(restored);
+            setSelectedTenantId(restored[0].id);
             return;
           }
         }
@@ -83,6 +84,7 @@ export function MerchantAuthModal({ onSuccess, onCancel }: Props) {
       const newTenant: Tenant = {
         id: crypto.randomUUID(),
         business_name: businessName.trim(),
+        owner_name: ownerName.trim() || undefined,
         tax_id: taxId.trim() || 'Sin RUC',
         phone: phone.trim().replace(/\D/g, ''),
         address: address.trim() || 'Central',
@@ -98,7 +100,7 @@ export function MerchantAuthModal({ onSuccess, onCancel }: Props) {
 
       const supabase = createClient();
       if (supabase) {
-        const { error: sbError } = await supabase.from('tenants').insert(newTenant);
+        const { error: sbError } = await supabase.from('tenants').insert(cleanTenantForSupabase(newTenant));
         if (sbError) {
           console.warn('Supabase tenant insert notice:', sbError.message);
         }

@@ -30,6 +30,12 @@ export interface Tenant {
   currency_code: string;
   currency_symbol: string;
   logo_url?: string;
+  cover_url?: string;
+  description?: string;
+  owner_name?: string;
+  email?: string;
+  opening_hours?: string;
+  city?: string;
   subscription_plan: string;
   sub_status: SubscriptionStatus;
   trial_ends_at: string;

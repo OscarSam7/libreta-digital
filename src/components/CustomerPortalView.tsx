@@ -7,6 +7,7 @@ import {
   getStoredData,
   saveCustomersLocalOnly,
   saveTransactionsLocalOnly,
+  restoreTenantFromSupabase,
   deduplicateTransactions,
   ensureValidUuid,
 } from '@/lib/storage';
@@ -35,7 +36,10 @@ import {
   Receipt,
   RotateCcw,
   ScanLine,
-  Loader2
+  Loader2,
+  Store,
+  MapPin,
+  Phone
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { BrandLogo } from '@/components/BrandLogo';
@@ -180,7 +184,7 @@ export function CustomerPortalView({ token }: Props) {
         if (json.success && json.customer) {
           const cloudCust: Customer = json.customer;
           setCustomer(cloudCust);
-          if (json.tenant) setTenant(json.tenant);
+          if (json.tenant) setTenant(restoreTenantFromSupabase(json.tenant));
 
           const targetCloudCustUuid = ensureValidUuid(cloudCust.id);
           const matchingLocalTxs: Transaction[] = localData.transactions
@@ -263,10 +267,24 @@ export function CustomerPortalView({ token }: Props) {
     window.addEventListener('storage', handleUpdate);
     document.addEventListener('visibilitychange', handleVisibility);
 
+    let tenantBc: BroadcastChannel | null = null;
+    try {
+      if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+        tenantBc = new BroadcastChannel('libretadigital_tenant_channel');
+        tenantBc.onmessage = (event) => {
+          if (event.data?.type === 'TENANT_UPDATED' && event.data.tenant) {
+            const restored = restoreTenantFromSupabase(event.data.tenant);
+            setTenant((prev) => (!prev || prev.id === restored.id ? restored : prev));
+          }
+        };
+      }
+    } catch {}
+
     return () => {
       window.removeEventListener('libreta_data_updated', handleUpdate);
       window.removeEventListener('storage', handleUpdate);
       document.removeEventListener('visibilitychange', handleVisibility);
+      if (tenantBc) tenantBc.close();
     };
   }, [token]);
 
@@ -591,14 +609,81 @@ export function CustomerPortalView({ token }: Props) {
       </div>
 
       {/* Header Comercio emisor */}
-      <div className="text-center mb-4 bg-white p-3 rounded-2xl border border-slate-200/80 shadow-xs">
-        <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 block">
-          Comercio Emisor
-        </span>
-        <h2 className="text-base font-black text-slate-900">{tenant.business_name}</h2>
-        {tenant.phone && (
-          <p className="text-xs text-slate-500 font-medium mt-0.5">Contacto: +{tenant.phone}</p>
+      <div className="mb-4 bg-white rounded-3xl border border-slate-200/80 shadow-xs overflow-hidden">
+        {tenant.cover_url && (
+          <div className="relative h-28 w-full bg-slate-900 overflow-hidden">
+            <img
+              src={tenant.cover_url}
+              alt={`Portada de ${tenant.business_name}`}
+              className="w-full h-full object-cover"
+            />
+            <div className="absolute inset-0 bg-gradient-to-t from-slate-950/60 via-transparent to-transparent" />
+          </div>
         )}
+
+        <div className={`px-4 pb-3.5 ${tenant.cover_url ? '-mt-8 relative z-10' : 'pt-3.5'}`}>
+          <div className={`flex ${tenant.cover_url ? 'flex-col items-center text-center' : 'items-center gap-3 text-left'}`}>
+            <div
+              className={`${
+                tenant.cover_url
+                  ? 'w-16 h-16 border-4 border-white shadow-md mb-1.5'
+                  : 'w-12 h-12 border border-slate-200 shadow-xs shrink-0'
+              } rounded-2xl bg-slate-900 overflow-hidden flex items-center justify-center`}
+            >
+              {tenant.logo_url ? (
+                <img
+                  src={tenant.logo_url}
+                  alt={`Logo de ${tenant.business_name}`}
+                  className="w-full h-full object-cover bg-white"
+                />
+              ) : (
+                <Store className="w-6 h-6 text-indigo-300" />
+              )}
+            </div>
+
+            <div className="min-w-0 flex-1">
+              <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 block">
+                Comercio Emisor
+              </span>
+              <h2 className="text-base font-black text-slate-900 truncate">{tenant.business_name}</h2>
+              {tenant.description && (
+                <p className="text-[11px] text-slate-600 font-medium mt-0.5 line-clamp-2">
+                  {tenant.description}
+                </p>
+              )}
+            </div>
+          </div>
+
+          {(tenant.address || tenant.city || tenant.phone || tenant.opening_hours || tenant.tax_id) && (
+            <div
+              className={`mt-2.5 pt-2.5 border-t border-slate-100 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-slate-500 font-medium ${
+                tenant.cover_url ? 'justify-center' : 'justify-start'
+              }`}
+            >
+              {(tenant.address || tenant.city) && (
+                <span className="inline-flex items-center gap-1">
+                  <MapPin className="w-3 h-3 text-emerald-600 shrink-0" />
+                  <span>{[tenant.address, tenant.city].filter(Boolean).join(' • ')}</span>
+                </span>
+              )}
+              {tenant.phone && (
+                <span className="inline-flex items-center gap-1">
+                  <Phone className="w-3 h-3 text-indigo-600 shrink-0" />
+                  <span>{tenant.phone}</span>
+                </span>
+              )}
+              {tenant.opening_hours && (
+                <span className="inline-flex items-center gap-1">
+                  <Clock className="w-3 h-3 text-amber-600 shrink-0" />
+                  <span>{tenant.opening_hours}</span>
+                </span>
+              )}
+              {tenant.tax_id && (
+                <span className="text-slate-400">RUC: {tenant.tax_id}</span>
+              )}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Tarjeta Principal de Saldo */}
