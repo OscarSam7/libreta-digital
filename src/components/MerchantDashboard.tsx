@@ -35,6 +35,8 @@ import { DetailedReportsModal } from '@/components/DetailedReportsModal';
 import { EditCreditLimitModal } from '@/components/EditCreditLimitModal';
 import { EditCustomerModal } from '@/components/EditCustomerModal';
 import { EditStoreModal } from '@/components/EditStoreModal';
+import { LanguageSelector } from '@/components/LanguageSelector';
+import { appendLocaleQuery, tLocale } from '@/lib/i18n';
 import { HistoricalBatchImportModal } from '@/components/HistoricalBatchImportModal';
 import { PDFReportPreviewModal } from '@/components/PDFReportPreviewModal';
 import { CustomerHistoryModal } from '@/components/CustomerHistoryModal';
@@ -1044,10 +1046,10 @@ export function MerchantDashboard() {
                 )}
                 <div className="hidden md:block min-w-0">
                   <span className="text-xs font-black tracking-tight text-slate-100 flex items-center gap-1 truncate max-w-[170px]">
-                    <span className="truncate">{tenant.business_name}</span>
+                    <span data-no-translate="true" className="truncate">{tenant.business_name}</span>
                     <Pencil className="w-2.5 h-2.5 text-slate-400 group-hover:text-emerald-400 shrink-0 transition" />
                   </span>
-                  <p className="text-[10px] text-slate-400 truncate max-w-[170px]">
+                  <p data-no-translate="true" className="text-[10px] text-slate-400 truncate max-w-[170px]">
                     {tenant.city || tenant.address || 'Terminal POS Activa'}
                   </p>
                 </div>
@@ -1168,12 +1170,19 @@ export function MerchantDashboard() {
             {/* Link Clientes */}
             <button
               onClick={() => {
-                const url = `${typeof window !== 'undefined' ? window.location.origin : ''}/registro-cliente?almacen=${tenant.id}`;
+                const url = appendLocaleQuery(
+                  `${typeof window !== 'undefined' ? window.location.origin : ''}/registro-cliente?almacen=${tenant.id}`
+                );
                 if (navigator.clipboard) {
                   navigator.clipboard.writeText(url);
-                  alert('¡Enlace de auto-registro copiado al portapapeles!\n\nPuedes enviarlo a tus clientes por WhatsApp:\n\n' + url);
+                  alert(
+                    tLocale(
+                      '¡Enlace de auto-registro copiado al portapapeles!\n\nPuedes enviarlo a tus clientes por WhatsApp:\n\n',
+                      'Link de autocadastro copiado para a área de transferência!\n\nVocê pode enviá-lo aos seus clientes pelo WhatsApp:\n\n'
+                    ) + url
+                  );
                 } else {
-                  prompt('Copia este enlace para enviar a tus clientes:', url);
+                  prompt(tLocale('Copia este enlace para enviar a tus clientes:', 'Copie este link para enviar aos seus clientes:'), url);
                 }
               }}
               className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-200 rounded-xl text-xs font-bold transition whitespace-nowrap shrink-0 shadow-xs"
@@ -1193,6 +1202,9 @@ export function MerchantDashboard() {
               <span>{tenant.currency_code} ({tenant.currency_symbol})</span>
               <ChevronDown className="w-3 h-3 text-slate-500 shrink-0" />
             </button>
+
+            {/* Selector de Idioma ES | PT */}
+            <LanguageSelector variant="dark" />
 
             {/* Configuración Impresora POS / A4 */}
             <button
@@ -1287,12 +1299,12 @@ export function MerchantDashboard() {
                   </button>
                 </div>
 
-                <h1 className="text-lg sm:text-xl font-black tracking-tight text-white leading-tight truncate">
+                <h1 data-no-translate="true" className="text-lg sm:text-xl font-black tracking-tight text-white leading-tight truncate">
                   {tenant.business_name}
                 </h1>
 
                 {tenant.description ? (
-                  <p className="text-xs sm:text-sm font-medium text-slate-200 line-clamp-2">
+                  <p data-no-translate="true" className="text-xs sm:text-sm font-medium text-slate-200 line-clamp-2">
                     {tenant.description}
                   </p>
                 ) : (
@@ -1541,7 +1553,7 @@ export function MerchantDashboard() {
                             className="font-black text-base text-slate-900 hover:text-blue-600 text-left transition flex items-center gap-1.5 group cursor-pointer"
                             title="Clic para editar ficha completa de este cliente"
                           >
-                            <span>{cust.full_name}</span>
+                            <span data-no-translate="true">{cust.full_name}</span>
                             <Pencil className="w-3.5 h-3.5 text-slate-400 group-hover:text-blue-600 opacity-60 group-hover:opacity-100 transition shrink-0" />
                           </button>
                           {isOverdue && (
@@ -2513,7 +2525,9 @@ export function MerchantDashboard() {
 
             {txStep === 'PIN_VERIFY' && createdTx && activeTxCustomer && (() => {
               const baseUrl = typeof window !== 'undefined' ? window.location.origin : 'https://libreta-digital-six.vercel.app';
-              const certifyQrUrl = `${baseUrl}/portal/${activeTxCustomer.qr_token}?certifyTx=${encodeURIComponent(createdTx.id)}&code=${encodeURIComponent(createdTx.validation_pin || '')}`;
+              const certifyQrUrl = appendLocaleQuery(
+                `${baseUrl}/portal/${activeTxCustomer.qr_token}?certifyTx=${encodeURIComponent(createdTx.id)}&code=${encodeURIComponent(createdTx.validation_pin || '')}`
+              );
 
               return (
                 <div className="text-center space-y-4 py-1 max-h-[82vh] overflow-y-auto">
@@ -2615,7 +2629,10 @@ export function MerchantDashboard() {
                       <div>
                         <a
                           href={`https://wa.me/${activeTxCustomer.phone.replace(/\D/g, '').replace(/^0/, '595')}?text=${encodeURIComponent(
-                            `Hola *${activeTxCustomer.full_name}*! Registramos tu compra fiada en *${tenant.business_name}* por *${formatCurrency(createdTx.amount)}* (${createdTx.description || 'Mercaderías'}). Tocá este enlace para certificar al instante:\n${certifyQrUrl}`
+                            tLocale(
+                              `Hola *${activeTxCustomer.full_name}*! Registramos tu compra fiada en *${tenant.business_name}* por *${formatCurrency(createdTx.amount)}* (${createdTx.description || 'Mercaderías'}). Tocá este enlace para certificar al instante:\n${certifyQrUrl}`,
+                              `Olá *${activeTxCustomer.full_name}*! Registramos sua compra no fiado em *${tenant.business_name}* de *${formatCurrency(createdTx.amount)}* (${createdTx.description || 'Mercadorias'}). Toque neste link para certificar na hora:\n${certifyQrUrl}`
+                            )
                           )}`}
                           target="_blank"
                           rel="noopener noreferrer"

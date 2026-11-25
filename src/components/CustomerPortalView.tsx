@@ -43,6 +43,7 @@ import {
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { BrandLogo } from '@/components/BrandLogo';
+import { LanguageSelector } from '@/components/LanguageSelector';
 
 interface Props {
   token: string;
@@ -603,9 +604,10 @@ export function CustomerPortalView({ token }: Props) {
 
   return (
     <main className="min-h-screen bg-slate-100 p-4 max-w-md mx-auto pb-16 font-sans">
-      {/* Logotipo Oficial LibretaDigital Pro */}
-      <div className="flex justify-center mb-3 pt-2">
+      {/* Logotipo Oficial LibretaDigital Pro y Selector de Idioma */}
+      <div className="flex items-center justify-between gap-2 mb-3 pt-2">
         <BrandLogo size="md" theme="light" />
+        <LanguageSelector variant="light" />
       </div>
 
       {/* Header Comercio emisor */}
@@ -645,9 +647,9 @@ export function CustomerPortalView({ token }: Props) {
               <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 block">
                 Comercio Emisor
               </span>
-              <h2 className="text-base font-black text-slate-900 truncate">{tenant.business_name}</h2>
+              <h2 data-no-translate="true" className="text-base font-black text-slate-900 truncate">{tenant.business_name}</h2>
               {tenant.description && (
-                <p className="text-[11px] text-slate-600 font-medium mt-0.5 line-clamp-2">
+                <p data-no-translate="true" className="text-[11px] text-slate-600 font-medium mt-0.5 line-clamp-2">
                   {tenant.description}
                 </p>
               )}
@@ -693,9 +695,9 @@ export function CustomerPortalView({ token }: Props) {
             <span className="text-[10px] uppercase font-bold tracking-wider text-indigo-300">
               Titular de Cuenta
             </span>
-            <h1 className="text-2xl font-black tracking-tight">{customer.full_name}</h1>
+            <h1 data-no-translate="true" className="text-2xl font-black tracking-tight">{customer.full_name}</h1>
             {customer.nickname && (
-              <p className="text-xs text-indigo-300">"{customer.nickname}"</p>
+              <p data-no-translate="true" className="text-xs text-indigo-300">"{customer.nickname}"</p>
             )}
             <p className="text-xs text-slate-400 mt-0.5">
               C.I / Documento: {customer.document_id || 'Registrado'}

@@ -48,6 +48,7 @@ import { safeCompare } from '@/lib/security';
 import { CustomSelect } from '@/components/ui/CustomSelectModal';
 import { CustomDateInput } from '@/components/ui/CustomDatePickerModal';
 import { sanitizeText } from '@/lib/validation';
+import { translateText } from '@/lib/i18n/translator';
 
 const SUPERADMIN_STORAGE_KEY = 'libretadigital_superadmin_session_v2';
 const MASTER_FOUNDER_EMAIL = 'oskrsam7@gmail.com';
@@ -257,7 +258,7 @@ export default function SuperAdminPage() {
 
   // Cerrar sesión de Super Admin
   const handleLogoutAdmin = async () => {
-    if (confirm('¿Deseas cerrar sesión del portal Super Admin?')) {
+    if (confirm(translateText('¿Deseas cerrar sesión del portal Super Admin?'))) {
       localStorage.removeItem(SUPERADMIN_STORAGE_KEY);
       const supabase = createClient();
       if (supabase) {

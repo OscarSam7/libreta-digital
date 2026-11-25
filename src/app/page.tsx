@@ -5,6 +5,7 @@ import { MerchantDashboard } from '@/components/MerchantDashboard';
 import { isMerchantLoggedIn, loginDemoDonMario, isSuperAdminLoggedIn } from '@/lib/storage';
 import { createClient } from '@/lib/supabase/client';
 import { BrandLogo } from '@/components/BrandLogo';
+import { LanguageSelector } from '@/components/LanguageSelector';
 import Link from 'next/link';
 import {
   Store,
@@ -120,6 +121,7 @@ export default function Home() {
           <div className="max-w-5xl mx-auto flex items-center justify-between">
             <BrandLogo size="md" theme={theme} showTagline={false} />
             <div className="flex items-center gap-2">
+              <LanguageSelector variant={isLight ? 'light' : 'dark'} />
               {/* SELECTOR DE TEMA BLANCO / OSCURO */}
               <button
                 onClick={toggleTheme}

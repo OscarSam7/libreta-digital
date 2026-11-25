@@ -30,6 +30,7 @@ import {
   Star
 } from 'lucide-react';
 import { BrandLogo } from '@/components/BrandLogo';
+import { translateText } from '@/lib/i18n/translator';
 
 export default function CommercialShowcasePage() {
   const [activeSimTab, setActiveSimTab] = useState<'VENTA' | 'WHATSAPP' | 'LEGAL' | 'CAJA'>('VENTA');
@@ -56,7 +57,7 @@ export default function CommercialShowcasePage() {
         setSimPin('');
       }, 4000);
     } else {
-      alert('Ingresa el PIN de prueba: 1234');
+      alert(translateText('Ingresa el PIN de prueba: 1234'));
     }
   };
 

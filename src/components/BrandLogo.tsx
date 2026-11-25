@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import { useI18n } from '@/components/I18nProvider';
 
 interface Props {
   size?: 'sm' | 'md' | 'lg' | 'xl' | 'icon-only';
@@ -15,6 +16,7 @@ export function BrandLogo({
   showTagline = false,
   className = '',
 }: Props) {
+  const { t } = useI18n();
   // Dimensiones del isotipo según el tamaño
   const iconDimensions = {
     sm: 'w-7 h-7',
@@ -96,7 +98,7 @@ export function BrandLogo({
 
       {/* Bloque Tipográfico Oficial */}
       <div>
-        <div className="flex items-center gap-1.5 leading-none">
+        <div data-no-translate="true" className="flex items-center gap-1.5 leading-none">
           <span
             className={`font-black tracking-tight ${textSizes} ${
               isLight ? 'text-slate-900' : 'text-white'
@@ -117,7 +119,7 @@ export function BrandLogo({
               isLight ? 'text-slate-500' : 'text-slate-400'
             }`}
           >
-            FinTech POS & Fiado en Tiempo Real
+            {t('FinTech POS & Fiado en Tiempo Real', 'PDV FinTech & Fiado em Tempo Real')}
           </span>
         )}
       </div>

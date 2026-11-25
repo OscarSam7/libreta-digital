@@ -19,6 +19,7 @@ import { setCurrentOperator } from '@/lib/storage';
 import { createClient } from '@/lib/supabase/client';
 import { safeCompare } from '@/lib/security';
 import { checkRateLimit, recordFailedAttempt, recordSuccessfulAttempt } from '@/lib/rateLimit';
+import { translateText } from '@/lib/i18n/translator';
 
 interface Props {
   tenant: Tenant;
@@ -281,7 +282,7 @@ export function StaffSwitchModal({
             <button
               type="button"
               onClick={async () => {
-                if (confirm('¿Deseas cerrar sesión del comercio y salir a la pantalla de login?')) {
+                if (confirm(translateText('¿Deseas cerrar sesión del comercio y salir a la pantalla de login?'))) {
                   const supabase = createClient();
                   if (supabase) {
                     try {

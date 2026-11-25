@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from 'next';
 import './globals.css';
 import { PWAInstallPrompt } from '@/components/PWAInstallPrompt';
+import { I18nProvider } from '@/components/I18nProvider';
 
 export const metadata: Metadata = {
   title: 'LibretaDigital Pro | FinTech POS & Fiado en Tiempo Real',
@@ -37,10 +38,12 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="es">
+    <html lang="es" suppressHydrationWarning>
       <body className="antialiased bg-slate-100 text-slate-900 select-none">
-        {children}
-        <PWAInstallPrompt />
+        <I18nProvider>
+          {children}
+          <PWAInstallPrompt />
+        </I18nProvider>
       </body>
     </html>
   );

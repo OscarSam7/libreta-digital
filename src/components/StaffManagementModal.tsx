@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 import { StaffMember, StaffRole, StaffPermissions, Tenant } from '@/types';
 import { saveStaff } from '@/lib/storage';
+import { translateText } from '@/lib/i18n/translator';
 import { CustomSelect } from '@/components/ui/CustomSelectModal';
 import { sanitizeText } from '@/lib/validation';
 
@@ -182,7 +183,7 @@ export function StaffManagementModal({
 
   const handleToggleActive = (member: StaffMember) => {
     if (member.id === currentOperator.id) {
-      alert('No puedes desactivar tu propio usuario en sesión activa.');
+      alert(translateText('No puedes desactivar tu propio usuario en sesión activa.'));
       return;
     }
     const updatedStaff = staff.map((s) =>

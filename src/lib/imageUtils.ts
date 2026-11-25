@@ -3,6 +3,8 @@
  * sin dependencias externas, aptas para almacenamiento eficiente en Supabase y localStorage.
  */
 
+import { tLocale } from '@/lib/i18n';
+
 const SAFE_IMAGE_URL_REGEX =
   /^(?:https?:\/\/|\/(?!\/)|data:image\/(?:png|jpeg|jpg|webp|gif);base64,[a-z0-9+/=\s]+$)/i;
 
@@ -50,20 +52,35 @@ export async function compressImageFile(
   options: CompressImageOptions
 ): Promise<string> {
   if (!file) {
-    throw new Error('No se seleccionó ningún archivo de imagen.');
+    throw new Error(tLocale('No se seleccionó ningún archivo de imagen.', 'Nenhum arquivo de imagem foi selecionado.'));
   }
 
   const mime = (file.type || '').toLowerCase();
   if (!mime.startsWith('image/')) {
-    throw new Error('El archivo seleccionado debe ser una imagen (PNG, JPG o WebP).');
+    throw new Error(
+      tLocale(
+        'El archivo seleccionado debe ser una imagen (PNG, JPG o WebP).',
+        'O arquivo selecionado deve ser uma imagem (PNG, JPG ou WebP).'
+      )
+    );
   }
 
   if (mime === 'image/svg+xml') {
-    throw new Error('Por seguridad no se permiten archivos SVG. Usá PNG, JPG o WebP.');
+    throw new Error(
+      tLocale(
+        'Por seguridad no se permiten archivos SVG. Usá PNG, JPG o WebP.',
+        'Por segurança não são permitidos arquivos SVG. Use PNG, JPG ou WebP.'
+      )
+    );
   }
 
   if (file.size > MAX_RAW_FILE_BYTES) {
-    throw new Error('La imagen supera el límite máximo permitido de 15 MB.');
+    throw new Error(
+      tLocale(
+        'La imagen supera el límite máximo permitido de 15 MB.',
+        'A imagem ultrapassa o limite máximo permitido de 15 MB.'
+      )
+    );
   }
 
   const maxWidth = Math.max(32, options.maxWidth);
@@ -79,7 +96,14 @@ export async function compressImageFile(
       const image = new Image();
       image.onload = () => resolve(image);
       image.onerror = () =>
-        reject(new Error('No se pudo leer la imagen. Probá con otro archivo PNG o JPG.'));
+        reject(
+          new Error(
+            tLocale(
+              'No se pudo leer la imagen. Probá con otro archivo PNG o JPG.',
+              'Não foi possível ler a imagem. Tente outro arquivo PNG ou JPG.'
+            )
+          )
+        );
       image.src = objectUrl;
     });
 
@@ -87,7 +111,12 @@ export async function compressImageFile(
     const srcHeight = img.naturalHeight || img.height;
 
     if (!srcWidth || !srcHeight) {
-      throw new Error('La imagen seleccionada no tiene dimensiones válidas.');
+      throw new Error(
+        tLocale(
+          'La imagen seleccionada no tiene dimensiones válidas.',
+          'A imagem selecionada não possui dimensões válidas.'
+        )
+      );
     }
 
     const scale = Math.min(1, maxWidth / srcWidth, maxHeight / srcHeight);
@@ -100,7 +129,12 @@ export async function compressImageFile(
 
     const ctx = canvas.getContext('2d');
     if (!ctx) {
-      throw new Error('Tu navegador no permite procesar imágenes en este momento.');
+      throw new Error(
+        tLocale(
+          'Tu navegador no permite procesar imágenes en este momento.',
+          'Seu navegador não permite processar imagens no momento.'
+        )
+      );
     }
 
     ctx.imageSmoothingEnabled = true;
@@ -163,7 +197,10 @@ export async function compressImageFile(
 
     if (!result || !isSafeImageUrl(result) || result.length > MAX_OUTPUT_DATAURL_CHARS) {
       throw new Error(
-        'La imagen sigue siendo demasiado pesada luego de comprimirla (máx. ~450 KB). Probá con una foto más liviana.'
+        tLocale(
+          'La imagen sigue siendo demasiado pesada luego de comprimirla (máx. ~450 KB). Probá con una foto más liviana.',
+          'A imagem continua muito pesada após a compressão (máx. ~450 KB). Tente uma foto mais leve.'
+        )
       );
     }
 

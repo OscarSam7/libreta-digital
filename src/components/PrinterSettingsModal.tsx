@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { Printer, Check, X, FileText, Receipt, Sparkles, Smartphone, Info } from 'lucide-react';
 import { PrinterFormat } from '@/types';
 import { getStoredPrinterFormat, setStoredPrinterFormat } from '@/lib/storage';
+import { translateText } from '@/lib/i18n/translator';
 
 interface PrinterSettingsModalProps {
   isOpen: boolean;
@@ -33,7 +34,7 @@ export function PrinterSettingsModal({ isOpen, onClose }: PrinterSettingsModalPr
   const handleTestPrint = () => {
     const printWindow = window.open('', '_blank', 'width=600,height=700');
     if (!printWindow) {
-      alert('Por favor permite ventanas emergentes para la prueba de impresión.');
+      alert(translateText('Por favor permite ventanas emergentes para la prueba de impresión.'));
       return;
     }
 

@@ -7,6 +7,7 @@ import { saveTenant, getStoredData, restoreTenantFromSupabase, cleanTenantForSup
 import { createClient } from '@/lib/supabase/client';
 import { BrandLogo } from '@/components/BrandLogo';
 import { CustomSelect } from '@/components/ui/CustomSelectModal';
+import { translateText } from '@/lib/i18n/translator';
 
 interface Props {
   onSuccess?: () => void;
@@ -364,7 +365,7 @@ export function MerchantAuthModal({ onSuccess, onCancel }: Props) {
             <button
               type="button"
               onClick={async () => {
-                if (confirm('¿Deseas cerrar sesión de este comercio y salir a la pantalla de registro / login?')) {
+                if (confirm(translateText('¿Deseas cerrar sesión de este comercio y salir a la pantalla de registro / login?'))) {
                   const supabase = createClient();
                   if (supabase) {
                     try {

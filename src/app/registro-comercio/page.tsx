@@ -45,6 +45,8 @@ import { BrandLogo } from '@/components/BrandLogo';
 import { CustomSelect } from '@/components/ui/CustomSelectModal';
 import { checkRateLimit, recordFailedAttempt, recordSuccessfulAttempt } from '@/lib/rateLimit';
 import { sanitizeText } from '@/lib/validation';
+import { appendLocaleQuery } from '@/lib/i18n';
+import { translateText } from '@/lib/i18n/translator';
 
 const REGIONAL_CURRENCIES = [
   { code: 'PYG', symbol: '₲', label: 'Paraguay (Guaraní - ₲)', default: true },
@@ -299,7 +301,9 @@ function MerchantRegisterContent() {
   };
 
   const clientRegistrationUrl = successData
-    ? `${typeof window !== 'undefined' ? window.location.origin : ''}/registro-cliente?almacen=${successData.tenant.id}`
+    ? appendLocaleQuery(
+        `${typeof window !== 'undefined' ? window.location.origin : ''}/registro-cliente?almacen=${successData.tenant.id}`
+      )
     : '';
 
   const handleCopyLink = () => {
@@ -309,7 +313,7 @@ function MerchantRegisterContent() {
       setCopiedLink(true);
       setTimeout(() => setCopiedLink(false), 2500);
     } else {
-      prompt('Copia este enlace para tus clientes:', clientRegistrationUrl);
+      prompt(translateText('Copia este enlace para tus clientes:'), clientRegistrationUrl);
     }
   };
 

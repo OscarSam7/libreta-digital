@@ -1,4 +1,5 @@
 import { CreditCycle, Customer } from '@/types';
+import { AppLocale, getCurrentLocale, tLocale } from '@/lib/i18n';
 
 export type DueState = 'NO_DEBT' | 'NO_DUE_DATE' | 'UPCOMING' | 'DUE_TODAY' | 'OVERDUE';
 
@@ -71,8 +72,10 @@ export function computeSuggestedDueDate(
  */
 export function getCustomerDueStatus(
   customer: Pick<Customer, 'current_balance' | 'payment_due_date'>,
-  referenceDate: Date = new Date()
+  referenceDate: Date = new Date(),
+  locale?: AppLocale
 ): CustomerDueStatus {
+  const activeLocale = locale ?? getCurrentLocale();
   const rawDue = typeof customer.payment_due_date === 'string' ? customer.payment_due_date.trim() : '';
   const dueMs = parseLocalYmdToMidnightMs(rawDue);
   const dueDate = dueMs !== null ? rawDue : null;
@@ -86,8 +89,8 @@ export function getCustomerDueStatus(
       dueDateFormatted,
       daysOverdue: 0,
       daysUntilDue: 0,
-      label: 'Sin deuda',
-      shortBadge: 'Al día',
+      label: tLocale('Sin deuda', 'Sem dívida', activeLocale),
+      shortBadge: tLocale('Al día', 'Em dia', activeLocale),
     };
   }
 
@@ -98,7 +101,7 @@ export function getCustomerDueStatus(
       dueDateFormatted: null,
       daysOverdue: 0,
       daysUntilDue: 0,
-      label: 'Sin vencimiento',
+      label: tLocale('Sin vencimiento', 'Sem vencimento', activeLocale),
       shortBadge: '',
     };
   }
@@ -112,7 +115,14 @@ export function getCustomerDueStatus(
   const diffDays = Math.round((todayMs - dueMs) / MS_PER_DAY);
 
   if (diffDays > 0) {
-    const label = diffDays === 1 ? '1 día de mora' : `${diffDays} días de mora`;
+    const label =
+      activeLocale === 'pt'
+        ? diffDays === 1
+          ? '1 dia em atraso'
+          : `${diffDays} dias em atraso`
+        : diffDays === 1
+        ? '1 día de mora'
+        : `${diffDays} días de mora`;
     return {
       state: 'OVERDUE',
       dueDate,
@@ -125,19 +135,27 @@ export function getCustomerDueStatus(
   }
 
   if (diffDays === 0) {
+    const dueTodayLabel = tLocale('Vence hoy', 'Vence hoje', activeLocale);
     return {
       state: 'DUE_TODAY',
       dueDate,
       dueDateFormatted,
       daysOverdue: 0,
       daysUntilDue: 0,
-      label: 'Vence hoy',
-      shortBadge: 'Vence hoy',
+      label: dueTodayLabel,
+      shortBadge: dueTodayLabel,
     };
   }
 
   const remaining = Math.abs(diffDays);
-  const label = remaining === 1 ? 'Vence mañana' : `Vence en ${remaining} días`;
+  const label =
+    activeLocale === 'pt'
+      ? remaining === 1
+        ? 'Vence amanhã'
+        : `Vence em ${remaining} dias`
+      : remaining === 1
+      ? 'Vence mañana'
+      : `Vence en ${remaining} días`;
   return {
     state: 'UPCOMING',
     dueDate,

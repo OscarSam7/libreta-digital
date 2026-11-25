@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
+import { useI18n } from '@/components/I18nProvider';
 import {
   Calendar as CalendarIcon,
   ChevronLeft,
@@ -21,12 +22,18 @@ interface CustomDatePickerModalProps {
   maxDate?: string;
 }
 
-const MONTH_NAMES = [
+const MONTH_NAMES_ES = [
   'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
   'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'
 ];
 
-const DAY_NAMES = ['Do', 'Lu', 'Ma', 'Mi', 'Ju', 'Vi', 'Sá'];
+const MONTH_NAMES_PT = [
+  'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
+  'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
+];
+
+const DAY_NAMES_ES = ['Do', 'Lu', 'Ma', 'Mi', 'Ju', 'Vi', 'Sá'];
+const DAY_NAMES_PT = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
 
 export function CustomDatePickerModal({
   isOpen,
@@ -37,6 +44,9 @@ export function CustomDatePickerModal({
   minDate,
   maxDate,
 }: CustomDatePickerModalProps) {
+  const { isPt, t } = useI18n();
+  const MONTH_NAMES = isPt ? MONTH_NAMES_PT : MONTH_NAMES_ES;
+  const DAY_NAMES = isPt ? DAY_NAMES_PT : DAY_NAMES_ES;
   // Parse initial date
   const parseDate = (dStr: string) => {
     if (!dStr) return new Date();
@@ -136,7 +146,7 @@ export function CustomDatePickerModal({
 
   // Formatted date header
   const getFormattedSelected = () => {
-    if (!selectedDate) return 'Ninguna';
+    if (!selectedDate) return t('Ninguna', 'Nenhuma');
     const d = parseDate(selectedDate);
     return `${d.getDate()} de ${MONTH_NAMES[d.getMonth()]} de ${d.getFullYear()}`;
   };
@@ -323,11 +333,12 @@ export function CustomDateInput({
   maxDate?: string;
   minDate?: string;
 }) {
+  const { isPt, t } = useI18n();
   const [modalOpen, setModalOpen] = useState(false);
 
   // Formato visual legible (ej. 21/10/2026)
   const formatDisplay = (ymd: string) => {
-    if (!ymd) return 'Elegir fecha';
+    if (!ymd) return t('Elegir fecha', 'Escolher data');
     const parts = ymd.split('-');
     if (parts.length === 3) {
       return `${parts[2]}/${parts[1]}/${parts[0]}`;
@@ -354,7 +365,7 @@ export function CustomDateInput({
         onClose={() => setModalOpen(false)}
         value={value}
         onChange={onChange}
-        title={label ? `Seleccionar ${label}` : 'Seleccionar Fecha'}
+        title={label ? `${isPt ? 'Selecionar' : 'Seleccionar'} ${t(label)}` : t('Seleccionar Fecha', 'Selecionar Data')}
         maxDate={maxDate}
         minDate={minDate}
       />
