@@ -67,7 +67,8 @@ function resolveFreshTenant(supabaseTenantRow: any, tenantId: string): Tenant {
 async function reconcileCustomersWithKnownTransactions(
   supabase: any,
   tenantId: string,
-  customers: Customer[]
+  customers: Customer[],
+  options?: { preserveIfIncomingNewerThanLedger?: boolean }
 ): Promise<Customer[]> {
   if (!Array.isArray(customers) || customers.length === 0) return customers;
 
@@ -80,9 +81,9 @@ async function reconcileCustomersWithKnownTransactions(
     try {
       let query = supabase.from('transactions').select('*');
       if (customers.length === 1) {
-        query = query.eq('customer_id', ensureValidUuid(customers[0].id));
+        query = query.eq('customer_id', ensureValidUuid(customers[0].id)).limit(5000);
       } else {
-        query = query.eq('tenant_id', ensureValidUuid(tenantId));
+        query = query.eq('tenant_id', ensureValidUuid(tenantId)).limit(5000);
       }
       const { data, error } = await query;
       if (!error && Array.isArray(data)) {
@@ -93,6 +94,23 @@ async function reconcileCustomersWithKnownTransactions(
 
   const allTxs = deduplicateTransactions([...sbTxs, ...memTxs]);
   if (allTxs.length === 0) return customers;
+
+  if (options?.preserveIfIncomingNewerThanLedger && customers.length === 1) {
+    const target = customers[0];
+    const targetUuid = ensureValidUuid(target.id);
+    const custTxs = allTxs.filter((t) => ensureValidUuid(t.customer_id) === targetUuid);
+    if (custTxs.length === 0) return customers;
+
+    const latestTxMs = custTxs.reduce((maxMs, t) => {
+      const ms = new Date(t.created_at || 0).getTime() || 0;
+      return ms > maxMs ? ms : maxMs;
+    }, 0);
+    const incomingUpdatedMs = new Date(target.updated_at || 0).getTime() || 0;
+    // Si el cliente llega de una operación recién guardada cuya transacción aún no replicó a esta lambda, no degradar su saldo
+    if (incomingUpdatedMs - latestTxMs > 2000) {
+      return customers;
+    }
+  }
 
   const reconciled = reconcileLedgerState(customers, allTxs, ensureValidUuid);
 
@@ -474,7 +492,8 @@ export async function POST(req: NextRequest) {
     const [reconciledCustomer] = await reconcileCustomersWithKnownTransactions(
       supabase,
       tenantId,
-      [rawMatch]
+      [rawMatch],
+      { preserveIfIncomingNewerThanLedger: Boolean(body._from_ledger_tx) }
     );
     const savedCustomer = reconciledCustomer || rawMatch;
 

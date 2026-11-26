@@ -165,23 +165,31 @@ export function executeLedgerTransaction(input: CreateTxInput): {
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new Event('libreta_data_updated'));
 
-    // Sincronizar de forma secuencial y atómica: primero la transacción, luego el cliente reconciliado
+    // Sincronizar de forma secuencial y atómica: primero la transacción (que ya reconcilia el saldo en nube)
+    // y solo respaldar POST /api/customers si aún no confirmó cloud_synced en Supabase
     void (async () => {
+      let txCloudSynced = false;
       try {
-        await fetch('/api/transactions', {
+        const txRes = await fetch('/api/transactions', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(reconciledNewTx),
         });
+        if (txRes.ok) {
+          const txJson = await txRes.json().catch(() => null);
+          txCloudSynced = Boolean(txJson?.cloud_synced);
+        }
       } catch {}
 
-      try {
-        await fetch('/api/customers', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(reconciledCustomer),
-        });
-      } catch {}
+      if (!txCloudSynced) {
+        try {
+          await fetch('/api/customers', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ...reconciledCustomer, _from_ledger_tx: true }),
+          });
+        } catch {}
+      }
     })();
   }
 
@@ -489,23 +497,34 @@ export function processHistoricalBatchTransactions(
     window.dispatchEvent(new Event('libreta_data_updated'));
 
     void (async () => {
+      let allCloudSynced = finalCreatedAsc.length > 0;
       for (const tx of finalCreatedAsc) {
         try {
-          await fetch('/api/transactions', {
+          const txRes = await fetch('/api/transactions', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(tx),
           });
-        } catch {}
+          if (!txRes.ok) {
+            allCloudSynced = false;
+          } else {
+            const txJson = await txRes.json().catch(() => null);
+            if (!txJson?.cloud_synced) allCloudSynced = false;
+          }
+        } catch {
+          allCloudSynced = false;
+        }
       }
 
-      try {
-        await fetch('/api/customers', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(finalCustomerWithTs),
-        });
-      } catch {}
+      if (!allCloudSynced) {
+        try {
+          await fetch('/api/customers', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ...finalCustomerWithTs, _from_ledger_tx: true }),
+          });
+        } catch {}
+      }
     })();
   }
 

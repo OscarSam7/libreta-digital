@@ -4,6 +4,7 @@ import React, { useState, useMemo } from 'react';
 import { Customer, Transaction, Tenant, PaymentMethod } from '@/types';
 import { exportTransactionsToCSV, generateWhatsAppReminderUrl } from '@/lib/reports';
 import { getCustomerDueStatus } from '@/lib/overdue';
+import { ensureValidUuid } from '@/lib/storage';
 import { PDFReportPreviewModal } from '@/components/PDFReportPreviewModal';
 import { PaymentReceiptModal } from '@/components/PaymentReceiptModal';
 import { CustomDateInput } from '@/components/ui/CustomDatePickerModal';
@@ -62,9 +63,19 @@ export function CustomerHistoryModal({
   // Pestaña de visualización: Todas / Solo Compras / Solo Pagos
   const [activeTab, setActiveTab] = useState<HistoryTab>('ALL');
 
-  // Fechas en borrador
-  const todayStr = new Date().toISOString().slice(0, 10);
-  const ninetyDaysAgoStr = new Date(Date.now() - 90 * 24 * 3600 * 1000).toISOString().slice(0, 10);
+  const getLocalDateStr = (d?: string | Date | null) => {
+    if (!d) return '';
+    const dateObj = typeof d === 'string' ? new Date(d) : d;
+    if (isNaN(dateObj.getTime())) return '';
+    const year = dateObj.getFullYear();
+    const month = String(dateObj.getMonth() + 1).padStart(2, '0');
+    const day = String(dateObj.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
+  // Fechas en borrador (en hora local para evitar desfase después de las 21:00 PY)
+  const todayStr = getLocalDateStr(new Date());
+  const ninetyDaysAgoStr = getLocalDateStr(new Date(Date.now() - 90 * 24 * 3600 * 1000));
 
   const [inputDateFrom, setInputDateFrom] = useState(ninetyDaysAgoStr);
   const [inputDateTo, setInputDateTo] = useState(todayStr);
@@ -88,7 +99,8 @@ export function CustomerHistoryModal({
 
   // Cliente actual seleccionado
   const currentCustomer = useMemo(() => {
-    return customers.find((c) => c.id === selectedCustomerId) || null;
+    const targetUuid = ensureValidUuid(selectedCustomerId);
+    return customers.find((c) => c.id === selectedCustomerId || ensureValidUuid(c.id) === targetUuid) || null;
   }, [customers, selectedCustomerId]);
 
   // Lista de clientes filtrados para búsqueda
@@ -107,17 +119,17 @@ export function CustomerHistoryModal({
   // Presets rápidos de fecha (se aplican al instante)
   const handleDatePreset = (preset: 'THIS_MONTH' | '30DAYS' | '90DAYS' | 'YEAR' | 'ALL_TIME') => {
     const now = new Date();
-    const today = now.toISOString().slice(0, 10);
+    const today = getLocalDateStr(now);
     let from = ninetyDaysAgoStr;
 
     if (preset === 'THIS_MONTH') {
-      from = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10);
+      from = getLocalDateStr(new Date(now.getFullYear(), now.getMonth(), 1));
     } else if (preset === '30DAYS') {
-      from = new Date(Date.now() - 30 * 24 * 3600 * 1000).toISOString().slice(0, 10);
+      from = getLocalDateStr(new Date(Date.now() - 30 * 24 * 3600 * 1000));
     } else if (preset === '90DAYS') {
       from = ninetyDaysAgoStr;
     } else if (preset === 'YEAR') {
-      from = new Date(now.getFullYear(), 0, 1).toISOString().slice(0, 10);
+      from = getLocalDateStr(new Date(now.getFullYear(), 0, 1));
     } else if (preset === 'ALL_TIME') {
       from = '2020-01-01';
     }
@@ -147,11 +159,12 @@ export function CustomerHistoryModal({
   // Transacciones del cliente dentro del rango aplicado
   const customerTransactions = useMemo(() => {
     if (!selectedCustomerId) return [];
+    const targetUuid = ensureValidUuid(selectedCustomerId);
 
     return transactions
-      .filter((t) => t.customer_id === selectedCustomerId)
+      .filter((t) => t.customer_id === selectedCustomerId || ensureValidUuid(t.customer_id) === targetUuid)
       .filter((t) => {
-        const txDate = t.created_at.slice(0, 10);
+        const txDate = getLocalDateStr(t.created_at);
         if (appliedDateFrom && txDate < appliedDateFrom) return false;
         if (appliedDateTo && txDate > appliedDateTo) return false;
         return true;
@@ -185,9 +198,14 @@ export function CustomerHistoryModal({
   // Cálculo de mora / días sin pagar
   const daysWithoutPayment = useMemo(() => {
     if (!currentCustomer || currentCustomer.current_balance <= 0) return null;
+    const custUuid = ensureValidUuid(currentCustomer.id);
 
     const allCustPayments = transactions
-      .filter((t) => t.customer_id === currentCustomer.id && t.type === 'CREDIT_PAYMENT')
+      .filter(
+        (t) =>
+          (t.customer_id === currentCustomer.id || ensureValidUuid(t.customer_id) === custUuid) &&
+          t.type === 'CREDIT_PAYMENT'
+      )
       .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
     const lastPayment = allCustPayments[0];
@@ -197,7 +215,11 @@ export function CustomerHistoryModal({
     }
 
     const allCustPurchases = transactions
-      .filter((t) => t.customer_id === currentCustomer.id && t.type === 'DEBIT_PURCHASE')
+      .filter(
+        (t) =>
+          (t.customer_id === currentCustomer.id || ensureValidUuid(t.customer_id) === custUuid) &&
+          t.type === 'DEBIT_PURCHASE'
+      )
       .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
     const lastPurchase = allCustPurchases[0];

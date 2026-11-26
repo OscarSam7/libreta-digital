@@ -239,10 +239,12 @@ export function deduplicateTransactions(
   const result: Transaction[] = [];
   const indexById = new Map<string, number>();
   const indexByFingerprint = new Map<string, number>();
+  const hadValidUuidByIdx = new Set<number>();
 
   for (const tx of transactions) {
     if (!tx || !tx.id) continue;
 
+    const hasRawValidUuid = UUID_REGEX.test(String(tx.id).trim());
     const remapped: Transaction = {
       ...tx,
       id: ensureValidUuid(tx.id),
@@ -257,7 +259,13 @@ export function deduplicateTransactions(
 
     const fingerprint = `${ensureValidUuid(remapped.customer_id)}|${remapped.type}|${roundMoney(remapped.amount)}|${String(remapped.created_at || '').slice(0, 19)}|${String(remapped.description || '').trim().toLowerCase()}`;
 
-    const existingIdx = indexById.get(remapped.id) ?? indexByFingerprint.get(fingerprint);
+    const idMatchIdx = indexById.get(remapped.id);
+    const fpMatchIdx = idMatchIdx === undefined ? indexByFingerprint.get(fingerprint) : undefined;
+    // Dos transacciones con UUIDs válidos distintos son eventos reales independientes (ej. dos compras iguales el mismo día)
+    const allowFpMatch =
+      fpMatchIdx !== undefined && (!hasRawValidUuid || !hadValidUuidByIdx.has(fpMatchIdx));
+    const existingIdx = idMatchIdx !== undefined ? idMatchIdx : allowFpMatch ? fpMatchIdx : undefined;
+
     if (existingIdx !== undefined) {
       const existing = result[existingIdx];
       // Si la versión entrante ya fue certificada y la almacenada seguía pendiente, actualizar en sitio
@@ -271,12 +279,18 @@ export function deduplicateTransactions(
           validation_metadata: remapped.validation_metadata || existing.validation_metadata,
         };
       }
+      if (hasRawValidUuid) {
+        hadValidUuidByIdx.add(existingIdx);
+      }
       continue;
     }
 
     const nextIdx = result.length;
     indexById.set(remapped.id, nextIdx);
     indexByFingerprint.set(fingerprint, nextIdx);
+    if (hasRawValidUuid) {
+      hadValidUuidByIdx.add(nextIdx);
+    }
     result.push(remapped);
   }
   return result;

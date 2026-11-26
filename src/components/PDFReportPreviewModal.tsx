@@ -443,7 +443,17 @@ export function PDFReportPreviewModal({
               {/* ============================================================== */}
               {/* CASO 1: ESTADO DE CUENTA INDIVIDUAL DE CLIENTE (WHATSAPP/QR)   */}
               {/* ============================================================== */}
-              {mode === 'CUSTOMER_STATEMENT' && customer && (
+              {mode === 'CUSTOMER_STATEMENT' && customer && (() => {
+                const latestStatementTx =
+                  !dateFrom && !dateTo && transactions.length > 0
+                    ? [...transactions].sort(
+                        (a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime()
+                      )[0]
+                    : null;
+                const effectiveCustomerBalance = latestStatementTx
+                  ? latestStatementTx.new_balance
+                  : customer.current_balance;
+                return (
                 <div className="space-y-5">
                   {/* Ficha del Cliente */}
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-slate-50 p-4 rounded-xl border border-slate-200">
@@ -478,10 +488,10 @@ export function PDFReportPreviewModal({
                       </span>
                       <span
                         className={`text-base font-black ${
-                          customer.current_balance > 0 ? 'text-rose-600' : 'text-emerald-600'
+                          effectiveCustomerBalance > 0 ? 'text-rose-600' : 'text-emerald-600'
                         }`}
                       >
-                        {formatCurrency(customer.current_balance)}
+                        {formatCurrency(effectiveCustomerBalance)}
                       </span>
                     </div>
                   </div>
@@ -550,7 +560,8 @@ export function PDFReportPreviewModal({
                     </table>
                   </div>
                 </div>
-              )}
+                );
+              })()}
 
               {/* ============================================================== */}
               {/* CASO 2: INFORME DE CARTERA, MOROSIDAD Y CLIENTES AL DÍA        */}

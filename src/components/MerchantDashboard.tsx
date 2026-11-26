@@ -301,6 +301,8 @@ export function MerchantDashboard() {
 
         const prevCustomers = customersRef.current || [];
         const prevTx = transactionsRef.current || [];
+        // Leer estado local fresco DESPUÉS del await para no pisar compras/pagos recién guardados mientras el fetch estuvo en vuelo
+        const freshLocal = getStoredData();
 
         const cleanCloudCustomers =
           custJson?.success && Array.isArray(custJson.customers)
@@ -312,8 +314,7 @@ export function MerchantDashboard() {
         // Subir silenciosamente en orden cronológico ascendente cualquier asiento local aún ausente en la nube
         if (txJson?.success && Array.isArray(txJson.transactions)) {
           const cloudIds = new Set(cloudTxs.map((t) => ensureValidUuid(t.id)));
-          const currentLocalTxs = getStoredData().transactions;
-          const missingLocalAsc = currentLocalTxs
+          const missingLocalAsc = freshLocal.transactions
             .filter((localTx) => {
               const normId = ensureValidUuid(localTx.id);
               return (
@@ -330,25 +331,36 @@ export function MerchantDashboard() {
             }
             void (async () => {
               for (const localTx of missingLocalAsc) {
+                const normId = ensureValidUuid(localTx.id);
                 try {
-                  await fetch('/api/transactions', {
+                  const postRes = await fetch('/api/transactions', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(localTx),
                   });
-                } catch {}
+                  const postJson = postRes.ok ? await postRes.json().catch(() => null) : null;
+                  if (!postRes.ok || !postJson?.cloud_synced) {
+                    pushedLocalTxIdsRef.current.delete(normId);
+                  }
+                } catch {
+                  pushedLocalTxIdsRef.current.delete(normId);
+                }
               }
             })();
           }
         }
 
-        // Fusionar clientes y transacciones y reconciliar matemáticamente en un solo paso atómico
-        const mergedRawCustomers =
-          cleanCloudCustomers.length > 0
-            ? deduplicateCustomers([...cleanCloudCustomers, ...prevCustomers])
-            : prevCustomers;
-        const mergedRawTxs =
-          cloudTxs.length > 0 ? deduplicateTransactions([...cloudTxs, ...prevTx]) : prevTx;
+        // Fusionar nube + local fresco + estado React y reconciliar matemáticamente en un solo paso atómico
+        const mergedRawCustomers = deduplicateCustomers([
+          ...cleanCloudCustomers,
+          ...freshLocal.customers,
+          ...prevCustomers,
+        ]);
+        const mergedRawTxs = deduplicateTransactions([
+          ...cloudTxs,
+          ...freshLocal.transactions,
+          ...prevTx,
+        ]);
 
         const reconciled = reconcileLedgerState(mergedRawCustomers, mergedRawTxs, ensureValidUuid);
         const nextCustomers = reconciled.customers;
@@ -874,6 +886,11 @@ export function MerchantDashboard() {
       return;
     }
 
+    const isRetroactiveDate = Boolean(txDate && txDate !== todayStr);
+    const effectiveCreatedAt = isRetroactiveDate
+      ? `${txDate}T${new Date().toISOString().slice(11)}`
+      : undefined;
+
     const res = executeLedgerTransaction({
       customerId: activeTxCustomer.id,
       type: txType,
@@ -885,9 +902,9 @@ export function MerchantDashboard() {
           : `Abono de cuenta (${selectedPaymentMethod})`),
       paymentMethod: txType === 'CREDIT_PAYMENT' ? selectedPaymentMethod : undefined,
       paymentReference: txType === 'CREDIT_PAYMENT' ? paymentRef : undefined,
-      createdAt: txDate ? `${txDate}T12:00:00.000Z` : undefined,
-      status: txDate && txType === 'DEBIT_PURCHASE' ? 'CERTIFIED_BOTH' : undefined,
-      validationMethod: txDate ? 'CARGA_HISTORICA_MANUAL' : undefined,
+      createdAt: effectiveCreatedAt,
+      status: isRetroactiveDate && txType === 'DEBIT_PURCHASE' ? 'CERTIFIED_BOTH' : undefined,
+      validationMethod: isRetroactiveDate ? 'CARGA_HISTORICA_MANUAL' : undefined,
       operatorId: currentOperator?.id,
       operatorName: currentOperator?.full_name,
     });
@@ -896,6 +913,9 @@ export function MerchantDashboard() {
       setTxError(res.error || 'No se pudo procesar');
       return;
     }
+
+    // Reflejar inmediatamente el nuevo asiento y saldo actualizado en pantalla sin esperar al próximo polling
+    loadData();
 
     // Los pagos abren automáticamente el comprobante de recibo para enviar por WhatsApp
     if (txType === 'CREDIT_PAYMENT') {
@@ -912,7 +932,7 @@ export function MerchantDashboard() {
         loadData();
         setReceiptData({ transaction: finishedTx, customer: targetCustomer });
       }, 700);
-    } else if (txDate && res.transaction.status === 'CERTIFIED_BOTH') {
+    } else if (isRetroactiveDate && res.transaction.status === 'CERTIFIED_BOTH') {
       setTxStep('SUCCESS');
       setTimeout(() => {
         setActiveTxCustomer(null);
@@ -2860,15 +2880,22 @@ export function MerchantDashboard() {
       )}
 
       {/* MODAL VISTA PREVIA PDF DE ESTADO DE CUENTA INDIVIDUAL */}
-      {pdfPreviewCustomer && (
-        <PDFReportPreviewModal
-          mode="CUSTOMER_STATEMENT"
-          tenant={tenant}
-          customer={pdfPreviewCustomer}
-          transactions={transactions.filter((t) => t.customer_id === pdfPreviewCustomer.id)}
-          onClose={() => setPdfPreviewCustomer(null)}
-        />
-      )}
+      {pdfPreviewCustomer && (() => {
+        const livePdfCustomer =
+          customers.find((c) => ensureValidUuid(c.id) === ensureValidUuid(pdfPreviewCustomer.id)) ||
+          pdfPreviewCustomer;
+        return (
+          <PDFReportPreviewModal
+            mode="CUSTOMER_STATEMENT"
+            tenant={tenant}
+            customer={livePdfCustomer}
+            transactions={transactions.filter(
+              (t) => ensureValidUuid(t.customer_id) === ensureValidUuid(livePdfCustomer.id)
+            )}
+            onClose={() => setPdfPreviewCustomer(null)}
+          />
+        );
+      })()}
 
       {/* MODAL RELATORIO GENERAL DE CIERRE DE ACTIVIDADES & RESPALDO POR WHATSAPP */}
       {showDailyClosingModal && (

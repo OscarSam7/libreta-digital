@@ -258,13 +258,20 @@ export function CustomerPortalView({ token }: Props) {
             }
             void (async () => {
               for (const localTx of missingLocalAsc) {
+                const normId = ensureValidUuid(localTx.id);
                 try {
-                  await fetch('/api/transactions', {
+                  const postRes = await fetch('/api/transactions', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(localTx),
                   });
-                } catch {}
+                  const postJson = postRes.ok ? await postRes.json().catch(() => null) : null;
+                  if (!postRes.ok || !postJson?.cloud_synced) {
+                    pushedTxIdsRef.current.delete(normId);
+                  }
+                } catch {
+                  pushedTxIdsRef.current.delete(normId);
+                }
               }
             })();
           }
