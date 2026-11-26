@@ -1,16 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { Tenant, Customer } from '@/types';
+import { Tenant, Customer, Transaction } from '@/types';
 import { sanitizeText, validateAmount } from '@/lib/validation';
 import {
   INITIAL_CUSTOMERS,
   INITIAL_TENANT,
+  INITIAL_TRANSACTIONS,
   cleanCustomerForSupabase,
   restoreCustomerFromSupabase,
   cleanTenantForSupabase,
   restoreTenantFromSupabase,
+  restoreTransactionFromSupabase,
   deduplicateCustomers,
+  deduplicateTransactions,
   areCustomersSamePerson,
+  ensureValidUuid,
 } from '@/lib/storage';
+import { reconcileLedgerState } from '@/lib/ledgerMath';
 import { createClient as createSupabaseClient } from '@supabase/supabase-js';
 
 export const dynamic = 'force-dynamic';
@@ -29,6 +34,8 @@ declare global {
   var __LIBRETA_SHARED_CUSTOMERS__: Map<string, Customer[]> | undefined;
   // eslint-disable-next-line no-var
   var __LIBRETA_SHARED_TENANTS__: Map<string, Tenant> | undefined;
+  // eslint-disable-next-line no-var
+  var __LIBRETA_SHARED_TRANSACTIONS__: Map<string, Transaction[]> | undefined;
 }
 
 if (!globalThis.__LIBRETA_SHARED_CUSTOMERS__) {
@@ -51,6 +58,58 @@ function resolveFreshTenant(supabaseTenantRow: any, tenantId: string): Tenant {
   }
 
   return sbTenant || memTenant || INITIAL_TENANT;
+}
+
+/**
+ * Reconcilia `current_balance` de uno o más clientes con sus transacciones conocidas
+ * (memoria compartida + Supabase) y auto-sana en segundo plano si detecta desvíos heredados.
+ */
+async function reconcileCustomersWithKnownTransactions(
+  supabase: any,
+  tenantId: string,
+  customers: Customer[]
+): Promise<Customer[]> {
+  if (!Array.isArray(customers) || customers.length === 0) return customers;
+
+  const memTxs =
+    globalThis.__LIBRETA_SHARED_TRANSACTIONS__?.get(tenantId) ||
+    (tenantId === INITIAL_TENANT.id ? INITIAL_TRANSACTIONS : []);
+  let sbTxs: Transaction[] = [];
+
+  if (supabase) {
+    try {
+      let query = supabase.from('transactions').select('*');
+      if (customers.length === 1) {
+        query = query.eq('customer_id', ensureValidUuid(customers[0].id));
+      } else {
+        query = query.eq('tenant_id', ensureValidUuid(tenantId));
+      }
+      const { data, error } = await query;
+      if (!error && Array.isArray(data)) {
+        sbTxs = data.map(restoreTransactionFromSupabase);
+      }
+    } catch {}
+  }
+
+  const allTxs = deduplicateTransactions([...sbTxs, ...memTxs]);
+  if (allTxs.length === 0) return customers;
+
+  const reconciled = reconcileLedgerState(customers, allTxs, ensureValidUuid);
+
+  if (reconciled.healedCustomerIds.length > 0 && supabase) {
+    const healedSet = new Set(reconciled.healedCustomerIds);
+    const healedCustomers = reconciled.customers.filter((c) => healedSet.has(c.id));
+    void Promise.allSettled(
+      healedCustomers.map((c) =>
+        supabase
+          .from('customers')
+          .update({ current_balance: c.current_balance })
+          .eq('id', ensureValidUuid(c.id))
+      )
+    );
+  }
+
+  return reconciled.customers;
 }
 
 // Helper para crear cliente Supabase server-side si las credenciales están configuradas
@@ -158,6 +217,12 @@ export async function GET(req: NextRequest) {
               ? deduplicateCustomers([restoredCustomer, memMatch])[0] || restoredCustomer
               : restoredCustomer;
 
+            const [reconciledCustomer] = await reconcileCustomersWithKnownTransactions(
+              supabase,
+              restoredCustomer.tenant_id,
+              [mergedCustomer]
+            );
+
             const { data: tData } = await supabase
               .from('tenants')
               .select('*')
@@ -167,7 +232,7 @@ export async function GET(req: NextRequest) {
             return NextResponse.json(
               {
                 success: true,
-                customer: mergedCustomer,
+                customer: reconciledCustomer || mergedCustomer,
                 tenant: resolveFreshTenant(tData, restoredCustomer.tenant_id),
               },
               { headers: NO_CACHE_HEADERS }
@@ -180,6 +245,7 @@ export async function GET(req: NextRequest) {
       for (const [tId, custList] of customerStore.entries()) {
         const found = custList.find((c) => c.qr_token === token);
         if (found) {
+          const [reconciledFound] = await reconcileCustomersWithKnownTransactions(supabase, tId, [found]);
           let sbTenantRow: any = null;
           if (supabase) {
             try {
@@ -195,7 +261,7 @@ export async function GET(req: NextRequest) {
           return NextResponse.json(
             {
               success: true,
-              customer: found,
+              customer: reconciledFound || found,
               tenant: resolveFreshTenant(sbTenantRow, tId),
             },
             { headers: NO_CACHE_HEADERS }
@@ -262,11 +328,16 @@ export async function GET(req: NextRequest) {
           const combined = deduplicateCustomers(rawList).sort(
             (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
           );
-          customerStore.set(tenantId, combined);
+          const reconciledCombined = await reconcileCustomersWithKnownTransactions(
+            supabase,
+            tenantId,
+            combined
+          );
+          customerStore.set(tenantId, reconciledCombined);
           return NextResponse.json(
             {
               success: true,
-              customers: combined,
+              customers: reconciledCombined,
               ...(debugMode
                 ? {
                     debug: {
@@ -290,7 +361,11 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    const finalMemory = deduplicateCustomers(memoryList);
+    const finalMemory = await reconcileCustomersWithKnownTransactions(
+      supabase,
+      tenantId,
+      deduplicateCustomers(memoryList)
+    );
     customerStore.set(tenantId, finalMemory);
     return NextResponse.json(
       {
@@ -383,22 +458,32 @@ export async function POST(req: NextRequest) {
       },
       registered_via: registeredVia,
       created_at: body.created_at || new Date().toISOString(),
-      updated_at: new Date().toISOString(),
+      updated_at: body.updated_at || new Date().toISOString(),
     };
 
-    // 1. Guardar en store compartido en servidor deduplicando exhaustivamente
+    const supabase = getServerSupabase();
+
+    // 1. Guardar en store compartido en servidor deduplicando por timestamp y reconciliando desde el libro mayor si hay historial
     if (tenantId === INITIAL_TENANT.id && !customerStore.has(INITIAL_TENANT.id)) {
       customerStore.set(INITIAL_TENANT.id, [...INITIAL_CUSTOMERS]);
     }
     const currentList = customerStore.get(tenantId) || [];
     const updated = deduplicateCustomers([customer, ...currentList]);
-    customerStore.set(tenantId, updated);
 
-    // Obtener la versión consolidada/canónica
-    const savedCustomer = updated.find((c) => areCustomersSamePerson(c, customer)) || customer;
+    const rawMatch = updated.find((c) => areCustomersSamePerson(c, customer)) || customer;
+    const [reconciledCustomer] = await reconcileCustomersWithKnownTransactions(
+      supabase,
+      tenantId,
+      [rawMatch]
+    );
+    const savedCustomer = reconciledCustomer || rawMatch;
+
+    const updatedWithReconciled = updated.map((c) =>
+      c.id === savedCustomer.id ? savedCustomer : c
+    );
+    customerStore.set(tenantId, updatedWithReconciled);
 
     // 2. Guardar en Supabase si está disponible (con auto-reparación ante columnas faltantes o RLS)
-    const supabase = getServerSupabase();
     let cloudSync: { synced: boolean; error?: string } = { synced: false, error: 'Supabase no configurado' };
     if (supabase) {
       cloudSync = await persistCustomerToSupabase(supabase, tenantId, savedCustomer);

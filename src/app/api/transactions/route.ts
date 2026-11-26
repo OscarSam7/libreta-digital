@@ -11,6 +11,10 @@ import {
   deduplicateTransactions,
   ensureValidUuid,
 } from '@/lib/storage';
+import {
+  reconcileCustomerTransactions,
+  reconcileTransactionsByCustomer,
+} from '@/lib/ledgerMath';
 import { createClient as createSupabaseClient } from '@supabase/supabase-js';
 
 export const dynamic = 'force-dynamic';
@@ -170,12 +174,6 @@ async function persistTransactionToSupabase(
       const { error } = await supabase.from('transactions').insert(payload);
 
       if (!error) {
-        try {
-          await supabase
-            .from('customers')
-            .update({ current_balance: Number(tx.new_balance) || 0 })
-            .eq('id', payload.customer_id);
-        } catch (e) {}
         return { synced: true };
       }
 
@@ -348,6 +346,29 @@ export async function GET(req: NextRequest) {
       }
     }
 
+    const reconciledLedger = reconcileTransactionsByCustomer(txs, ensureValidUuid);
+    txs = reconciledLedger.transactions;
+    txStore.set(tenantId, txs);
+
+    // Auto-sanar saldos en memoria del almacén compartido de clientes
+    if (globalThis.__LIBRETA_SHARED_CUSTOMERS__ && reconciledLedger.balancesByCustomerKey.size > 0) {
+      const custList = globalThis.__LIBRETA_SHARED_CUSTOMERS__.get(tenantId);
+      if (custList && custList.length > 0) {
+        let custChanged = false;
+        const healedCusts = custList.map((c) => {
+          const expected = reconciledLedger.balancesByCustomerKey.get(ensureValidUuid(c.id));
+          if (expected !== undefined && c.current_balance !== expected) {
+            custChanged = true;
+            return { ...c, current_balance: expected };
+          }
+          return c;
+        });
+        if (custChanged) {
+          globalThis.__LIBRETA_SHARED_CUSTOMERS__.set(tenantId, healedCusts);
+        }
+      }
+    }
+
     let responseTxs = txs;
     if (customerId) {
       const targetCustomerUuid = ensureValidUuid(customerId);
@@ -385,6 +406,71 @@ export async function GET(req: NextRequest) {
   }
 }
 
+async function reconcileAndPersistCustomerBalance(
+  supabase: any,
+  tenantId: string,
+  customerId: string,
+  extraTransactions: Transaction[]
+): Promise<{ currentBalance: number; transactionsDesc: Transaction[] }> {
+  const normCustId = ensureValidUuid(customerId);
+  const currentTenantTxs = txStore.get(tenantId) || (tenantId === INITIAL_TENANT.id ? [...INITIAL_TRANSACTIONS] : []);
+  const memCustTxs = currentTenantTxs.filter((t) => ensureValidUuid(t.customer_id) === normCustId);
+
+  let sbCustTxs: Transaction[] = [];
+  if (supabase) {
+    try {
+      const { data, error } = await supabase
+        .from('transactions')
+        .select('*')
+        .eq('customer_id', normCustId);
+      if (!error && Array.isArray(data)) {
+        sbCustTxs = data.map(restoreTransactionFromSupabase);
+      }
+    } catch {}
+  }
+
+  const combinedCustTxs = deduplicateTransactions([...sbCustTxs, ...extraTransactions, ...memCustTxs]);
+  const reconciled = reconcileCustomerTransactions(combinedCustTxs);
+
+  const otherTxs = currentTenantTxs.filter((t) => ensureValidUuid(t.customer_id) !== normCustId);
+  const nextTenantTxs = deduplicateTransactions([...reconciled.transactionsDesc, ...otherTxs]).sort(
+    (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+  );
+  txStore.set(tenantId, nextTenantTxs);
+
+  const nowIso = new Date().toISOString();
+  if (globalThis.__LIBRETA_SHARED_CUSTOMERS__) {
+    const custList = globalThis.__LIBRETA_SHARED_CUSTOMERS__.get(tenantId);
+    if (custList) {
+      const cIndex = custList.findIndex(
+        (c) => c.id === customerId || ensureValidUuid(c.id) === normCustId
+      );
+      if (cIndex !== -1) {
+        custList[cIndex] = {
+          ...custList[cIndex],
+          current_balance: reconciled.currentBalance,
+          updated_at: nowIso,
+        };
+        globalThis.__LIBRETA_SHARED_CUSTOMERS__.set(tenantId, custList);
+      }
+    }
+  }
+
+  if (supabase && combinedCustTxs.length > 0) {
+    try {
+      await supabase
+        .from('customers')
+        .update({ current_balance: reconciled.currentBalance, updated_at: nowIso })
+        .eq('id', normCustId);
+    } catch {}
+  }
+
+  return {
+    currentBalance: reconciled.currentBalance,
+    transactionsDesc: reconciled.transactionsDesc,
+  };
+}
+
 export async function POST(req: NextRequest) {
   try {
     const rawTx: Transaction = await req.json();
@@ -414,24 +500,6 @@ export async function POST(req: NextRequest) {
     );
     txStore.set(tenantId, updated);
 
-    // Actualizar saldo del cliente en el repositorio central de clientes
-    if (globalThis.__LIBRETA_SHARED_CUSTOMERS__) {
-      const custList = globalThis.__LIBRETA_SHARED_CUSTOMERS__.get(tenantId);
-      if (custList) {
-        const cIndex = custList.findIndex(
-          (c) => c.id === normalizedTx.customer_id || ensureValidUuid(c.id) === normalizedTx.customer_id
-        );
-        if (cIndex !== -1) {
-          custList[cIndex] = {
-            ...custList[cIndex],
-            current_balance: normalizedTx.new_balance,
-            updated_at: new Date().toISOString(),
-          };
-          globalThis.__LIBRETA_SHARED_CUSTOMERS__.set(tenantId, custList);
-        }
-      }
-    }
-
     const supabase = getServerSupabase();
     let cloudSync: { synced: boolean; error?: string } = {
       synced: false,
@@ -444,10 +512,21 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // Recalcular y persistir el saldo del cliente exclusivamente desde su historial cronológico completo
+    const reconciledResult = await reconcileAndPersistCustomerBalance(
+      supabase,
+      tenantId,
+      normalizedTx.customer_id,
+      [normalizedTx]
+    );
+    const reconciledTx =
+      reconciledResult.transactionsDesc.find((t) => ensureValidUuid(t.id) === normalizedTx.id) || normalizedTx;
+
     return NextResponse.json(
       {
         success: true,
-        transaction: normalizedTx,
+        transaction: reconciledTx,
+        current_balance: reconciledResult.currentBalance,
         cloud_synced: cloudSync.synced,
         ...(cloudSync.error ? { cloud_error: cloudSync.error } : {}),
       },

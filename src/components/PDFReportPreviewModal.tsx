@@ -35,6 +35,13 @@ export type PDFReportMode =
   | 'TERMS_CONTRACT'
   | 'DAILY_CLOSING_REPORT';
 
+function formatTxDescriptionWithMethod(description?: string, paymentMethod?: string): string {
+  const base = (description || '').trim() || '-';
+  if (!paymentMethod) return base;
+  if (base.toUpperCase().includes(paymentMethod.toUpperCase())) return base;
+  return `${base} (${paymentMethod})`;
+}
+
 interface Props {
   mode: PDFReportMode;
   tenant: Tenant;
@@ -521,8 +528,7 @@ export function PDFReportPreviewModal({
                                   </span>
                                 </td>
                                 <td className="py-2 px-3 text-slate-800 text-[11px]">
-                                  {t.description || '-'}
-                                  {t.payment_method ? ` (${t.payment_method})` : ''}
+                                  {formatTxDescriptionWithMethod(t.description, t.payment_method)}
                                   {t.operator_name ? ` • Atendió: ${t.operator_name}` : ''}
                                 </td>
                                 <td className="py-2 px-2 text-right font-black whitespace-nowrap">

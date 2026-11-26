@@ -22,6 +22,7 @@ import {
   normalizePhone,
   ensureValidUuid,
 } from '@/lib/storage';
+import { reconcileLedgerState } from '@/lib/ledgerMath';
 import { executeLedgerTransaction, certifyTransactionWithPin } from '@/lib/ledger';
 import { exportTransactionsToCSV, generateWhatsAppReminderUrl } from '@/lib/reports';
 import { getCustomerDueStatus, computeSuggestedDueDate } from '@/lib/overdue';
@@ -201,6 +202,10 @@ export function MerchantDashboard() {
   const autoCloseTimerRef = useRef<number | null>(null);
   const tenantRef = useRef<Tenant | null>(null);
   tenantRef.current = tenant;
+  const customersRef = useRef<Customer[]>(customers);
+  customersRef.current = customers;
+  const transactionsRef = useRef<Transaction[]>(transactions);
+  transactionsRef.current = transactions;
 
   // Filtros del Libro Mayor (Asientos Inmutables) por fecha, tipo y cliente
   const [ledgerDateFrom, setLedgerDateFrom] = useState('');
@@ -263,15 +268,19 @@ export function MerchantDashboard() {
     // Auto-sincronización en vivo con el servidor central para clientes y transacciones
     let isMounted = true;
     const syncCloudData = async () => {
-      const currentTenantId = tenant?.id;
+      const currentTenantId = tenantRef.current?.id || tenant?.id;
       if (!currentTenantId) return;
 
       try {
-        // 0. Sincronizar perfil del comercio (nombre, logo, portada y datos generales)
-        const tenantRes = await fetch(`/api/tenants?id=${encodeURIComponent(currentTenantId)}&t=${Date.now()}`, {
-          cache: 'no-store',
-        });
-        if (tenantRes.ok) {
+        const ts = Date.now();
+        // Consultar comercio, clientes y transacciones en paralelo para reconciliar atómicamente
+        const [tenantRes, custRes, txRes] = await Promise.all([
+          fetch(`/api/tenants?id=${encodeURIComponent(currentTenantId)}&t=${ts}`, { cache: 'no-store' }).catch(() => null),
+          fetch(`/api/customers?tenantId=${currentTenantId}&t=${ts}`, { cache: 'no-store' }).catch(() => null),
+          fetch(`/api/transactions?tenantId=${currentTenantId}&t=${ts}`, { cache: 'no-store' }).catch(() => null),
+        ]);
+
+        if (tenantRes && tenantRes.ok) {
           const tenantJson = await tenantRes.json();
           if (tenantJson?.success && tenantJson.tenant && isMounted) {
             const restoredTenant = restoreTenantFromSupabase(tenantJson.tenant);
@@ -286,128 +295,148 @@ export function MerchantDashboard() {
           }
         }
 
-        // 1. Sincronizar clientes (nuevos registros y actualización de saldos)
-        const res = await fetch(`/api/customers?tenantId=${currentTenantId}&t=${Date.now()}`, {
-          cache: 'no-store',
-        });
-        if (res.ok) {
-          const json = await res.json();
-          if (json.success && Array.isArray(json.customers) && isMounted) {
-            setCustomers((prevCustomers) => {
-              const cleanCloud = deduplicateCustomers(json.customers);
-              const merged = deduplicateCustomers([...cleanCloud, ...prevCustomers]);
+        const custJson = custRes && custRes.ok ? await custRes.json().catch(() => null) : null;
+        const txJson = txRes && txRes.ok ? await txRes.json().catch(() => null) : null;
+        if (!isMounted) return;
 
-              // Identificar si hay clientes genuinamente nuevos para alertar (no falsos positivos de duplicados)
-              const prevIds = new Set(prevCustomers.map((c) => c.id));
-              const prevDocs = new Set(prevCustomers.map((c) => normalizeDocumentId(c.document_id)).filter(Boolean));
-              const prevPhones = new Set(prevCustomers.map((c) => normalizePhone(c.phone)).filter(Boolean));
+        const prevCustomers = customersRef.current || [];
+        const prevTx = transactionsRef.current || [];
 
-              const genuinelyNew = cleanCloud.filter((c) => {
-                if (prevIds.has(c.id)) return false;
-                const doc = normalizeDocumentId(c.document_id);
-                if (doc && prevDocs.has(doc)) return false;
-                const ph = normalizePhone(c.phone);
-                if (ph && prevPhones.has(ph)) return false;
-                return true;
-              });
+        const cleanCloudCustomers =
+          custJson?.success && Array.isArray(custJson.customers)
+            ? deduplicateCustomers(custJson.customers)
+            : [];
+        const cloudTxs: Transaction[] =
+          txJson?.success && Array.isArray(txJson.transactions) ? txJson.transactions : [];
 
-              let hasDiff = merged.length !== prevCustomers.length || genuinelyNew.length > 0;
-              if (!hasDiff) {
-                for (const m of merged) {
-                  const p = prevCustomers.find((c) => c.id === m.id);
-                  if (
-                    p &&
-                    (p.current_balance !== m.current_balance ||
-                      p.credit_limit !== m.credit_limit ||
-                      p.full_name !== m.full_name ||
-                      p.payment_due_date !== m.payment_due_date)
-                  ) {
-                    hasDiff = true;
-                    break;
-                  }
-                }
-              }
-
-              if (genuinelyNew.length > 0) {
-                const latest = genuinelyNew[0];
-                setNewCustomerAlert({
-                  id: latest.id,
-                  name: latest.full_name,
-                  phone: latest.phone,
-                });
-
-                // Reproducir alerta sonora de bienvenida (Web Audio API)
-                try {
-                  const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
-                  const osc = ctx.createOscillator();
-                  const gain = ctx.createGain();
-                  osc.type = 'sine';
-                  osc.frequency.setValueAtTime(587.33, ctx.currentTime);
-                  osc.frequency.exponentialRampToValueAtTime(880, ctx.currentTime + 0.15);
-                  gain.gain.setValueAtTime(0.25, ctx.currentTime);
-                  gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.35);
-                  osc.connect(gain);
-                  gain.connect(ctx.destination);
-                  osc.start();
-                  osc.stop(ctx.currentTime + 0.35);
-                } catch (e) {}
-              }
-
-              if (hasDiff) {
-                saveCustomersLocalOnly(merged);
-                return merged;
-              }
-              return prevCustomers;
-            });
-          }
-        }
-
-        // 2. Sincronizar transacciones en tiempo real y auto-sanar asientos locales heredados
-        const txRes = await fetch(`/api/transactions?tenantId=${currentTenantId}&t=${Date.now()}`, {
-          cache: 'no-store',
-        });
-        if (txRes.ok) {
-          const txJson = await txRes.json();
-          if (txJson.success && Array.isArray(txJson.transactions) && isMounted) {
-            const cloudTxs: Transaction[] = txJson.transactions;
-            const cloudIds = new Set(cloudTxs.map((t) => ensureValidUuid(t.id)));
-
-            // Subir silenciosamente una vez cualquier asiento local aún ausente en la nube
-            const currentLocalTxs = getStoredData().transactions;
-            for (const localTx of currentLocalTxs) {
+        // Subir silenciosamente en orden cronológico ascendente cualquier asiento local aún ausente en la nube
+        if (txJson?.success && Array.isArray(txJson.transactions)) {
+          const cloudIds = new Set(cloudTxs.map((t) => ensureValidUuid(t.id)));
+          const currentLocalTxs = getStoredData().transactions;
+          const missingLocalAsc = currentLocalTxs
+            .filter((localTx) => {
               const normId = ensureValidUuid(localTx.id);
-              if (
+              return (
                 ensureValidUuid(localTx.tenant_id) === ensureValidUuid(currentTenantId) &&
                 !cloudIds.has(normId) &&
                 !pushedLocalTxIdsRef.current.has(normId)
-              ) {
-                pushedLocalTxIdsRef.current.add(normId);
-                fetch('/api/transactions', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify(localTx),
-                }).catch(() => {});
-              }
-            }
-
-            setTransactions((prevTx) => {
-              const prevByNormId = new Map(prevTx.map((t) => [ensureValidUuid(t.id), t]));
-              const hasCloudChanges = cloudTxs.some((t) => {
-                const prevMatch = prevByNormId.get(ensureValidUuid(t.id));
-                return !prevMatch || prevMatch.status !== t.status;
-              });
-
-              const mergedTx = deduplicateTransactions([...cloudTxs, ...prevTx]).sort(
-                (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
               );
+            })
+            .sort((a, b) => new Date(a.created_at || 0).getTime() - new Date(b.created_at || 0).getTime());
 
-              if (hasCloudChanges || mergedTx.length !== prevTx.length) {
-                saveTransactionsLocalOnly(mergedTx);
-                return mergedTx;
+          if (missingLocalAsc.length > 0) {
+            for (const localTx of missingLocalAsc) {
+              pushedLocalTxIdsRef.current.add(ensureValidUuid(localTx.id));
+            }
+            void (async () => {
+              for (const localTx of missingLocalAsc) {
+                try {
+                  await fetch('/api/transactions', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(localTx),
+                  });
+                } catch {}
               }
-              return prevTx;
-            });
+            })();
           }
+        }
+
+        // Fusionar clientes y transacciones y reconciliar matemáticamente en un solo paso atómico
+        const mergedRawCustomers =
+          cleanCloudCustomers.length > 0
+            ? deduplicateCustomers([...cleanCloudCustomers, ...prevCustomers])
+            : prevCustomers;
+        const mergedRawTxs =
+          cloudTxs.length > 0 ? deduplicateTransactions([...cloudTxs, ...prevTx]) : prevTx;
+
+        const reconciled = reconcileLedgerState(mergedRawCustomers, mergedRawTxs, ensureValidUuid);
+        const nextCustomers = reconciled.customers;
+        const nextTxs = reconciled.transactions;
+
+        // Alertar únicamente si hay clientes genuinamente nuevos desde la nube
+        if (cleanCloudCustomers.length > 0) {
+          const prevIds = new Set(prevCustomers.map((c) => c.id));
+          const prevDocs = new Set(prevCustomers.map((c) => normalizeDocumentId(c.document_id)).filter(Boolean));
+          const prevPhones = new Set(prevCustomers.map((c) => normalizePhone(c.phone)).filter(Boolean));
+
+          const genuinelyNew = cleanCloudCustomers.filter((c) => {
+            if (prevIds.has(c.id)) return false;
+            const doc = normalizeDocumentId(c.document_id);
+            if (doc && prevDocs.has(doc)) return false;
+            const ph = normalizePhone(c.phone);
+            if (ph && prevPhones.has(ph)) return false;
+            return true;
+          });
+
+          if (genuinelyNew.length > 0) {
+            const latest = genuinelyNew[0];
+            setNewCustomerAlert({
+              id: latest.id,
+              name: latest.full_name,
+              phone: latest.phone,
+            });
+
+            try {
+              const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+              const osc = ctx.createOscillator();
+              const gain = ctx.createGain();
+              osc.type = 'sine';
+              osc.frequency.setValueAtTime(587.33, ctx.currentTime);
+              osc.frequency.exponentialRampToValueAtTime(880, ctx.currentTime + 0.15);
+              gain.gain.setValueAtTime(0.25, ctx.currentTime);
+              gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.35);
+              osc.connect(gain);
+              gain.connect(ctx.destination);
+              osc.start();
+              osc.stop(ctx.currentTime + 0.35);
+            } catch (e) {}
+          }
+        }
+
+        let custDiff = nextCustomers.length !== prevCustomers.length;
+        if (!custDiff) {
+          const prevCustById = new Map(prevCustomers.map((c) => [c.id, c]));
+          for (const m of nextCustomers) {
+            const p = prevCustById.get(m.id);
+            if (
+              !p ||
+              p.current_balance !== m.current_balance ||
+              p.credit_limit !== m.credit_limit ||
+              p.is_blocked !== m.is_blocked ||
+              p.full_name !== m.full_name ||
+              p.payment_due_date !== m.payment_due_date
+            ) {
+              custDiff = true;
+              break;
+            }
+          }
+        }
+
+        let txDiff = nextTxs.length !== prevTx.length;
+        if (!txDiff) {
+          const prevTxByNormId = new Map(prevTx.map((t) => [ensureValidUuid(t.id), t]));
+          for (const t of nextTxs) {
+            const prevMatch = prevTxByNormId.get(ensureValidUuid(t.id));
+            if (
+              !prevMatch ||
+              prevMatch.status !== t.status ||
+              prevMatch.previous_balance !== t.previous_balance ||
+              prevMatch.new_balance !== t.new_balance
+            ) {
+              txDiff = true;
+              break;
+            }
+          }
+        }
+
+        if (custDiff) {
+          saveCustomersLocalOnly(nextCustomers);
+          setCustomers(nextCustomers);
+        }
+        if (txDiff) {
+          saveTransactionsLocalOnly(nextTxs);
+          setTransactions(nextTxs);
         }
       } catch (err) {}
     };

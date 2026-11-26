@@ -2,6 +2,14 @@ import { Tenant, Customer, Transaction, StaffMember, PrinterFormat } from '@/typ
 import { createClient } from '@/lib/supabase/client';
 import { setSecureCookie, removeSecureCookie } from './cookies';
 import { isSafeImageUrl } from './imageUtils';
+import {
+  reconcileLedgerState,
+  reconcileCustomerTransactions,
+  reconcileTransactionsByCustomer,
+  roundMoney,
+} from './ledgerMath';
+
+export { reconcileLedgerState, reconcileCustomerTransactions, reconcileTransactionsByCustomer, roundMoney };
 
 export const PRINTER_STORAGE_KEY = 'libreta_printer_format_v2';
 
@@ -145,63 +153,65 @@ export function mergeCustomers(a: Customer, b: Customer): Customer {
   const isAInitial = INITIAL_CUSTOMERS.some((ic) => ic.id === a.id);
   const isBInitial = INITIAL_CUSTOMERS.some((ic) => ic.id === b.id);
 
-  let primary = a;
-  let secondary = b;
-  if (isBInitial && !isAInitial) {
-    primary = b;
-    secondary = a;
-  }
+  const aTime = new Date(a.updated_at || a.created_at || 0).getTime() || 0;
+  const bTime = new Date(b.updated_at || b.created_at || 0).getTime() || 0;
 
-  const termsAccepted = Boolean(primary.terms_accepted || secondary.terms_accepted);
-  const termsAcceptedAt = primary.terms_accepted_at || secondary.terms_accepted_at;
-  const termsMethod = primary.terms_acceptance_method || secondary.terms_acceptance_method;
-  const creditLimit = Math.max(Number(primary.credit_limit) || 0, Number(secondary.credit_limit) || 0);
-  const currentBalance = Math.max(Number(primary.current_balance) || 0, Number(secondary.current_balance) || 0);
+  // Respetar estrictamente el registro más reciente por `updated_at` (sin Math.max ni || destructivo).
+  // En caso de empate exacto de timestamp, priorizar `a` (por convención nube/entrante).
+  const newer = bTime > aTime ? b : a;
+  const older = newer === a ? b : a;
+  const canonicalId = isAInitial && !isBInitial ? a.id : isBInitial && !isAInitial ? b.id : newer.id;
 
-  const earlistCreated =
-    primary.created_at && secondary.created_at
-      ? new Date(primary.created_at).getTime() < new Date(secondary.created_at).getTime()
-        ? primary.created_at
-        : secondary.created_at
-      : primary.created_at || secondary.created_at || new Date().toISOString();
+  const termsAccepted = Boolean(newer.terms_accepted || older.terms_accepted);
+  const termsAcceptedAt = newer.terms_accepted_at || older.terms_accepted_at;
+  const termsMethod = newer.terms_acceptance_method || older.terms_acceptance_method;
+  const creditLimit = roundMoney(Number(newer.credit_limit) || 0);
+  const currentBalance = roundMoney(Number(newer.current_balance) || 0);
+
+  const earliestCreated =
+    a.created_at && b.created_at
+      ? new Date(a.created_at).getTime() < new Date(b.created_at).getTime()
+        ? a.created_at
+        : b.created_at
+      : newer.created_at || older.created_at || new Date().toISOString();
 
   const mergedMeta = {
-    ...(secondary.terms_acceptance_metadata || {}),
-    ...(primary.terms_acceptance_metadata || {}),
+    ...(older.terms_acceptance_metadata || {}),
+    ...(newer.terms_acceptance_metadata || {}),
   };
 
   const resolvedDueDate =
-    primary.terms_acceptance_metadata?.payment_due_date === null
+    newer.terms_acceptance_metadata?.payment_due_date === null
       ? undefined
-      : primary.payment_due_date ??
-        secondary.payment_due_date ??
+      : newer.payment_due_date ??
+        older.payment_due_date ??
         (typeof mergedMeta.payment_due_date === 'string' && mergedMeta.payment_due_date
           ? mergedMeta.payment_due_date
           : undefined);
 
   return {
-    ...secondary,
-    ...primary,
-    id: primary.id,
-    full_name: primary.full_name || secondary.full_name,
-    nickname: primary.nickname || secondary.nickname || '',
-    document_id: primary.document_id || secondary.document_id || '',
-    phone: primary.phone || secondary.phone || '',
-    qr_token: primary.qr_token || secondary.qr_token,
-    security_pin: primary.security_pin || secondary.security_pin || '1234',
-    pin_hash: primary.pin_hash || secondary.pin_hash,
+    ...older,
+    ...newer,
+    id: canonicalId,
+    full_name: newer.full_name || older.full_name,
+    nickname: newer.nickname ?? older.nickname ?? '',
+    document_id: newer.document_id ?? older.document_id ?? '',
+    phone: newer.phone ?? older.phone ?? '',
+    qr_token: newer.qr_token || older.qr_token,
+    security_pin: newer.security_pin || older.security_pin || '1234',
+    pin_hash: newer.pin_hash || older.pin_hash,
     credit_limit: creditLimit,
     current_balance: currentBalance,
-    is_blocked: Boolean(primary.is_blocked || secondary.is_blocked),
-    credit_cycle: primary.credit_cycle || secondary.credit_cycle || 'MENSUAL',
+    is_blocked: Boolean(newer.is_blocked),
+    credit_cycle: newer.credit_cycle || older.credit_cycle || 'MENSUAL',
     payment_due_date: resolvedDueDate,
     terms_accepted: termsAccepted,
     terms_accepted_at: termsAcceptedAt,
     terms_acceptance_method: termsMethod,
     terms_acceptance_metadata: mergedMeta,
-    registered_via: primary.registered_via || secondary.registered_via || 'SELF_MOBILE_LINK',
-    created_at: earlistCreated,
-    updated_at: new Date().toISOString(),
+    registered_via: newer.registered_via || older.registered_via || 'SELF_MOBILE_LINK',
+    created_at: earliestCreated,
+    updated_at: newer.updated_at || older.updated_at || new Date().toISOString(),
   };
 }
 
@@ -236,16 +246,16 @@ export function deduplicateTransactions(
     const remapped: Transaction = {
       ...tx,
       id: ensureValidUuid(tx.id),
-      amount: Number(tx.amount) || 0,
-      previous_balance: Number(tx.previous_balance) || 0,
-      new_balance: Number(tx.new_balance) || 0,
+      amount: roundMoney(Number(tx.amount) || 0),
+      previous_balance: roundMoney(Number(tx.previous_balance) || 0),
+      new_balance: roundMoney(Number(tx.new_balance) || 0),
       items: Array.isArray(tx.items) ? tx.items : [],
     };
     if (customerIdRemap && customerIdRemap.has(remapped.customer_id)) {
       remapped.customer_id = customerIdRemap.get(remapped.customer_id)!;
     }
 
-    const fingerprint = `${remapped.customer_id}|${remapped.type}|${remapped.amount}|${remapped.previous_balance}|${remapped.new_balance}|${String(remapped.created_at || '').slice(0, 19)}`;
+    const fingerprint = `${ensureValidUuid(remapped.customer_id)}|${remapped.type}|${roundMoney(remapped.amount)}|${String(remapped.created_at || '').slice(0, 19)}|${String(remapped.description || '').trim().toLowerCase()}`;
 
     const existingIdx = indexById.get(remapped.id) ?? indexByFingerprint.get(fingerprint);
     if (existingIdx !== undefined) {
@@ -480,7 +490,7 @@ export const INITIAL_CUSTOMERS: Customer[] = [
     current_balance: 145000,
     is_blocked: false,
     created_at: new Date(Date.now() - 20 * 24 * 60 * 60 * 1000).toISOString(),
-    updated_at: new Date().toISOString(),
+    updated_at: '2025-01-01T00:00:00.000Z',
   },
   {
     id: '019339bb-7824-7662-8e39-165f123d9202',
@@ -495,7 +505,7 @@ export const INITIAL_CUSTOMERS: Customer[] = [
     current_balance: 245000, // Supera el límite para disparo de alertas
     is_blocked: false,
     created_at: new Date(Date.now() - 15 * 24 * 60 * 60 * 1000).toISOString(),
-    updated_at: new Date().toISOString(),
+    updated_at: '2025-01-01T00:00:00.000Z',
   },
   {
     id: '019339bb-7824-7662-8e39-165f123d9203',
@@ -510,7 +520,7 @@ export const INITIAL_CUSTOMERS: Customer[] = [
     current_balance: 0,
     is_blocked: false,
     created_at: new Date(Date.now() - 40 * 24 * 60 * 60 * 1000).toISOString(),
-    updated_at: new Date().toISOString(),
+    updated_at: '2025-01-01T00:00:00.000Z',
   },
   {
     id: '019339bb-7824-7662-8e39-165f123d9204',
@@ -533,7 +543,7 @@ export const INITIAL_CUSTOMERS: Customer[] = [
     },
     registered_via: 'SELF_MOBILE_LINK',
     created_at: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
-    updated_at: new Date().toISOString(),
+    updated_at: '2025-01-01T00:00:00.000Z',
   },
 ];
 
@@ -647,18 +657,21 @@ export function getStoredData() {
   const staff: StaffMember[] = staffRaw ? JSON.parse(staffRaw) : INITIAL_STAFF;
   const currentOperator: StaffMember = operatorRaw ? JSON.parse(operatorRaw) : (staff[0] || INITIAL_STAFF[0]);
 
-  // Ejecutar deduplicación y normalización de UUIDs exhaustiva
+  // Ejecutar deduplicación, normalización de UUIDs y reconciliación matemática desde el libro mayor
   const rawCustomerCount = customers.length;
   const rawTxCount = transactions.length;
   const hadLegacyTxIds = transactions.some((t) => !t?.id || !UUID_REGEX.test(t.id));
   customers = deduplicateCustomers(customers);
   transactions = deduplicateTransactions(transactions);
+  const reconciled = reconcileLedgerState(customers, transactions, ensureValidUuid);
+  customers = reconciled.customers;
+  transactions = reconciled.transactions;
 
-  // Si se detectaron duplicados/IDs heredados, o no existía la clave, reescribir localStorage inmediatamente
-  if (!customersRaw || customers.length !== rawCustomerCount) {
+  // Si se detectaron duplicados/IDs heredados, desajustes de saldo o faltaba clave, reescribir localStorage
+  if (!customersRaw || customers.length !== rawCustomerCount || reconciled.changed) {
     localStorage.setItem(STORAGE_KEYS.CUSTOMERS, JSON.stringify(customers));
   }
-  if (!txRaw || hadLegacyTxIds || transactions.length !== rawTxCount) {
+  if (!txRaw || hadLegacyTxIds || transactions.length !== rawTxCount || reconciled.changed) {
     localStorage.setItem(STORAGE_KEYS.TRANSACTIONS, JSON.stringify(transactions));
   }
   if (!tenantRaw) localStorage.setItem(STORAGE_KEYS.TENANT, JSON.stringify(INITIAL_TENANT));
@@ -921,18 +934,28 @@ export function saveTransactionsLocalOnly(transactions: Transaction[]): Transact
   return cleanTransactions;
 }
 
-export function saveTransactions(transactions: Transaction[]) {
+export function saveTransactions(transactions: Transaction[], transactionsToSync?: Transaction[]) {
   if (typeof window !== 'undefined') {
     const cleanTransactions = saveTransactionsLocalOnly(transactions);
     window.dispatchEvent(new Event('libreta_data_updated'));
 
-    // Sincronizar mediante API central (usa INSERT resiliente compatible con inmutabilidad RLS)
-    for (const tx of cleanTransactions.slice(0, 25)) {
-      fetch('/api/transactions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(tx),
-      }).catch(() => {});
+    // Enviar solo las transacciones nuevas/específicas en orden cronológico ascendente (evita carreras de 25 POST concurrentes)
+    const rawToSync = transactionsToSync ?? cleanTransactions.slice(0, 1);
+    const orderedToSync = [...rawToSync].sort(
+      (a, b) => new Date(a.created_at || 0).getTime() - new Date(b.created_at || 0).getTime()
+    );
+    if (orderedToSync.length > 0) {
+      void (async () => {
+        for (const tx of orderedToSync) {
+          try {
+            await fetch('/api/transactions', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(tx),
+            });
+          } catch {}
+        }
+      })();
     }
   }
 }
@@ -945,16 +968,25 @@ export function saveCustomersLocalOnly(customers: Customer[]): Customer[] {
   return cleanCustomers;
 }
 
-export function saveCustomers(customers: Customer[]) {
+export function saveCustomers(customers: Customer[], customerIdsToSync?: string[]) {
   if (typeof window !== 'undefined') {
     const cleanCustomers = deduplicateCustomers(customers);
     localStorage.setItem(STORAGE_KEYS.CUSTOMERS, JSON.stringify(cleanCustomers));
     window.dispatchEvent(new Event('libreta_data_updated'));
 
+    const syncFilter = Array.isArray(customerIdsToSync)
+      ? new Set(customerIdsToSync.map((id) => ensureValidUuid(id)))
+      : null;
+    const targets = syncFilter
+      ? cleanCustomers.filter((c) => syncFilter.has(ensureValidUuid(c.id)) || customerIdsToSync!.includes(c.id))
+      : cleanCustomers;
+
+    if (targets.length === 0) return;
+
     try {
       const supabase = createClient();
       if (supabase) {
-        const cleaned = cleanCustomers.map(cleanCustomerForSupabase);
+        const cleaned = targets.map(cleanCustomerForSupabase);
         supabase.from('customers').upsert(cleaned).then(({ error }: { error: any }) => {
           if (error) console.warn('Supabase customers sync notice:', error.message);
         });
@@ -964,7 +996,7 @@ export function saveCustomers(customers: Customer[]) {
     }
 
     // Sincronizar también con la API central /api/customers
-    for (const c of cleanCustomers) {
+    for (const c of targets) {
       fetch('/api/customers', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1222,6 +1254,21 @@ export async function syncFromSupabase() {
       );
       localStorage.setItem(STORAGE_KEYS.TRANSACTIONS, JSON.stringify(finalTxs));
     }
+
+    // Reconciliación matemática final cliente <-> libro mayor tras combinar todas las fuentes
+    try {
+      const custsRaw = localStorage.getItem(STORAGE_KEYS.CUSTOMERS);
+      const txsRaw = localStorage.getItem(STORAGE_KEYS.TRANSACTIONS);
+      const currentCusts: Customer[] = custsRaw ? deduplicateCustomers(JSON.parse(custsRaw)) : [];
+      const currentTxs: Transaction[] = txsRaw ? deduplicateTransactions(JSON.parse(txsRaw)) : [];
+      const reconciled = reconcileLedgerState(currentCusts, currentTxs, ensureValidUuid);
+      if (custsRaw || reconciled.customers.length > 0) {
+        localStorage.setItem(STORAGE_KEYS.CUSTOMERS, JSON.stringify(reconciled.customers));
+      }
+      if (txsRaw || reconciled.transactions.length > 0) {
+        localStorage.setItem(STORAGE_KEYS.TRANSACTIONS, JSON.stringify(reconciled.transactions));
+      }
+    } catch {}
 
     window.dispatchEvent(new Event('libreta_data_updated'));
   } catch (err) {

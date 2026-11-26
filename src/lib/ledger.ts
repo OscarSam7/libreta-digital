@@ -1,5 +1,16 @@
 import { Customer, Transaction, TransactionType, PaymentMethod, ValidationStatus, TransactionItem } from '@/types';
-import { getStoredData, saveCustomers, saveTransactions, saveTransactionsLocalOnly, ensureValidUuid } from './storage';
+import {
+  getStoredData,
+  saveCustomersLocalOnly,
+  saveTransactionsLocalOnly,
+  ensureValidUuid,
+} from './storage';
+import {
+  reconcileCustomerTransactions,
+  reconcileLedgerState,
+  getTransactionSignedDelta,
+  roundMoney,
+} from './ledgerMath';
 import { safeCompare } from './security';
 import { validateAmount, sanitizeText } from './validation';
 
@@ -70,28 +81,28 @@ export function executeLedgerTransaction(input: CreateTxInput): {
     };
   }
 
-  // 3. Cálculo de saldos antes y después
-  const previousBalance = customer.current_balance;
-  let newBalance = previousBalance;
+  // 3. Reconciliar primero los asientos existentes del cliente para partir del saldo real exacto
+  const normCustId = ensureValidUuid(customer.id);
+  const existingCustomerTxs = transactions.filter(
+    (t) => ensureValidUuid(t.customer_id) === normCustId
+  );
+  const priorState = reconcileCustomerTransactions(existingCustomerTxs, customer.current_balance);
+  const previousBalance = priorState.currentBalance;
+  const newBalance = roundMoney(
+    previousBalance + getTransactionSignedDelta({ type: input.type, amount: cleanAmount })
+  );
 
-  if (input.type === 'DEBIT_PURCHASE' || input.type === 'ADJUSTMENT_DEBIT') {
-    newBalance = previousBalance + cleanAmount;
-
-    // Validar límite de crédito configurado (solo para operaciones en tiempo real normales)
-    if (
-      input.type === 'DEBIT_PURCHASE' &&
-      customer.credit_limit > 0 &&
-      newBalance > customer.credit_limit &&
-      !input.validationMethod?.includes('HISTORICA')
-    ) {
-      return {
-        success: false,
-        error: `La operación excede el límite de crédito (${tenant.currency_symbol} ${customer.credit_limit.toLocaleString('es-PY')}).`,
-      };
-    }
-  } else {
-    // CREDIT_PAYMENT o ADJUSTMENT_CREDIT restan deuda
-    newBalance = previousBalance - cleanAmount;
+  // Validar límite de crédito configurado (solo para operaciones en tiempo real normales)
+  if (
+    input.type === 'DEBIT_PURCHASE' &&
+    customer.credit_limit > 0 &&
+    newBalance > customer.credit_limit &&
+    !input.validationMethod?.includes('HISTORICA')
+  ) {
+    return {
+      success: false,
+      error: `La operación excede el límite de crédito (${tenant.currency_symbol} ${customer.credit_limit.toLocaleString('es-PY')}).`,
+    };
   }
 
   const dynamicPin = Math.floor(1000 + Math.random() * 9000).toString();
@@ -132,7 +143,7 @@ export function executeLedgerTransaction(input: CreateTxInput): {
     created_at: txDate,
   };
 
-  // 4. Actualizar el saldo maestro del cliente
+  // 4. Actualizar saldo maestro y reconciliar todo el libro mayor para garantizar coherencia total
   const updatedCustomer: Customer = {
     ...customer,
     current_balance: newBalance,
@@ -140,31 +151,41 @@ export function executeLedgerTransaction(input: CreateTxInput): {
   };
 
   customers[customerIndex] = updatedCustomer;
-  
-  // Guardar transacciones ordenadas cronológicamente (más recientes primero)
-  const updatedTransactions = [newTx, ...transactions].sort(
-    (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-  );
+  const rawUpdatedTransactions = [newTx, ...transactions];
+  const reconciled = reconcileLedgerState(customers, rawUpdatedTransactions, ensureValidUuid);
 
-  saveCustomers(customers);
-  saveTransactions(updatedTransactions);
+  const reconciledNewTx =
+    reconciled.transactions.find((t) => ensureValidUuid(t.id) === ensureValidUuid(newTx.id)) || newTx;
+  const reconciledCustomer =
+    reconciled.customers.find((c) => ensureValidUuid(c.id) === normCustId) || updatedCustomer;
 
-  // Sincronizar en tiempo real con la API en la nube central
+  saveCustomersLocalOnly(reconciled.customers);
+  saveTransactionsLocalOnly(reconciled.transactions);
+
   if (typeof window !== 'undefined') {
-    fetch('/api/transactions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(newTx),
-    }).catch(() => {});
+    window.dispatchEvent(new Event('libreta_data_updated'));
 
-    fetch('/api/customers', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(updatedCustomer),
-    }).catch(() => {});
+    // Sincronizar de forma secuencial y atómica: primero la transacción, luego el cliente reconciliado
+    void (async () => {
+      try {
+        await fetch('/api/transactions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(reconciledNewTx),
+        });
+      } catch {}
+
+      try {
+        await fetch('/api/customers', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(reconciledCustomer),
+        });
+      } catch {}
+    })();
   }
 
-  return { success: true, transaction: newTx };
+  return { success: true, transaction: reconciledNewTx };
 }
 
 export function certifyTransactionWithPin(
@@ -342,21 +363,60 @@ export function processHistoricalBatchTransactions(
     (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
   );
 
-  // 2. Encadenar los saldos cronológicamente
-  // Partimos del saldo base indicado (por defecto el saldo actual del cliente o startingBalance)
-  let runningBalance = customer.current_balance + startingBalance;
+  // 2. Reconciliar el historial existente antes de encadenar los asientos históricos
+  const normCustId = ensureValidUuid(customer.id);
+  const existingCustomerTxs = transactions.filter(
+    (t) => ensureValidUuid(t.customer_id) === normCustId
+  );
+  const priorState = reconcileCustomerTransactions(existingCustomerTxs, customer.current_balance);
   const createdTransactions: Transaction[] = [];
+
+  let runningBalance = roundMoney(priorState.currentBalance);
+
+  // Si ya existen asientos y además se especificó un startingBalance distinto de 0,
+  // asentarlo explícitamente para preservar la integridad matemática de la cadena completa.
+  const cleanStarting = roundMoney(startingBalance);
+  if (cleanStarting !== 0 && existingCustomerTxs.length > 0) {
+    const firstDate = sortedEntries[0]?.date;
+    const baseMs = firstDate
+      ? new Date(firstDate.includes('T') ? firstDate : `${firstDate}T12:00:00.000Z`).getTime() - 1000
+      : Date.now() - 1000;
+    const openingIso = new Date(baseMs).toISOString();
+    const openingTx: Transaction = {
+      id: ensureValidUuid(),
+      tenant_id: tenant.id,
+      customer_id: customer.id,
+      created_by: 'comerciante-carga-historica',
+      operator_id: currentOperator?.id,
+      operator_name: currentOperator?.full_name,
+      type: cleanStarting > 0 ? 'ADJUSTMENT_DEBIT' : 'ADJUSTMENT_CREDIT',
+      amount: Math.abs(cleanStarting),
+      previous_balance: runningBalance,
+      new_balance: roundMoney(runningBalance + cleanStarting),
+      description: 'Saldo inicial anterior declarado en carga histórica',
+      items: [],
+      status: 'CERTIFIED_BOTH',
+      validation_pin: Math.floor(1000 + Math.random() * 9000).toString(),
+      validated_at: openingIso,
+      validation_method: 'CARGA_HISTORICA_CUADERNO',
+      validation_metadata: {
+        fuente: 'Libreta de papel / Saldo base inicial',
+        asentado_el: new Date().toISOString(),
+      },
+      created_at: openingIso,
+    };
+    createdTransactions.push(openingTx);
+    runningBalance = openingTx.new_balance;
+  } else {
+    runningBalance = roundMoney(priorState.currentBalance + cleanStarting);
+  }
 
   for (let i = 0; i < sortedEntries.length; i++) {
     const entry = sortedEntries[i];
     const prevBalance = runningBalance;
-    let nextBalance = prevBalance;
-
-    if (entry.type === 'DEBIT_PURCHASE') {
-      nextBalance = prevBalance + entry.amount;
-    } else {
-      nextBalance = prevBalance - entry.amount;
-    }
+    const nextBalance = roundMoney(
+      prevBalance + getTransactionSignedDelta({ type: entry.type, amount: entry.amount })
+    );
     runningBalance = nextBalance;
 
     const dynamicPin = Math.floor(1000 + Math.random() * 9000).toString();
@@ -370,7 +430,7 @@ export function processHistoricalBatchTransactions(
       operator_id: currentOperator?.id,
       operator_name: currentOperator?.full_name,
       type: entry.type,
-      amount: entry.amount,
+      amount: roundMoney(entry.amount),
       previous_balance: prevBalance,
       new_balance: nextBalance,
       description: entry.description?.trim() || (entry.type === 'DEBIT_PURCHASE' ? 'Compra anterior asentada de cuaderno' : 'Abono anterior registrado'),
@@ -391,42 +451,67 @@ export function processHistoricalBatchTransactions(
     createdTransactions.push(tx);
   }
 
-  // 3. Actualizar el saldo maestro del cliente
-  const updatedCustomer: Customer = {
+  // 3. Reconciliar todo el libro mayor del cliente (cubre fechas intercaladas con historial previo)
+  customers[customerIndex] = {
     ...customer,
-    current_balance: runningBalance,
     updated_at: new Date().toISOString(),
   };
 
-  customers[customerIndex] = updatedCustomer;
-
-  // 4. Agregar al libro mayor y ordenar cronológicamente
-  const updatedTransactions = [...createdTransactions, ...transactions].sort(
-    (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+  const reconciled = reconcileLedgerState(
+    customers,
+    [...createdTransactions, ...transactions],
+    ensureValidUuid
   );
 
-  saveCustomers(customers);
-  saveTransactions(updatedTransactions);
+  const updatedCustomer =
+    reconciled.customers.find((c) => ensureValidUuid(c.id) === normCustId) || {
+      ...customer,
+      current_balance: runningBalance,
+      updated_at: new Date().toISOString(),
+    };
+  const finalCustomerWithTs: Customer = {
+    ...updatedCustomer,
+    updated_at: new Date().toISOString(),
+  };
+  const finalCustomers = reconciled.customers.map((c) =>
+    ensureValidUuid(c.id) === normCustId ? finalCustomerWithTs : c
+  );
+
+  saveCustomersLocalOnly(finalCustomers);
+  saveTransactionsLocalOnly(reconciled.transactions);
+
+  const createdIdSet = new Set(createdTransactions.map((t) => ensureValidUuid(t.id)));
+  const finalCreatedAsc = reconciled.transactions
+    .filter((t) => createdIdSet.has(ensureValidUuid(t.id)))
+    .reverse();
 
   if (typeof window !== 'undefined') {
-    for (const tx of createdTransactions) {
-      fetch('/api/transactions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(tx),
-      }).catch(() => {});
-    }
+    window.dispatchEvent(new Event('libreta_data_updated'));
 
-    fetch('/api/customers', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(updatedCustomer),
-    }).catch(() => {});
+    void (async () => {
+      for (const tx of finalCreatedAsc) {
+        try {
+          await fetch('/api/transactions', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(tx),
+          });
+        } catch {}
+      }
+
+      try {
+        await fetch('/api/customers', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(finalCustomerWithTs),
+        });
+      } catch {}
+    })();
   }
 
   return {
     success: true,
-    transactions: createdTransactions,
-    finalBalance: runningBalance,
+    transactions: finalCreatedAsc,
+    finalBalance: finalCustomerWithTs.current_balance,
   };
 }

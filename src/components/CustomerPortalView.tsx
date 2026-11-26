@@ -11,6 +11,7 @@ import {
   deduplicateTransactions,
   ensureValidUuid,
 } from '@/lib/storage';
+import { reconcileCustomerTransactions } from '@/lib/ledgerMath';
 import { certifyTransactionWithPin } from '@/lib/ledger';
 import { acceptCustomerTerms } from '@/lib/customers';
 import { exportTransactionsToCSV } from '@/lib/reports';
@@ -170,8 +171,14 @@ export function CustomerPortalView({ token }: Props) {
       : [];
 
     if (localCustomer) {
-      setCustomer(localCustomer);
-      setTransactions(initialLocalTxs);
+      if (initialLocalTxs.length > 0) {
+        const reconciledLocal = reconcileCustomerTransactions(initialLocalTxs, localCustomer.current_balance);
+        setCustomer({ ...localCustomer, current_balance: reconciledLocal.currentBalance });
+        setTransactions(reconciledLocal.transactionsDesc);
+      } else {
+        setCustomer(localCustomer);
+        setTransactions(initialLocalTxs);
+      }
       setIsLoadingCloud(false);
     }
 
@@ -184,7 +191,6 @@ export function CustomerPortalView({ token }: Props) {
         const json = await res.json();
         if (json.success && json.customer) {
           const cloudCust: Customer = json.customer;
-          setCustomer(cloudCust);
           if (json.tenant) setTenant(restoreTenantFromSupabase(json.tenant));
 
           const targetCloudCustUuid = ensureValidUuid(cloudCust.id);
@@ -216,35 +222,51 @@ export function CustomerPortalView({ token }: Props) {
             }
           }
 
-          // Fusionar nube + local (nunca borrar asientos locales si la nube respondió vacío)
-          const mergedCustTxs = deduplicateTransactions([...cloudTxs, ...matchingLocalTxs]).sort(
-            (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-          );
-          setTransactions(mergedCustTxs);
+          // Fusionar nube + local y reconciliar matemáticamente todo el historial del cliente
+          const mergedCustTxs = deduplicateTransactions([...cloudTxs, ...matchingLocalTxs]);
+          const reconciled = reconcileCustomerTransactions(mergedCustTxs, cloudCust.current_balance);
+          const finalTransactionsDesc =
+            mergedCustTxs.length > 0 ? reconciled.transactionsDesc : [];
+          const finalCustomer: Customer =
+            mergedCustTxs.length > 0
+              ? { ...cloudCust, current_balance: reconciled.currentBalance }
+              : cloudCust;
+
+          setCustomer(finalCustomer);
+          setTransactions(finalTransactionsDesc);
 
           // Persistir localmente de forma silenciosa para evitar bucles de eventos
           const latestLocal = getStoredData();
-          saveCustomersLocalOnly([cloudCust, ...latestLocal.customers]);
+          saveCustomersLocalOnly([finalCustomer, ...latestLocal.customers]);
           const otherTxs = latestLocal.transactions.filter(
             (t) =>
               t.customer_id !== cloudCust.id &&
               ensureValidUuid(t.customer_id) !== targetCloudCustUuid &&
               (!localCustomer || t.customer_id !== localCustomer.id)
           );
-          saveTransactionsLocalOnly([...mergedCustTxs, ...otherTxs]);
+          saveTransactionsLocalOnly([...finalTransactionsDesc, ...otherTxs]);
 
-          // Auto-sanar: subir silenciosamente asientos locales que aún no existen en la nube
+          // Auto-sanar: subir secuencialmente en orden cronológico asientos locales que aún no existen en la nube
           const cloudIdSet = new Set(cloudTxs.map((t) => ensureValidUuid(t.id)));
-          for (const localTx of matchingLocalTxs) {
+          const missingLocalAsc = reconciled.transactionsAsc.filter((localTx) => {
             const normId = ensureValidUuid(localTx.id);
-            if (!cloudIdSet.has(normId) && !pushedTxIdsRef.current.has(normId)) {
-              pushedTxIdsRef.current.add(normId);
-              fetch('/api/transactions', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(localTx),
-              }).catch(() => {});
+            return !cloudIdSet.has(normId) && !pushedTxIdsRef.current.has(normId);
+          });
+          if (missingLocalAsc.length > 0) {
+            for (const localTx of missingLocalAsc) {
+              pushedTxIdsRef.current.add(ensureValidUuid(localTx.id));
             }
+            void (async () => {
+              for (const localTx of missingLocalAsc) {
+                try {
+                  await fetch('/api/transactions', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(localTx),
+                  });
+                } catch {}
+              }
+            })();
           }
         }
       }
